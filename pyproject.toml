@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "muthur"
+version = "0.1.0"
+description = "Sorts finished downloads into a Kodi library and writes Kodi NFOs, so Kodi never has to scrape."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "guessit>=3.8",      # LGPL-3.0, used unmodified as a dependency
+    "requests>=2.32",    # Apache-2.0
+    "rapidfuzz>=3.9",    # MIT
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[project.scripts]
+muthur = "muthur.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

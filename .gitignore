@@ -1,0 +1,16 @@
+# Secrets
+.env
+
+# Personal library data: audits, dry-run reports, caches
+local/
+reports/
+.cache/
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
