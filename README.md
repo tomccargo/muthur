@@ -13,7 +13,7 @@ It's built for a Synology NAS running Container Manager, with Kodi reading the l
 - Write Kodi NFOs with IMDb scores per episode, from IMDb's free non-commercial datasets.
 - Pick the best copy among duplicates, move the rest to a quarantine folder, and keep a journal with undo.
 
-The full design is in [docs/DESIGN.md](docs/DESIGN.md).
+The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the look and UI rules in [DESIGN.md](DESIGN.md).
 
 ## Milestone 1: dry run
 

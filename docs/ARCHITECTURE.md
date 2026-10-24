@@ -1,8 +1,8 @@
-# muthur — design
+# muthur — architecture
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: design draft, 2026-10-24. Milestone 1 in progress.
+Status: 2026-10-24. Milestone 1 (read-only dry run) is done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
