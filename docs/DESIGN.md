@@ -125,7 +125,7 @@ Anything else goes to **Review**, with the candidates shown (poster, year, plot,
 ### 5.4 Plan
 For each identified item: target path, the NFOs to write, the artwork to download, and conflicts.
 
-- **Target exists?** That's a duplicate. Both versions get a quality score, the better one is proposed as the winner, and the user confirms (see §8).
+- **Target exists?** That's a duplicate. Both versions get a quality score, the better one is proposed as the winner, and the user confirms (see §9).
 - **Subtitles** follow their video: `.en.srt`, `.nl.srt`, `.en.forced.srt`.
 - **Junk** (tracker `.txt`, `.exe`, samples, `.part`, `Screens/`) is not copied. When a torrent folder holds only junk after the move, the folder goes to quarantine.
 
@@ -244,12 +244,33 @@ The tool proposes a winner and you confirm. The loser goes to `_muthur-quarantin
    ```
 4. Enable *Allow remote control via HTTP* with a username and password, and enter those in muthur's settings.
 
-## 11. Existing library: dry run first
+## 11. Watched status: Kodi is the master, muthur keeps a synced backup
 
-**Watched status is a real risk.** Kodi stores watched and resume points per *file path*. Renaming existing files would make Kodi see them as new and unwatched. So before any change to the existing library:
-1. Export the watched and resume status via JSON-RPC (`VideoLibrary.GetEpisodes`/`GetMovies` with `playcount`, `resume`, `lastplayed`).
-2. Apply the renames.
-3. Let Kodi scan, clean the old paths, then write the status back (`SetEpisodeDetails`/`SetMovieDetails`) by matching on the TMDB ID.
+Kodi stores play count, last played and resume point in its own database on the Shield, **per file path**. That database has been lost before, and renaming a file makes Kodi treat it as new and unwatched. So muthur keeps a continuously updated backup, keyed by what the item *is* rather than where it lives.
+
+**Roles**
+- **Kodi is the master.** Whatever Kodi says is the truth, including when you mark something unwatched.
+- **muthur is a backup that follows Kodi**, in one direction (Kodi → muthur), all the time.
+- **muthur writes to Kodi only in two explicit cases:**
+  1. after muthur itself renamed or moved files, to carry each item's status to its new path, and
+  2. when you press **Restore** (after a Kodi reinstall or a lost database), after a preview of what will change.
+
+  It never writes to Kodi on its own initiative otherwise. So this is a backup with restore, not two-way sync, which avoids most of what makes sync dangerous.
+
+**How the backup follows Kodi**
+- Listens to Kodi's JSON-RPC notifications over WebSocket (port 9090: `VideoLibrary.OnUpdate` carries the new play count) for near-instant updates ([forum example](https://forum.kodi.tv/showthread.php?tid=197858)).
+- Polls a full snapshot (`VideoLibrary.GetMovies` / `GetEpisodes` with `playcount`, `lastplayed`, `resume`, `uniqueid`, `file`) every hour and when muthur starts, because notifications don't fire for every change (for example changes made by add-ons) and the Shield may be off.
+- Each record is keyed by **TMDB ID** (movies) or **show TMDB ID + season + episode** (episodes), with IMDb/TVDB IDs and the last known path alongside. A key that survives renames, moves and reinstalls.
+
+**Safety rules** (where sync usually goes wrong)
+- **Append-only history.** Every change is stored as a new row with a timestamp, never overwritten. Restore can use "now" or any earlier moment.
+- **Mass-change guard.** If one poll would mark more than 25 items unwatched, or Kodi's library suddenly holds far fewer items (a wiped database looks exactly like that), muthur **stops following**. It keeps the last good state and shows a warning on the Dashboard until you confirm. A lost Kodi database therefore never wipes the backup.
+- **Restore is never silent.** It shows a diff (n movies, m episodes, resume points) and needs a click. It only raises play counts and fills in missing resume points, unless you choose an exact restore.
+- **Renames:** before a batch, muthur takes a fresh snapshot and refuses to start if Kodi can't be reached. After the batch, Kodi scans the changed folders and cleans the old paths. muthur then writes the status to the new paths, matched first by old → new path from its journal, then by ID. The batch is checked: every item that was watched before must be watched after.
+
+This needs Kodi's web server enabled (Settings → Services → Control) and the Shield on the network. Third-party services such as Trakt aren't needed for this. Trakt's free tier has been restricted since 2025 ([AlternativeTo](https://alternativeto.net/news/2025/2/trakt-tv-has-set-stricter-limits-for-free-users-and-raised-vip-subscription-prices-by-100-/)).
+
+## 12. Existing library: dry run first
 
 **Test plan:**
 
@@ -258,11 +279,11 @@ The tool proposes a winner and you confirm. The loser goes to `_muthur-quarantin
 | 0. Dry run, library | Run the identifier on every existing show and movie *as if it were a download*, and compare with the IDs already in their NFOs. Report: agreements, disagreements, held for review. Disagreements are either tool bugs or library mistakes. | No |
 | 1. Leftover downloads | Finished downloads an earlier tool never imported. Small, real, and includes a show that's new to the library. | Yes, with undo |
 | 2. New downloads | Normal use from here on. | Yes |
-| 3. Library cleanup | Audit fixes in batches you approve: missing movies, misplaced content, duplicates, renames, NFO rewrite. Watched status kept as above. | Yes, in batches |
+| 3. Library cleanup | Audit fixes in batches you approve: missing movies, misplaced content, duplicates, renames, NFO rewrite. Watched status carried over as in §11. | Yes, in batches |
 
 Target before phase 3: ≥ 98 % agreement on the phase 0 sample, zero wrong *auto-accepts*. Anything uncertain may go to Review; nothing may be confidently wrong.
 
-## 12. UI
+## 13. UI
 
 A clickable mockup of all screens exists (private, because it shows real library data).
 
@@ -277,25 +298,25 @@ A clickable mockup of all screens exists (private, because it shows real library
 | **History** | Every run and item with what moved where. Undo per item or per run. |
 | **Settings** | Paths, TMDB/fanart keys, title rule and language list, quality preferences, Kodi connection, schedule, dry-run switch. |
 
-## 13. Security
+## 14. Security
 
 - Deploy over SSH with a dedicated DSM admin user, key-only login (Docker on DSM needs root, so that user is powerful; SSH can be turned off after the build phase).
 - The container itself runs **non-root** with access to `Iedereen` and its own config folder only.
 - API keys live in `/config`, never in the image or the repo.
 - The UI listens on the LAN only.
 
-## 14. Milestones
+## 15. Milestones
 
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only).
 3. **Review + Apply + journal/undo + NFO/artwork writer**, then phase 1 on the leftover downloads.
-4. **IMDb scores + weekly refresh + Kodi JSON-RPC.**
+4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).**
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
 
-## 15. Decisions on the former open questions (2026-10-24)
+## 16. Decisions on the former open questions (2026-10-24)
 
 1. **Torrent client: Download Station.** "Finished" is read from the Download Station Web API (`SYNO.DownloadStation.Task`, `list` with status `finished`/`seeding`) as well as the 10-minute stability check. After a successful move, muthur removes the task through the same API, never before. A Sonarr user reported that removing Download Station tasks too early confused the importer ([Sonarr forum](https://forums.sonarr.tv/t/synology-download-station-not-completing-imports-solved/19865)). The exact `delete` parameters are checked against Synology's [Download Station Web API guide](https://cndl.synology.cn/download/Document/Software/DeveloperGuide/Package/DownloadStation/All/enu/Synology_Download_Station_Web_API.pdf) and tested on Nostromo. This needs a DSM account for muthur with Download Station rights only.
-2. **Watched status must be kept.** The export and restore in §11 is mandatory for every cleanup batch, and a batch stops if the export fails or a restore can't be matched. The Kodi connection has to work before phase 3 starts.
+2. **Watched status must be kept.** See §11: Kodi is the master and muthur keeps a synced backup with restore. A cleanup batch stops if Kodi can't be reached or the restore can't be verified.
 3. **No age ratings.** `mpaa` is not written.
 4. **Actor photos: TMDB image links** in `<actor><thumb>`. Kodi downloads each once and caches it ([Kodi forum](https://forum.kodi.tv/showthread.php?tid=153424)). No `.actors` folders.
 5. **No HDR.** The TV is SDR. HDR gets no bonus in the quality score, and an SDR copy is never beaten by an HDR copy just for being HDR.
