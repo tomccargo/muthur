@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import nfo_write
+from . import nfo_write, quarantine
 from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare
@@ -175,7 +175,7 @@ class Health:
             summary["kodi"] = kodi.refresh_files([self._full(p) for p in nfos], {v: k for k, v in self.roots.items()})
         return {"run": run, **summary}
 
-    def _quarantine(self, run: int, path: str) -> None:
+    def _quarantine(self, run: int, path: str, why: str) -> None:
         src = self._full(path)
         if not os.path.lexists(src):
             raise ValueError("it isn't there any more")
@@ -187,6 +187,7 @@ class Health:
         op = self.journal.record(run, path, "quarantine", src, dst, size, status="failed")
         os.rename(src, dst)
         self.journal.mark(op, "done")
+        quarantine.note(self.quarantine, dst, path, run, why)
         if size is not None:
             with self.store.lock:
                 self.store.db.execute("UPDATE ops SET digest = ? WHERE id = ?", (fingerprint(dst), op))
@@ -202,13 +203,14 @@ class Health:
         return True
 
     def _leftovers(self, run, x, nfos):
-        self._quarantine(run, x["path"])
+        self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
+                         else "A leftover in the library: it belonged to a video that is gone.")
 
     def _empty_films(self, run, x, nfos):
         if any(os.path.isfile(os.path.join(d, n)) and n.lower().endswith((".mkv", ".mp4", ".avi", ".m4v"))
                for d, _, names in os.walk(self._full(x["path"])) for n in names):
             raise ValueError("a video appeared in it since the check")
-        self._quarantine(run, x["path"])
+        self._quarantine(run, x["path"], "A film folder without a video in it.")
 
     def _episode_nfos(self, run, x, nfos):
         if not os.path.isfile(self._full(x["video"])):

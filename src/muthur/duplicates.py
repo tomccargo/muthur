@@ -415,6 +415,9 @@ def _apply_one(dups: Duplicates, journal, run: int, g: dict, quarantine: str) ->
             if os.path.lexists(dst):
                 dst += f" ({int(time.time())})"
             move(src, dst, "quarantine")
+            from . import quarantine as notes
+
+            notes.note(quarantine, dst, o["src"], run, f"Another copy of {g['label']} was kept: {g['plan']['final']}.")
         else:
             move(src, _full(dups, o["dst"]), "move")
 

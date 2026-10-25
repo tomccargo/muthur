@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import nfo_write
+from . import nfo_write, quarantine
 from .journal import Journal, fingerprint
 
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
@@ -206,4 +206,5 @@ class Applier:
             target += f" ({int(time.time())})"
         self._mkdirs(run, item["id"], os.path.dirname(target))
         self._move(run, item["id"], path, target, "quarantine")
+        quarantine.note(self.quarantine, target, path, run, "What was left of the download after its video moved into the library.")
         return 1

@@ -140,6 +140,8 @@ class Journal:
         op, src, dst = o["op"], o["src"], o["dst"]
         if op == "mkdir":
             if os.path.isdir(dst):
+                if os.listdir(dst) == ["muthur-notes.jsonl"]:  # only muthur's quarantine notes are left: they go too
+                    os.remove(os.path.join(dst, "muthur-notes.jsonl"))
                 if os.listdir(dst):
                     return "the folder isn't empty any more"
                 os.rmdir(dst)

@@ -168,6 +168,7 @@ export const api = {
     call<{ fixes: Partial<Record<FixKind, number>>; questions: number }>('/api/fixes/choose', { method: 'POST', body: JSON.stringify({ kind, path, tmdbId }) }),
   fixesLast: () => call<FixResult | Record<string, never>>('/api/fixes/last'),
   quarantine: () => call<{ days: { day: string; files: number; size: number }[] }>('/api/quarantine'),
+  quarantineDay: (day: string) => call<{ notes: { at: number; run: number; from: string; to: string; why: string }[] }>(`/api/quarantine/${day}`),
   emptyQuarantine: (days: string[]) =>
     call<{ emptied: string[]; freed: number }>('/api/quarantine/empty', { method: 'POST', body: JSON.stringify({ days, confirm: 'delete' }) }),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),

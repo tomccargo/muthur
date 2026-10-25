@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { size } from '../labels';
+import { libraryPath, size } from '../labels';
 
 type Day = { day: string; files: number; size: number };
 
@@ -10,6 +10,12 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
   const [chosen, setChosen] = useState<Set<string>>(new Set());
   const [asking, setAsking] = useState(false);
   const [message, setMessage] = useState<{ kind: 'error' | 'note'; text: string } | null>(null);
+  const [open, setOpen] = useState<string | null>(null);
+  const [notes, setNotes] = useState<{ from: string; why: string }[]>([]);
+  const show = (day: string) => {
+    if (open === day) { setOpen(null); return; }
+    api.quarantineDay(day).then((r) => { setNotes(r.notes); setOpen(day); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+  };
 
   const load = () => api.quarantine().then((q) => { setDays(q.days); setChosen(new Set()); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
   useEffect(() => { load(); }, [busy]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -35,12 +41,24 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
       {days && days.length > 0 && (
         <ul className="rows">
           {days.map((d) => (
-            <li key={d.day}>
-              <label className="choice">
-                <input type="checkbox" checked={chosen.has(d.day)} onChange={(e) => setChosen((s) => { const n = new Set(s); if (e.target.checked) n.add(d.day); else n.delete(d.day); return n; })} />
-                <span>{new Date(d.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
-              </label>
-              <span className="small num">{d.files} files · {size(d.size || 1)}</span>
+            <li key={d.day} style={{ flexDirection: 'column', gap: 4 }}>
+              <span style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <label className="choice">
+                  <input type="checkbox" checked={chosen.has(d.day)} onChange={(e) => setChosen((s) => { const n = new Set(s); if (e.target.checked) n.add(d.day); else n.delete(d.day); return n; })} />
+                  <span>{new Date(d.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
+                </label>
+                <span className="small num">{d.files} files · {size(d.size || 1)} · <button type="button" className="btn-link small" onClick={() => show(d.day)}>{open === d.day ? 'Hide' : 'What and why'}</button></span>
+              </span>
+              {open === d.day && (notes.length ? (
+                <ul className="rows" style={{ paddingLeft: 26 }}>
+                  {notes.map((n, i) => (
+                    <li key={i} style={{ flexDirection: 'column', gap: 2 }}>
+                      <span className="mono small" style={{ wordBreak: 'break-all' }}>{libraryPath(n.from)}</span>
+                      <span className="small muted">{n.why}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : <p className="hint" style={{ paddingLeft: 26 }}>No notes for this day; it was filled before muthur kept them.</p>)}
             </li>
           ))}
         </ul>

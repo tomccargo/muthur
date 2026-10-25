@@ -127,3 +127,13 @@ def test_only_ready_items_are_applied(env):
     tmp, applier, journal, show, film = env
     show["status"] = "review"
     assert applier.apply([show])["applied"] == 0
+
+
+def test_quarantine_says_what_and_why(env):
+    tmp, applier, journal, show, film = env
+    applier.apply([show])
+    from muthur.quarantine import notes
+
+    day = next((tmp / "_muthur-quarantine").iterdir()).name
+    [n] = notes(str(tmp / "_muthur-quarantine"), day)
+    assert n["to"] == "Some.Show.S01E02.1080p.WEB" and "after its video moved" in n["why"]

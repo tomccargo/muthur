@@ -28,6 +28,7 @@ from .kodi import Kodi
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
+from . import quarantine as quarantine_notes
 from .scores import ScoreRefresh
 from .store import Store
 from .tmdb import Tmdb
@@ -610,9 +611,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             for d in sorted(os.listdir(cfg.quarantine)):
                 path = os.path.join(cfg.quarantine, d)
                 if DAY.match(d) and os.path.isdir(path):
-                    files = [os.path.join(dp, n) for dp, _, names in os.walk(path) for n in names]
+                    files = [os.path.join(dp, n) for dp, _, names in os.walk(path) for n in names if n != quarantine_notes.NOTES]
                     days.append({"day": d, "files": len(files), "size": sum(os.path.getsize(f) for f in files if os.path.isfile(f))})
         return {"days": days}
+
+    @app.get("/api/quarantine/{day}")
+    def quarantine_day(day: str):
+        if not DAY.match(day):
+            raise HTTPException(404, "Not a day in the quarantine.")
+        return {"notes": quarantine_notes.notes(cfg.quarantine, day)}
 
     @app.post("/api/quarantine/empty")
     def quarantine_empty(body: dict):
