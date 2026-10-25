@@ -23,11 +23,16 @@ def main(argv=None) -> None:
     d.add_argument("--limit", type=int, help="only the first N shows/movies (for quick tests)")
     d.add_argument("--workers", type=int, default=8)
 
+    sub.add_parser("password", help="set a new password for the web UI (signs every browser out)")
+
     p = sub.add_parser("parse", help="show how a path is parsed")
     p.add_argument("kind", choices=["episode", "movie"])
     p.add_argument("path", help="path relative to the library root, e.g. 'Show/Season 01/file.mkv'")
 
     args = ap.parse_args(argv)
+    if args.cmd == "password":
+        _password()
+        return
     if args.cmd == "parse":
         parts = args.path.replace("\\", "/").split("/")
         res = parse_episode(parts) if args.kind == "episode" else parse_movie(parts)
@@ -43,6 +48,25 @@ def main(argv=None) -> None:
     tmdb = Tmdb(tmdb_token(), os.path.join(args.cache, "tmdb.sqlite"))
     out = run(tmdb, args.tv, args.film, args.out, args.cache, args.rescan, args.limit, args.workers)
     print(f"Report: {os.path.join(out, 'summary.md')}")
+
+
+def _password() -> None:
+    """In the container: `muthur password` (Container Manager: the container's Terminal, or docker exec -it)."""
+    from getpass import getpass
+
+    from .auth import Auth
+    from .store import Store
+
+    load_dotenv()
+    config = os.environ.get("MUTHUR_CONFIG", "/config")
+    first, again = getpass("New password: "), getpass("The same again: ")
+    if first != again:
+        raise SystemExit("The two passwords differ; nothing changed.")
+    try:
+        Auth(Store(os.path.join(config, "muthur.db"))).set_password(first)
+    except ValueError as e:
+        raise SystemExit(str(e))
+    print("Password changed. Every browser signs in again with it.")
 
 
 if __name__ == "__main__":

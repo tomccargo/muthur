@@ -115,6 +115,13 @@ export type FixResult = { done: Partial<Record<FixKind, number>>; failed: { path
 
 export class ApiError extends Error {}
 
+export type AuthMode = 'login' | 'setup';
+export type AuthState = { required: boolean; set: boolean; signedIn: boolean };
+
+// The app shows the sign-in page when this fires: the server said this browser isn't signed in (any more).
+export const AUTH_EVENT = 'muthur-auth';
+export const askToSignIn = (mode: AuthMode) => window.dispatchEvent(new CustomEvent<AuthMode>(AUTH_EVENT, { detail: mode }));
+
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
   const r = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...init });
   if (!r.ok) {
@@ -122,6 +129,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
     try {
       const body = await r.json();
       if (typeof body.detail === 'string') message = body.detail;
+      if (r.status === 401 && (body.auth === 'login' || body.auth === 'setup')) askToSignIn(body.auth);
     } catch {
       // keep the generic message
     }
@@ -131,6 +139,12 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  auth: () => call<AuthState>('/api/auth'),
+  setup: (password: string) => call<{ signedIn: boolean }>('/api/auth/setup', { method: 'POST', body: JSON.stringify({ password }) }),
+  login: (password: string) => call<{ signedIn: boolean }>('/api/auth/login', { method: 'POST', body: JSON.stringify({ password }) }),
+  logout: () => call<{ signedIn: boolean }>('/api/auth/logout', { method: 'POST', body: '{}' }),
+  changePassword: (current: string, next: string) =>
+    call<{ signedIn: boolean }>('/api/auth/password', { method: 'POST', body: JSON.stringify({ current, new: next }) }),
   status: () => call<Status>('/api/status'),
   inbox: () => call<Inbox>('/api/inbox'),
   scan: () => call<Job>('/api/inbox/scan', { method: 'POST' }),

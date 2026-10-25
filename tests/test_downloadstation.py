@@ -24,7 +24,7 @@ def calls(monkeypatch):
              {"id": "dbid_3", "title": "Still.Coming.S01E01", "status": "downloading"},
              {"id": "dbid_4", "title": "Something.Else", "status": "finished"}]
 
-    def get(url, params, timeout, verify):
+    def get(url, params, timeout, verify=True):
         seen.append((url.rsplit("/webapi/", 1)[1], params))
         if params["api"] == "SYNO.API.Auth":
             ok = params["passwd"] == "right"

@@ -15,6 +15,10 @@ It's built for a Synology NAS running Container Manager, with Kodi reading the l
 
 The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the look and UI rules in [DESIGN.md](DESIGN.md).
 
+## Signing in
+
+The first visit asks you to choose a password; after that each browser signs in once (and again after 30 days without a visit). Forgot it? Run `muthur password` inside the container: in Container Manager, open the muthur container's terminal ([Open Terminal](https://kb.synology.com/en-my/DSM/help/ContainerManager/docker_container?version=7); the image has `sh`, not `bash`), or over SSH with `sudo docker exec -it muthur muthur password`.
+
 ## Running it
 
 On a Synology NAS: see [docs/DEPLOY.md](docs/DEPLOY.md). Locally, for development:

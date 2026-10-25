@@ -6,14 +6,17 @@ import re
 import shutil
 import threading
 import time
+from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from . import __version__
+from .auth import COOKIE, SESSION_SECONDS, Auth, same_site
 from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
@@ -23,7 +26,7 @@ from .health import FIXES, Health
 from .inbox import Inbox
 from .library_edit import LibraryEdit
 from .index import Index
-from .jobs import Jobs
+from .jobs import Busy, Jobs
 from .journal import Journal
 from .kodi import Kodi
 from .memory import import_tv
@@ -31,7 +34,7 @@ from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
 from . import quarantine as quarantine_notes
 from .scores import ScoreRefresh
-from .shield import Shield, ShieldError
+from .shield import COMPONENT, Shield, ShieldError
 from .store import Store
 from .tmdb import Tmdb
 from .watched import Listener, Watched
@@ -51,6 +54,8 @@ class Config:
         self.web_dist = os.environ.get("MUTHUR_WEB", str(Path(__file__).resolve().parents[2] / "web" / "dist"))
         # The weekly IMDb refresh runs on its own; tests and one-off tools switch it off.
         self.scheduler = os.environ.get("MUTHUR_SCHEDULER", "1") != "0"
+        # The UI asks for a password (§14). Only tests, or a proxy in front with its own login, switch it off.
+        self.auth = os.environ.get("MUTHUR_AUTH", "1") != "0"
 
 
 TMDB_LINK = re.compile(r"themoviedb\.org/(tv|movie)/(\d+)")
@@ -120,6 +125,18 @@ def _film_summary(f: dict, films: list[dict]) -> dict:
                               "damaged": len([x for x in f["flags"] if x != "multiple-main-videos"]), "loose": 0}}
 
 
+def _size(path: str) -> int:
+    """Bytes in a folder; a file that vanished or a broken link counts as nothing."""
+    total = 0
+    for dp, _, names in os.walk(path):
+        for n in names:
+            try:
+                total += os.lstat(os.path.join(dp, n)).st_size
+            except OSError:
+                pass
+    return total
+
+
 def _path_state(path: str) -> dict:
     exists = os.path.isdir(path)
     return {"path": path, "exists": exists, "readable": exists and os.access(path, os.R_OK),
@@ -140,6 +157,31 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
+    auth = Auth(store, cfg.auth)
+    OPEN = {"/api/health", "/api/auth", "/api/auth/login", "/api/auth/setup", "/api/auth/logout"}
+    BUSY = "Another job is running. Try again when it's done."
+
+    @app.middleware("http")
+    async def guard(request: Request, call_next):
+        """Every API request: a change a browser says comes from another site is refused, and only a
+        signed-in browser gets an answer (§14)."""
+        path = request.url.path
+        if path.startswith("/api/"):
+            if request.method not in ("GET", "HEAD", "OPTIONS") and not same_site(request.headers):
+                return JSONResponse({"detail": "Refused: this request came from another website."}, status_code=403)
+            if auth.required and path not in OPEN and not await run_in_threadpool(auth.valid, request.cookies.get(COOKIE)):
+                return JSONResponse({"detail": "Sign in to muthur first.", "auth": "login" if auth.is_set() else "setup"},
+                                    status_code=401)
+        return await call_next(request)
+
+    @contextmanager
+    def alone(name: str):
+        """A change made in the request itself, never while a job runs (and no job starts meanwhile)."""
+        try:
+            with jobs.exclusive(name):
+                yield
+        except Busy:
+            raise HTTPException(409, BUSY)
 
     def tmdb() -> Tmdb | None:
         token = store.get("tmdb.token") or os.environ.get("TMDB_READ_TOKEN", "").strip()
@@ -188,6 +230,60 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
         return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout) if k.get("host") else None
+
+    # -- signing in (§14) -------------------------------------------------------
+    def signed_in(request: Request, response: Response) -> dict:
+        response.set_cookie(COOKIE, auth.start_session(), max_age=SESSION_SECONDS, httponly=True, samesite="strict",
+                            secure=request.url.scheme == "https", path="/")
+        return {"signedIn": True}
+
+    def address(request: Request) -> str:
+        return request.client.host if request.client else "?"
+
+    @app.get("/api/auth")
+    def auth_state(request: Request):
+        return {"required": auth.required, "set": auth.is_set(),
+                "signedIn": not auth.required or auth.valid(request.cookies.get(COOKIE))}
+
+    @app.post("/api/auth/setup")
+    def auth_setup(body: dict, request: Request, response: Response):
+        """The first visit chooses the password; once one is set, this is refused."""
+        if auth.is_set():
+            raise HTTPException(409, "A password is already set. Sign in with it.")
+        try:
+            auth.set_password(str(body.get("password") or ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return signed_in(request, response)
+
+    @app.post("/api/auth/login")
+    def auth_login(body: dict, request: Request, response: Response):
+        if not auth.allowed(address(request)):
+            raise HTTPException(429, "Too many wrong passwords. Wait five minutes and try again.")
+        if not auth.check(str(body.get("password") or "")):
+            auth.failed(address(request))
+            raise HTTPException(401, "That isn't the password.")
+        return signed_in(request, response)
+
+    @app.post("/api/auth/logout")
+    def auth_logout(request: Request, response: Response):
+        auth.end_session(request.cookies.get(COOKIE))
+        response.delete_cookie(COOKIE, path="/")
+        return {"signedIn": False}
+
+    @app.post("/api/auth/password")
+    def auth_password(body: dict, request: Request, response: Response):
+        """A new password signs every other browser out."""
+        if not auth.allowed(address(request)):
+            raise HTTPException(429, "Too many wrong passwords. Wait five minutes and try again.")
+        if not auth.check(str(body.get("current") or "")):
+            auth.failed(address(request))
+            raise HTTPException(403, "The current password isn't right.")
+        try:
+            auth.set_password(str(body.get("new") or ""))
+        except ValueError as e:
+            raise HTTPException(422, str(e))
+        return signed_in(request, response)
 
     # -- status ---------------------------------------------------------------
     @app.get("/api/health", include_in_schema=False)
@@ -276,7 +372,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if client is None:
             raise HTTPException(409, "Add your TMDB token in Settings first.")
         items, _ = store.snapshot("inbox")
-        wanted = set((body or {}).get("ids") or [i["id"] for i in items or [] if i["status"] == "ready"])
+        asked = (body or {}).get("ids")
+        if asked and (not isinstance(asked, list) or not {str(i) for i in asked} <= {i["id"] for i in items or []}):
+            raise HTTPException(404, "A download isn't in the inbox any more. Check the downloads again.")
+        wanted = {str(i) for i in asked} if asked else {i["id"] for i in items or [] if i["status"] == "ready"}
         if not wanted:
             raise HTTPException(409, "Nothing is ready to apply. Check the downloads first.")
 
@@ -317,6 +416,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.post("/api/history/{run_id}/undo", status_code=202)
     def undo(run_id: int, body: dict | None = None):
+        not_dry()  # putting back moves and deletes files too
         item = (body or {}).get("item")
         client = tmdb()
 
@@ -495,11 +595,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def edit(fn):
         not_dry()
-        not_busy()
-        try:
-            return edited(fn())
-        except (ValueError, OSError) as e:
-            raise HTTPException(409, getattr(e, "strerror", None) or str(e))
+        with alone("edit"):
+            try:
+                result = fn()
+            except (ValueError, OSError) as e:
+                raise HTTPException(409, getattr(e, "strerror", None) or str(e))
+        return edited(result)  # after the change: the index is built again as a job
 
     @app.post("/api/library/match")
     def library_match(body: dict):
@@ -673,7 +774,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """The reader says which show or film a library folder is. A show is remembered for its folder; a
         film's choice is kept for its file. That one item is checked again right away."""
         client = need_tmdb()
-        not_busy()
+        with alone("edit"):
+            return choose_in_library(client, body)
+
+    def choose_in_library(client, body: dict) -> dict:
         kind, path, tmdb_id = body.get("kind"), str(body.get("path") or ""), str(body.get("tmdbId") or "")
         if kind not in ("tv", "movie") or not tmdb_id.isdigit():
             raise HTTPException(422, "Choose a show or a film first.")
@@ -744,16 +848,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def quarantine_empty(body: dict):
         """Deletes the chosen days for good. Only ever on the reader's explicit confirmation in the page."""
         not_dry()
-        not_busy()
         days = [d for d in body.get("days") or [] if isinstance(d, str) and DAY.match(d)]
         if not days or body.get("confirm") != "delete":
             raise HTTPException(422, "Choose the days to empty, and confirm.")
         freed = 0
-        for d in days:
-            path = os.path.join(cfg.quarantine, d)
-            if os.path.isdir(path):
-                freed += sum(os.path.getsize(os.path.join(dp, n)) for dp, _, names in os.walk(path) for n in names)
-                shutil.rmtree(path)
+        with alone("quarantine"):
+            for d in days:
+                path = os.path.join(cfg.quarantine, d)
+                if os.path.isdir(path):
+                    freed += _size(path)
+                    shutil.rmtree(path)
         return {"emptied": days, "freed": freed}
 
     @app.get("/api/jobs/current")
@@ -778,10 +882,6 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             return asdict(Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).examine(item_id, choice))
         except OSError as e:
             raise HTTPException(409, f"Couldn't read the download: {e.strerror or e}")
-
-    def not_busy():
-        if jobs.current and jobs.current.running:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
 
     def replace(items: list[dict], new: dict) -> None:
         store.save_snapshot("inbox", [new if i["id"] == new["id"] else i for i in items])
@@ -842,28 +942,28 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.post("/api/review/choose")
     def review_choose(body: dict):
         client = need_tmdb()
-        not_busy()
         item_id, choice = _choice(body)
-        items = inbox_items(item_id)
-        new = examine(client, item_id, choice)
-        store.choose(item_id, choice)
-        title = new["parsed"].get("title")
-        if body.get("remember") and choice["kind"] == "tv" and title:
-            # 'Remember for this show': the next download with this name goes straight to this show.
-            store.remember("tv", title, choice["tmdbId"], new["year"], new["title"], store.folder_for("tv", choice["tmdbId"]), "confirmed")
-        replace(items, new)
+        with alone("review"):
+            items = inbox_items(item_id)
+            new = examine(client, item_id, choice)
+            store.choose(item_id, choice)
+            title = new["parsed"].get("title")
+            if body.get("remember") and choice["kind"] == "tv" and title:
+                # 'Remember for this show': the next download with this name goes straight to this show.
+                store.remember("tv", title, choice["tmdbId"], new["year"], new["title"], store.folder_for("tv", choice["tmdbId"]), "confirmed")
+            replace(items, new)
         return new
 
     @app.post("/api/review/forget")
     def review_forget(body: dict):
         """Drop a choice: the item is planned again as if it had never been reviewed."""
         client = need_tmdb()
-        not_busy()
         item_id = str(body.get("id") or "")
-        items = inbox_items(item_id)
-        store.forget_choice(item_id)
-        new = examine(client, item_id)
-        replace(items, new)
+        with alone("review"):
+            items = inbox_items(item_id)
+            store.forget_choice(item_id)
+            new = examine(client, item_id)
+            replace(items, new)
         return new
 
     # -- settings ---------------------------------------------------------------
@@ -889,6 +989,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if "kodi" in body:
             k = dict(store.get("kodi", {}))
             new = body["kodi"]
+            if "host" in new and str(new["host"]).strip() != k.get("host", ""):
+                k.pop("password", None)  # a stored password only ever goes to the address it was given for
             for key in ("host", "user"):
                 if key in new:
                     k[key] = str(new[key]).strip()
@@ -910,7 +1012,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 except (TypeError, ValueError):
                     raise HTTPException(422, "The ADB port must be a number; network debugging uses 5555 unless you changed it.")
             if "app" in new:
-                sh["app"] = str(new["app"]).strip()
+                component = str(new["app"]).strip()
+                if component and not COMPONENT.match(component):
+                    raise HTTPException(422, "Choose the app from the list the Shield gives.")
+                sh["app"] = component
             store.put("shield", sh)
         if isinstance(body.get("dryRun"), bool):
             store.put("dryRun", body["dryRun"])
@@ -919,6 +1024,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if "downloadStation" in body:
             d = dict(store.get("downloadstation", {}))
             new = body["downloadStation"]
+            if "url" in new and str(new["url"]).strip() != d.get("url", ""):
+                d.pop("password", None)  # as for Kodi: never send the password to a new address
             for key in ("url", "user"):
                 if key in new:
                     d[key] = str(new[key]).strip()

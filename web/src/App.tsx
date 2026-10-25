@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { api, type Status } from './api';
+import { AUTH_EVENT, api, type AuthMode, type Status } from './api';
 import { Icon } from './icons';
 import { when } from './labels';
 import { Link, useLocation } from './nav';
@@ -12,6 +12,7 @@ import { ReviewPage } from './pages/Review';
 import { LibraryPage } from './pages/Library';
 import { DuplicatesPage } from './pages/Duplicates';
 import { HealthPage } from './pages/Health';
+import { SignIn } from './pages/SignIn';
 
 // Only pages that exist are in the navigation (DESIGN.md §1.5).
 const SECTIONS = [
@@ -77,7 +78,21 @@ function RailFoot({ status, onChange }: { status: Status | null; onChange: () =>
   );
 }
 
+// Signed in first (ARCHITECTURE.md §14); the app itself only once the server says this browser may.
 export function App() {
+  const [auth, setAuth] = useState<'checking' | 'ok' | AuthMode>('checking');
+  useEffect(() => {
+    api.auth().then((a) => setAuth(a.signedIn ? 'ok' : a.set ? 'login' : 'setup')).catch(() => setAuth('ok'));
+    const onAuth = (e: Event) => setAuth((e as CustomEvent<AuthMode>).detail);
+    window.addEventListener(AUTH_EVENT, onAuth);
+    return () => window.removeEventListener(AUTH_EVENT, onAuth);
+  }, []);
+  if (auth === 'checking') return null;
+  if (auth !== 'ok') return <SignIn mode={auth} onDone={() => setAuth('ok')} />;
+  return <Shell />;
+}
+
+function Shell() {
   const { path } = useLocation();
   const hook = useStatus();
   const counts = hook.status?.inbox.counts ?? {};

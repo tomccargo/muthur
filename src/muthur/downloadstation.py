@@ -28,9 +28,13 @@ class DownloadStation:
 
     def _get(self, path: str, **params) -> dict:
         try:
-            r = requests.get(self.base + path, params=params, timeout=self.timeout, verify=False)
+            # Certificates are checked: the account's password must not go to a machine posing as the NAS.
+            r = requests.get(self.base + path, params=params, timeout=self.timeout)
             r.raise_for_status()
             body = r.json()
+        except requests.exceptions.SSLError as e:
+            raise DownloadStationError(f"The NAS's certificate at {self.base} isn't trusted. Use the NAS's http:// address "
+                                       "on your own network, or give DSM a trusted certificate.") from e
         except (requests.RequestException, ValueError) as e:
             raise DownloadStationError(f"The NAS didn't answer at {self.base} ({type(e).__name__}).") from e
         if not body.get("success"):

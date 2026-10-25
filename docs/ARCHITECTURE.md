@@ -75,7 +75,7 @@ volumes:
 `torrent-output`, `TV` and `Film` **must be under one bind mount**. Moving a file between two separate Docker bind mounts can't be a simple rename, even on the same disk. Docker falls back to copy-then-delete, which is slow and not atomic. With one mount, a move is an instant rename.
 
 - The container runs as a dedicated DSM user (PUID/PGID) with read/write on `Iedereen` only.
-- The web UI is on the LAN only (for example `http://nostromo:8580`), with an optional password.
+- The web UI is on the LAN only (for example `http://nostromo:8580`) and asks for a password (§14).
 - `quarantine` lives at `/data/_muthur-quarantine`.
 
 ## 4. Data sources
@@ -351,6 +351,9 @@ A clickable mockup of all screens exists (private, because it shows real library
 - The container itself runs **non-root** with access to `Iedereen` and its own config folder only.
 - API keys live in `/config`, never in the image or the repo.
 - The UI listens on the LAN only.
+- **Signing in (0.19).** The first visit chooses a password (at least 8 characters), stored as an scrypt hash. A browser that signs in gets a random session cookie (HttpOnly, SameSite=Strict, 30 days of use; stored hashed). Every API call except the container's health check needs it. Five wrong passwords from one address mean a five-minute pause. A new password signs every other browser out. Forgotten: `muthur password` in the container's terminal sets a new one. `MUTHUR_AUTH=0` switches the password off, only for tests or behind a proxy with its own login.
+- **Other websites can't press muthur's buttons (0.19).** A request that changes something is refused when the browser says it comes from another site (`Sec-Fetch-Site`, else `Origin`), following [OWASP's CSRF guidance](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html). FastAPI already refuses JSON bodies sent as plain text ([CVE-2021-32677](https://nvd.nist.gov/vuln/detail/cve-2021-32677)), but requests without a body weren't covered. The SameSite cookie also stops a DNS-rebinding page, which would have to call muthur under its own name and so never has the cookie ([NCC Group](https://github.com/nccgroup/singularity/wiki/Preventing-DNS-Rebinding-Attacks)).
+- **What the API accepts (0.19).** Apply only takes downloads that are in the inbox, never a path. The Shield's app must look like an Android component (`package/activity`) and is quoted before it reaches `adb shell`, which runs its arguments through the box's shell. A new Kodi or Download Station address forgets the stored password, so it never goes to another machine. Download Station's certificate is checked. Undo is refused in a dry run, like every other change. Edits made from a page (Library, Review, Health questions, emptying the quarantine) take the same one-at-a-time slot as the jobs, so a scheduled job can't write the same file at the same moment.
 
 ## 15. Milestones
 

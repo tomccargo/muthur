@@ -5,6 +5,7 @@ import os
 import threading
 import time
 import traceback
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass, field
 
 
@@ -32,6 +33,10 @@ def _lower_priority() -> None:
             os.setpriority(os.PRIO_PROCESS, threading.get_native_id(), 10)
         except OSError:
             pass
+
+
+class Busy(Exception):
+    """Another job is running."""
 
 
 class Jobs:
@@ -62,3 +67,17 @@ class Jobs:
 
         threading.Thread(target=run, name=f"job-{name}", daemon=True).start()
         return job
+
+    @contextmanager
+    def exclusive(self, name: str):
+        """Short work done in the request itself (an edit, a choice) under the same one-at-a-time rule,
+        so a job can't start halfway and write the same files. Raises Busy when a job is running."""
+        with self.lock:
+            if self.current and self.current.running:
+                raise Busy(name)
+            job = self.current = Job(name)
+        try:
+            yield job
+        finally:
+            job.finished = time.time()
+            self.last[name] = job

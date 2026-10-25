@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import time
@@ -73,12 +74,14 @@ class Shield:
 
     def wake_and_start(self, component: str, ready, wait: float = 60) -> dict:
         """Wake the box, start `component`, and wait until ready() is true (the app answers)."""
+        if not COMPONENT.match(component):  # it ends up in a shell command on the box
+            raise ShieldError("The app in Settings isn't one from the Shield's list. Choose it again.")
         self.connect()
         woke = False
         if not self.awake():
             self._shell("input keyevent KEYCODE_WAKEUP")
             woke = True
-        self._shell(f"am start -n {component}")
+        self._shell(f"am start -n {shlex.quote(component.strip())}")
         end = time.time() + wait
         while time.time() < end:
             if ready():

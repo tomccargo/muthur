@@ -204,6 +204,8 @@ class Inbox:
 
     def examine(self, entry: str, choice: dict | None = None) -> Item:
         """choice: what the reader chose in Review ({kind, tmdbId, episodes}); by default the stored one."""
+        if entry.startswith(("/", "\\")) or ".." in entry.replace("\\", "/").split("/"):
+            raise ValueError("Not a download in the downloads folder.")
         choice = choice if choice is not None else self.store.choice(entry)
         files = _walk(self.downloads, entry)
         item = Item(entry, "ignored", "", size=sum(s for _, s, _ in files))

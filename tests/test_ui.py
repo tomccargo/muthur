@@ -60,7 +60,7 @@ def server(tmp_path_factory):
         (dl / name).write_bytes(b"v" * 100)
         _old(dl / name)
     env = {"MUTHUR_CONFIG": tmp / "config", "MUTHUR_DOWNLOADS": dl, "MUTHUR_TV": tv, "MUTHUR_FILM": film,
-           "MUTHUR_QUARANTINE": tmp / "_q", "TMDB_READ_TOKEN": "x", "MUTHUR_WEB": DIST, "MUTHUR_SCHEDULER": "0"}
+           "MUTHUR_QUARANTINE": tmp / "_q", "TMDB_READ_TOKEN": "x", "MUTHUR_WEB": DIST, "MUTHUR_SCHEDULER": "0", "MUTHUR_AUTH": "0"}
     saved = {k: os.environ.get(k) for k in env}
     os.environ.update({k: str(v) for k, v in env.items()})
     app = create_app(Config(dotenv=False), tmdb_factory=FakeTmdb)
