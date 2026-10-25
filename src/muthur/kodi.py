@@ -21,6 +21,28 @@ class Kodi:
             raise RuntimeError(body["error"].get("message", "Kodi returned an error"))
         return body.get("result")
 
+    def source_prefix(self, name: str) -> str | None:
+        """Kodi's path of the video source named like the library folder: 'TV' -> 'smb://nostromo/iedereen/TV/'."""
+        for s in (self.call("Files.GetSources", {"media": "video"}) or {}).get("sources", []):
+            path = s.get("file", "")
+            if path.rstrip("/").rsplit("/", 1)[-1].lower() == name.lower():
+                return path if path.endswith("/") else path + "/"
+        return None
+
+    def scan_and_wait(self, directory: str | None = None, limit: float = 300) -> bool:
+        """Scan (one folder, or everything) and wait until Kodi is done. False when it took too long."""
+        import time
+
+        self.call("VideoLibrary.Scan", {"directory": directory} if directory else {})
+        time.sleep(2)
+        end = time.time() + limit
+        while time.time() < end:
+            state = self.call("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}) or {}
+            if not state.get("Library.IsScanningVideo"):
+                return True
+            time.sleep(2)
+        return False
+
     def refresh_files(self, paths: list[str], shares: dict[str, str]) -> dict:
         """Ask Kodi to re-read the NFOs at these paths. shares maps muthur's library roots to the
         name of the same folder on the share ('/data/TV' -> 'TV'), so 'smb://nostromo/iedereen/TV/…'

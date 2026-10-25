@@ -16,6 +16,7 @@ from . import __version__
 from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
+from .duplicates import Duplicates, apply_groups
 from .inbox import Inbox
 from .index import Index
 from .jobs import Jobs
@@ -128,6 +129,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     imdb = Imdb(store)
     watched = Watched(store)
     index = Index(store, cfg.tv, cfg.film)
+    dups = Duplicates(store, cfg.tv, cfg.film)
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
@@ -166,6 +168,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "memory": {"shows": store.alias_count("tv")},
             "scores": scores_state(),
             "watched": watched.state(),
+            "duplicates": len(((store.snapshot("duplicates")[0]) or {}).get("groups", [])),
             "job": jobs.current.as_dict() if jobs.current else None,
         }
 
@@ -409,6 +412,75 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
             raise HTTPException(404, "Not an image in the library.")
         return FileResponse(full, media_type=ART_TYPES[ext], headers={"Cache-Control": "max-age=3600"})
+
+    # -- duplicates ---------------------------------------------------------------
+    def find_duplicates(job):
+        lib = index.build(watched.latest(), job)
+        store.save_snapshot("library", lib)
+        store.save_snapshot("duplicates", {"at": time.time(), "groups": dups.find(lib, job)})
+
+    @app.post("/api/duplicates/scan", status_code=202)
+    def duplicates_scan():
+        job = jobs.start("duplicates", find_duplicates)
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/duplicates")
+    def duplicates():
+        data, _ = store.snapshot("duplicates")
+        return data or {"at": None, "groups": []}
+
+    def chosen_groups(choices: list[dict]) -> list[dict]:
+        data, _ = store.snapshot("duplicates")
+        by_id = {g["id"]: g for g in (data or {}).get("groups", [])}
+        out = []
+        for c in choices:
+            g = by_id.get(str(c.get("id")))
+            if not g:
+                raise HTTPException(404, "A group isn't in the list any more. Check the duplicates again.")
+            keep = c.get("keep") or g["keep"]
+            if keep not in {x["path"] for x in g["copies"]}:
+                raise HTTPException(422, "Choose one of the group's copies to keep.")
+            out.append({**g, "keep": keep, "plan": dups.plan(g, keep) if keep != g["keep"] else g["plan"]})
+        return out
+
+    @app.post("/api/duplicates/plan")
+    def duplicates_plan(body: dict):
+        return chosen_groups([body])[0]["plan"]
+
+    @app.post("/api/duplicates/apply", status_code=202)
+    def duplicates_apply(body: dict):
+        groups = chosen_groups(body.get("choices") or [])
+        if not groups:
+            raise HTTPException(422, "Choose at least one group.")
+        k = kodi(timeout=90)
+        if not k:
+            raise HTTPException(409, "Set up the Kodi connection first: muthur carries the watched status of every copy to the one it keeps.")
+        state = k.check()
+        if not state.get("connected"):
+            raise HTTPException(409, f"{state.get('problem')} muthur only resolves duplicates while Kodi answers, so watched status isn't lost.")
+
+        def work(job):
+            watched.follow(Watched.read_kodi(k))  # a fresh backup right before anything moves (§11)
+            result = apply_groups(dups, groups, journal, cfg.quarantine, k, job)
+            store.save_snapshot("last-duplicates", result)
+            done = {r["id"] for r in result["items"] if r["ok"]}
+            data, _ = store.snapshot("duplicates")
+            if data:
+                data["groups"] = [g for g in data["groups"] if g["id"] not in done]
+                store.save_snapshot("duplicates", data)
+            store.save_snapshot("library", index.build(watched.latest()))
+
+        job = jobs.start("duplicates-apply", work)
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/duplicates/last")
+    def duplicates_last():
+        data, _ = store.snapshot("last-duplicates")
+        return data or {}
 
     @app.get("/api/jobs/current")
     def current_job():

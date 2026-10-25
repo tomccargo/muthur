@@ -18,6 +18,8 @@ export const JOBS: Record<string, string> = {
   undo: 'Putting a run back',
   scores: 'Refreshing IMDb scores',
   library: 'Indexing the library',
+  duplicates: 'Looking for duplicates',
+  'duplicates-apply': 'Resolving duplicates',
 };
 
 // Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.

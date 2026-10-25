@@ -251,7 +251,9 @@ Each NFO carries a comment `<!-- muthur vX, tmdb:93740, 2026-10-24 -->` so the t
 6. Bitrate per minute (a tiebreaker against over-compressed encodes)
 7. Subtitles present (en/nl)
 
-The tool proposes a winner and you confirm. The loser goes to `_muthur-quarantine/<date>/…` with a small JSON note on why. The quarantine can be emptied from the UI, per item or everything older than N days.
+The tool proposes a winner and you confirm.
+
+**As built (0.8, 2026-10-25):** groups are episode numbers held by more than one video in a show (joined through double episodes; damaged numbers left out) and films sharing an IMDb or TMDB ID. Each copy is measured with ffprobe (cached by size and modification time; about 0.3 s a file) and its source read from the name; the rank is source, resolution, codec, audio, bitrate, subtitles, and a copy ffprobe can't read is never kept. Between equals, the copy with an NFO in a proper season or show folder wins. The kept video takes the name of the best-named copy with an NFO (muthur's, else one named after the show), with the resolution in the name corrected; that copy's NFO, thumbnail and subtitles keep matching, and a subtitle the kept copy lacks comes from another copy. Films in folders end up in the curated  folder as ; other folders go to quarantine whole. Applying needs Kodi: muthur takes a fresh watched backup, re-checks every copy's size, journals each move, then has Kodi scan the folder, gives the kept item the highest play count (or resume point) of all copies and removes the old entries. On the real library: 97 groups (86 episodes, 11 films). The loser goes to `_muthur-quarantine/<date>/…` with a small JSON note on why. The quarantine can be emptied from the UI, per item or everything older than N days.
 
 ## 10. Kodi setup (one-time, on the Shield)
 
@@ -347,7 +349,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup with restore: done (0.6).
-5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation. Library: done (0.7). An index of every show, episode and film (NFO facts, the score Kodi shows, watched status from the backup, problems) is built daily and on demand; NFOs are cached by modification time, so a re-index of the real library takes about 30 s. Library images are served only from the TV and Film folders, and only as images.
+5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation. Library: done (0.7). Duplicates: done (0.8). An index of every show, episode and film (NFO facts, the score Kodi shows, watched status from the backup, problems) is built daily and on demand; NFOs are cached by modification time, so a re-index of the real library takes about 30 s. Library images are served only from the TV and Film folders, and only as images.
 
 ## 16. Decisions on the former open questions (2026-10-24)
 

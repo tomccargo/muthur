@@ -10,6 +10,7 @@ import { SettingsPage } from './pages/Settings';
 import { HistoryPage } from './pages/History';
 import { ReviewPage } from './pages/Review';
 import { LibraryPage } from './pages/Library';
+import { DuplicatesPage } from './pages/Duplicates';
 
 // Only pages that exist are in the navigation (DESIGN.md §1.5).
 const SECTIONS = [
@@ -17,6 +18,7 @@ const SECTIONS = [
   { to: '/inbox', label: 'Inbox', icon: 'inbox' },
   { to: '/review', label: 'Review', icon: 'review' },
   { to: '/library', label: 'Library', icon: 'library' },
+  { to: '/duplicates', label: 'Duplicates', icon: 'duplicates' },
   { to: '/history', label: 'History', icon: 'history' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ] as const;
@@ -75,7 +77,7 @@ export function App() {
   const { path } = useLocation();
   const hook = useStatus();
   const counts = hook.status?.inbox.counts ?? {};
-  const counter: Record<string, number> = { '/inbox': counts.ready ?? 0, '/review': counts.review ?? 0 };
+  const counter: Record<string, number> = { '/inbox': counts.ready ?? 0, '/review': counts.review ?? 0, '/duplicates': hook.status?.duplicates ?? 0 };
   const current = SECTIONS.find((s) => s.to === path) ?? SECTIONS[0];
 
   useEffect(() => {
@@ -112,6 +114,7 @@ export function App() {
         {current.to === '/inbox' && <InboxPage {...hook} />}
         {current.to === '/review' && <ReviewPage {...hook} />}
         {current.to === '/library' && <LibraryPage {...hook} />}
+        {current.to === '/duplicates' && <DuplicatesPage {...hook} />}
         {current.to === '/history' && <HistoryPage {...hook} />}
         {current.to === '/settings' && <SettingsPage {...hook} />}
       </main>

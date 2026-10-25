@@ -16,6 +16,7 @@ export type Status = {
     last: { at: number; items: number; watched: number; changes: number } | null;
     paused: { at: number; why: string; unwatched: number; items: number } | null;
   };
+  duplicates: number;
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -84,6 +85,18 @@ export type Film = {
 };
 export type Library = { at: number | null; shows: ShowSummary[]; films: Film[] };
 
+export type Copy = {
+  path: string; nfo: boolean; muthur: boolean; watched: number | null; folder: boolean; label: string;
+  quality: { size: number; readable: boolean; source: string };
+};
+export type DupOp = { op: 'move' | 'quarantine'; src: string; dst?: string };
+export type DupPlan = { final: string; ops: DupOp[] };
+export type DupGroup = {
+  id: string; kind: 'episode' | 'film'; label: string; title: string; show: string | null; copies: Copy[]; keep: string;
+  note: string | null; plan: DupPlan;
+};
+export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
+
 export class ApiError extends Error {}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -129,6 +142,12 @@ export const api = {
   library: () => call<Library>('/api/library'),
   libraryShow: (folder: string) => call<ShowDetail>(`/api/library/show?${new URLSearchParams({ folder })}`),
   indexLibrary: () => call<Job>('/api/library/scan', { method: 'POST' }),
+  duplicates: () => call<{ at: number | null; groups: DupGroup[] }>('/api/duplicates'),
+  scanDuplicates: () => call<Job>('/api/duplicates/scan', { method: 'POST' }),
+  duplicatePlan: (id: string, keep: string) => call<DupPlan>('/api/duplicates/plan', { method: 'POST', body: JSON.stringify({ id, keep }) }),
+  applyDuplicates: (choices: { id: string; keep: string }[]) =>
+    call<Job>('/api/duplicates/apply', { method: 'POST', body: JSON.stringify({ choices }) }),
+  duplicatesLast: () => call<DupResult | Record<string, never>>('/api/duplicates/last'),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };
