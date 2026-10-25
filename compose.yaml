@@ -1,13 +1,13 @@
-# muthur on a Synology NAS (Container Manager → Project, or `docker compose up -d` over SSH).
-# Copy .env.example next to this file as .env and fill it in; see docs/DEPLOY.md.
+# muthur as a Synology Container Manager project.
+# The image is built by GitHub Actions (.github/workflows/image.yml) and pulled from Docker Hub;
+# the NAS never builds anything. Settings come from .env next to this file (see .env.example).
 
 services:
   muthur:
-    build: .
-    image: muthur:local
+    image: tomccargo/muthur:latest
     container_name: muthur
     restart: unless-stopped
-    # The DSM user muthur acts as: owns /config, may read (later: write) the media share.
+    # A DSM user without admin rights that owns the config folder (docs/DEPLOY.md).
     user: "${PUID:-1026}:${PGID:-100}"
     ports:
       - "${MUTHUR_PORT:-8580}:8580"
