@@ -171,7 +171,10 @@ class Health:
         summary = {"done": done, "failed": failed}
         self.journal.finish(run, summary)
         if kodi and nfos:
-            summary["kodi"] = kodi.refresh_files([self._full(p) for p in nfos], self.roots)
+            if job:
+                job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
+            summary["kodi"] = kodi.refresh_files([self._full(p) for p in nfos], self.roots,
+                                                 (lambda d, t: setattr(job, "done", d)) if job else None)
         return {"run": run, **summary}
 
     def _quarantine(self, run: int, path: str, why: str) -> None:

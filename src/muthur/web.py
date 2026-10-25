@@ -800,7 +800,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     pass  # the fixes still happen; Kodi re-reads the items later
             result = health_tool(client).apply(plan, kinds, k, job)
             store.save_snapshot("last-fixes", result)
-            check_health(client, None)
+            job.begin("Checking the library again", 0)
+            check_health(client, job)
 
         job = jobs.start("fixes-apply", work)
         if job is None:

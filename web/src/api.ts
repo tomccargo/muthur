@@ -1,7 +1,10 @@
 // Types and calls for muthur's JSON API (src/muthur/web.py).
 
 export type PathState = { path: string; exists: boolean; readable: boolean; writable: boolean };
-export type Job = { name: string; started: number; finished: number | null; done: number; total: number; error: string | null; running: boolean };
+export type Job = {
+  name: string; started: number; finished: number | null; done: number; total: number; error: string | null; running: boolean;
+  step?: string | null;  // the part of a long job running now; done/total count that part
+};
 export type KodiState = ({ connected: true; version: string } | { connected: false; problem: string }) & { pendingScan?: number | null; canWake?: boolean };
 
 export type Names = { device: string; nas: string };  // what the reader calls the Kodi box and the NAS

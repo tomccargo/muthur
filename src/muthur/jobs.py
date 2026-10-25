@@ -17,6 +17,7 @@ class Job:
     done: int = 0
     total: int = 0
     error: str | None = None
+    step: str | None = None  # the part of a long job running now, as a sentence; done/total count that part
 
     @property
     def running(self) -> bool:
@@ -24,6 +25,10 @@ class Job:
 
     def as_dict(self) -> dict:
         return {**asdict(self), "running": self.running}
+
+    def begin(self, step: str, total: int) -> None:
+        """A new part of the job, with its own count, so the bar never sits full while work goes on."""
+        self.step, self.total, self.done = step, total, 0
 
 
 def _lower_priority() -> None:

@@ -16,13 +16,14 @@ class Kodi:
                  device: str = "Kodi device"):
         """device: what the reader calls the box Kodi runs on (Settings, Names), for the sentences below."""
         self.device = device
+        self.session = requests.Session()  # one connection for a batch of calls, not one per call
         self.url = f"http://{host}:{port}/jsonrpc"
         self.auth = (user, password or "") if user else None
         self.timeout = timeout
 
     def call(self, method: str, params: dict | None = None):
-        r = requests.post(self.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}},
-                          auth=self.auth, timeout=self.timeout)
+        r = self.session.post(self.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}},
+                              auth=self.auth, timeout=self.timeout)
         r.raise_for_status()
         body = r.json()
         if "error" in body:
@@ -51,21 +52,27 @@ class Kodi:
             time.sleep(2)
         return False
 
-    def refresh_files(self, paths: list[str], roots: dict[str, str]) -> dict:
+    def refresh_files(self, paths: list[str], roots: dict[str, str], progress=None) -> dict:
         """Ask Kodi to re-read the NFOs at these paths. roots maps each library ('TV', 'Film') to muthur's
         folder for it ('/data/Series'); Kodi's path is matched by that folder's name ('smb://nas/media/Series/…'),
-        whatever the folders are called. Returns counts; an item Kodi doesn't have is skipped."""
+        whatever the folders are called. Returns counts; an item Kodi doesn't have is skipped.
+        progress(done, total) after each path: a library-wide batch is thousands of calls."""
         done = missing = 0
-        for path in paths:
+        shows: list | None = None  # Kodi's show list, read once for the whole batch
+        for n, path in enumerate(paths, 1):
             try:
-                done += self._refresh_one(path, roots)
+                if shows is None and path.endswith("tvshow.nfo"):
+                    shows = self.call("VideoLibrary.GetTVShows", {"properties": ["file"]}).get("tvshows", [])
+                done += self._refresh_one(path, roots, shows or [])
             except LookupError:
                 missing += 1
             except (requests.exceptions.RequestException, RuntimeError):
                 missing += 1
+            if progress:
+                progress(n, len(paths))
         return {"refreshed": done, "notInKodi": missing}
 
-    def _refresh_one(self, path: str, roots: dict[str, str]) -> int:
+    def _refresh_one(self, path: str, roots: dict[str, str], shows: list) -> int:
         lib = next((k for k, r in roots.items() if path.startswith(r.rstrip("/\\") + os.sep) or path.startswith(r.rstrip("/") + "/")), None)
         if lib is None:
             raise LookupError(path)
@@ -77,7 +84,7 @@ class Kodi:
             return kodi_path.replace("\\", "/").rstrip("/").lower().endswith("/" + suffix.lower())
 
         if name == "tvshow.nfo":
-            for s in self.call("VideoLibrary.GetTVShows", {"properties": ["file"]}).get("tvshows", []):
+            for s in shows:
                 if ends(s["file"], folder):
                     self.call("VideoLibrary.RefreshTVShow", {"tvshowid": s["tvshowid"], "refreshepisodes": False})
                     return 1

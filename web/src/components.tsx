@@ -14,7 +14,7 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
     return (
       <div className="panel" role="status" aria-live="polite" style={{ padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, fontSize: 14 }}>
-          <span>{label}…</span>
+          <span>{job.step ?? label}…</span>
           <span className="muted num">{job.total ? `${job.done} of ${job.total}` : 'starting'}</span>
         </div>
         <div className="track" aria-hidden="true"><span className="fill" style={{ width: `${pct}%` }} /></div>

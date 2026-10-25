@@ -151,7 +151,10 @@ class ScoreRefresh:
         if run is not None:
             self.journal.finish(run, summary)
         if self.kodi and updated:
-            summary["kodi"] = self.kodi.refresh_files(updated, {"TV": self.tv_root, "Film": self.film_root})
+            if job:
+                job.begin(f"Asking Kodi to re-read {len(updated):,} changed NFOs", len(updated))
+            summary["kodi"] = self.kodi.refresh_files(updated, {"TV": self.tv_root, "Film": self.film_root},
+                                                      (lambda d, t: setattr(job, "done", d)) if job else None)
         return summary
 
     def _score(self, path: str, text: str, ours: bool = True) -> tuple[float, int] | None:
