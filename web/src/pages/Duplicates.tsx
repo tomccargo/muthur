@@ -21,9 +21,9 @@ function Group({ g, keep, plan, selected, onKeep, onSelect }: {
   return (
     <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: selected ? 'var(--accent)' : undefined }}>
       <div className="panel-head" style={{ marginBottom: 0 }}>
-        <label className="choice" style={{ alignItems: 'center' }}>
+        <label className="choice" style={{ alignItems: 'center', minWidth: 0 }}>
           <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} />
-          <h2 style={{ fontSize: '1.1rem' }}>{g.label}</h2>
+          <h2 style={{ fontSize: '1.1rem', overflowWrap: 'anywhere' }}>{g.label}</h2>
         </label>
         <span className="small muted">
           {g.show && <Link to={`/library?${new URLSearchParams({ folder: g.show })}`}>{g.show}</Link>}
@@ -33,7 +33,7 @@ function Group({ g, keep, plan, selected, onKeep, onSelect }: {
       <fieldset style={{ border: 0, padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 6 }}>
         <legend className="small muted" style={{ marginBottom: 4 }}>Which copy stays?</legend>
         {g.copies.map((c) => (
-          <label key={c.path} className="choice" style={{ padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: c.path === keep ? 'var(--surface-muted)' : undefined }}>
+          <label key={c.path} className="choice" style={{ minWidth: 0, overflowWrap: 'anywhere', padding: '6px 8px', borderRadius: 'var(--radius-sm)', background: c.path === keep ? 'var(--surface-muted)' : undefined }}>
             <input type="radio" name={`keep-${g.id}`} checked={c.path === keep} onChange={() => onKeep(c.path)} />
             <span style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
               <span className="small"><strong>{c.label}</strong> · {size(c.quality.size)}{c.nfo ? ' · has NFO' : ''}{c.watched ? ' · watched' : ''}
@@ -43,7 +43,7 @@ function Group({ g, keep, plan, selected, onKeep, onSelect }: {
           </label>
         ))}
       </fieldset>
-      <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <div className="small" style={{ display: 'flex', flexDirection: 'column', gap: 2, overflowWrap: 'anywhere', minWidth: 0 }}>
         <span>Stays as <span className="mono" style={{ color: 'var(--accent-text)', wordBreak: 'break-all' }}>{libraryPath(plan.final)}</span></span>
         <span className="muted">
           To quarantine: {quarantined.length} {quarantined.length === 1 ? 'file' : 'files'} ({size(freed(g, keep))})
