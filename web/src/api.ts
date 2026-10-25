@@ -55,6 +55,7 @@ export type Settings = {
   kodi: { host: string; port: number; user: string; passwordSet: boolean };
   tmdb: { tokenSet: boolean };
   titles: { keepOriginal: string[] };
+  downloadStation: { url: string; user: string; passwordSet: boolean };
   paths: { downloads: string; tv: string; film: string };
 };
 
@@ -133,6 +134,7 @@ export const api = {
   job: () => call<Job | null>('/api/jobs/current'),
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  testDownloadStation: () => call<{ connected: true; tasks: number } | { connected: false; problem: string }>('/api/downloadstation/test', { method: 'POST' }),
   testKodi: () => call<KodiState>('/api/kodi/test', { method: 'POST' }),
   scanKodi: () => call<{ started: boolean }>('/api/kodi/scan', { method: 'POST' }),
   apply: (ids?: string[]) => call<Job>('/api/apply', { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) }),

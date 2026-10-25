@@ -17,6 +17,7 @@ from . import __version__
 from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
+from .downloadstation import DownloadStation, DownloadStationError
 from .duplicates import Duplicates, apply_groups
 from .health import FIXES, Health
 from .inbox import Inbox
@@ -144,6 +145,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             tmdb_cache.update(token=token, client=tmdb_factory(token, os.path.join(cfg.config_dir, "tmdb-cache.sqlite")))
         return tmdb_cache["client"]
 
+    def download_station() -> DownloadStation | None:
+        d = store.get("downloadstation", {})
+        return DownloadStation(d["url"], d.get("user", ""), d.get("password", "")) if d.get("url") and d.get("user") else None
+
     def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
         return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout) if k.get("host") else None
@@ -231,6 +236,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             # Look again right before acting: the plan must match what is on disk now.
             fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
             result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb).apply(fresh, job)
+            ds = download_station()
+            moved = {i["id"].rsplit("/", 1)[-1] for i in result["items"] if i["ok"]}
+            if ds and moved:
+                # Only now that the files are in the library: the finished tasks leave Download Station (§16).
+                try:
+                    result["downloadStation"] = ds.remove_finished(moved)
+                except DownloadStationError as e:
+                    result["downloadStation"] = {"problem": str(e)}
             store.save_snapshot("last-apply", result)
             _rescan(client)
             if result["applied"]:
@@ -678,11 +691,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.get("/api/settings")
     def get_settings():
         k = store.get("kodi", {})
+        ds = store.get("downloadstation", {})
         return {
             "kodi": {"host": k.get("host", ""), "port": k.get("port", 8080), "user": k.get("user", ""),
                      "passwordSet": bool(k.get("password"))},
             "tmdb": {"tokenSet": tmdb() is not None},
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
+            "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
             "paths": {"downloads": cfg.downloads, "tv": cfg.tv, "film": cfg.film},
         }
 
@@ -702,11 +717,25 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if new.get("password"):
                 k["password"] = new["password"]
             store.put("kodi", k)
+        if "downloadStation" in body:
+            d = dict(store.get("downloadstation", {}))
+            new = body["downloadStation"]
+            for key in ("url", "user"):
+                if key in new:
+                    d[key] = str(new[key]).strip()
+            if new.get("password"):
+                d["password"] = new["password"]
+            store.put("downloadstation", d)
         if (token := (body.get("tmdb") or {}).get("token")):
             store.put("tmdb.token", token.strip())
         if "titles" in body and isinstance(body["titles"].get("keepOriginal"), list):
             store.put("titles.keepOriginal", sorted({str(c) for c in body["titles"]["keepOriginal"]}))
         return get_settings()
+
+    @app.post("/api/downloadstation/test")
+    def downloadstation_test():
+        ds = download_station()
+        return ds.check() if ds else {"connected": False, "problem": "Enter the NAS address and the account first."}
 
     @app.post("/api/kodi/test")
     def kodi_test():

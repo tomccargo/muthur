@@ -4,10 +4,17 @@ import type { StatusHook } from '../App';
 import { Dot, Footer } from '../components';
 import { ALL_LANGUAGES, language } from '../labels';
 
-type Draft = { host: string; port: string; user: string; password: string; token: string; keepOriginal: string[] };
+type Draft = {
+  host: string; port: string; user: string; password: string; token: string; keepOriginal: string[];
+  dsUrl: string; dsUser: string; dsPassword: string;
+};
+type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 
 function toDraft(s: Settings): Draft {
-  return { host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal };
+  return {
+    host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal,
+    dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '',
+  };
 }
 
 export function SettingsPage({ refresh }: StatusHook) {
@@ -17,6 +24,7 @@ export function SettingsPage({ refresh }: StatusHook) {
   const [message, setMessage] = useState<{ kind: 'error' | 'note'; text: string } | null>(null);
   const [kodi, setKodi] = useState<KodiState | null>(null);
   const [testing, setTesting] = useState(false);
+  const [ds, setDs] = useState<DsState | null>(null);
 
   useEffect(() => {
     api.settings().then((s) => { setSaved(s); setDraft(toDraft(s)); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
@@ -33,11 +41,21 @@ export function SettingsPage({ refresh }: StatusHook) {
     const body: Record<string, unknown> = {
       kodi: { host: draft.host, port: draft.port, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
       titles: { keepOriginal: draft.keepOriginal },
+      downloadStation: dsBody(),
       ...(draft.token ? { tmdb: { token: draft.token } } : {}),
     };
     api.saveSettings(body)
       .then((s) => { setSaved(s); setDraft(toDraft(s)); setDirty(false); refresh(); })
       .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+  };
+
+  function dsBody() {
+    return { url: draft!.dsUrl, user: draft!.dsUser, ...(draft!.dsPassword ? { password: draft!.dsPassword } : {}) };
+  }
+  const testDs = () => {
+    setDs(null);
+    const go = dirty ? api.saveSettings({ downloadStation: dsBody() }) : Promise.resolve(saved);
+    go.then(() => api.testDownloadStation()).then(setDs).catch((e: Error) => setDs({ connected: false, problem: e.message }));
   };
 
   const test = () => {
@@ -88,6 +106,30 @@ export function SettingsPage({ refresh }: StatusHook) {
           {kodi && (kodi.connected
             ? <span className="status small"><Dot kind="dot-success" />Connected · Kodi {kodi.version}</span>
             : <span className="status small"><Dot kind="dot-danger" />{kodi.problem}</span>)}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="ds-h">
+        <h2 id="ds-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Download Station</h2>
+        <p className="hint">
+          After a download is moved into the library, muthur removes its finished task from Download Station, so it doesn’t keep pointing at files
+          that are gone. Give muthur its own DSM account that may only use Download Station, without two-step verification. Leave this empty to keep
+          tasks as they are.
+        </p>
+        <label className="field-label">The NAS’s address
+          <input className="field" type="text" placeholder="for example http://192.168.1.10:5000" value={draft.dsUrl} onChange={(e) => edit({ dsUrl: e.target.value })} />
+        </label>
+        <div className="pair">
+          <label className="field-label">DSM account<input className="field" type="text" autoComplete="off" value={draft.dsUser} onChange={(e) => edit({ dsUser: e.target.value })} /></label>
+          <label className="field-label">{saved.downloadStation.passwordSet ? 'Password (saved)' : 'Password'}
+            <input className="field" type="password" autoComplete="off" value={draft.dsPassword} onChange={(e) => edit({ dsPassword: e.target.value })} />
+          </label>
+        </div>
+        <div className="actions">
+          <button className="btn btn-secondary btn-sm" type="button" onClick={testDs} disabled={!draft.dsUrl || !draft.dsUser}>Test the connection</button>
+          {ds && (ds.connected
+            ? <span className="status small"><Dot kind="dot-success" />Connected · {ds.tasks} tasks</span>
+            : <span className="status small"><Dot kind="dot-danger" />{ds.problem}</span>)}
         </div>
       </section>
 
