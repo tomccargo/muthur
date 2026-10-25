@@ -17,6 +17,7 @@ from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
 from .inbox import Inbox
+from .index import Index
 from .jobs import Jobs
 from .journal import Journal
 from .kodi import Kodi
@@ -77,6 +78,40 @@ def _choice(body: dict) -> tuple[str, dict]:
     return item_id, {"kind": c["kind"], "tmdbId": int(c["tmdbId"]), "episodes": episodes}
 
 
+def _ep_key(e: dict) -> tuple | None:
+    return (e["season"], tuple(e["episodes"])) if e["season"] is not None and e["episodes"] else None
+
+
+def _duplicates(episodes: list[dict]) -> set:
+    """Episode numbers that more than one video file in a show claims (S04E14 twice, or S01E01 and S01E01E02)."""
+    seen: dict[tuple, int] = {}
+    for e in episodes:
+        if e["season"] is not None:
+            for n in e["episodes"]:
+                seen[(e["season"], n)] = seen.get((e["season"], n), 0) + 1
+    return {_ep_key(e) for e in episodes if e["season"] is not None and any(seen[(e["season"], n)] > 1 for n in e["episodes"])}
+
+
+def _show_summary(sh: dict) -> dict:
+    eps = sh["episodes"]
+    return {
+        "folder": sh["folder"], "title": sh["title"], "year": sh["year"], "ids": sh["ids"], "nfo": sh["nfo"],
+        "poster": sh["poster"], "rating": sh["rating"], "count": len(eps),
+        "seasons": len({e["season"] for e in eps if e["season"] is not None}),
+        "watched": sum(1 for e in eps if e["watched"]), "size": sum(e["size"] for e in eps),
+        "problems": {"noNfo": sum(not e["nfo"] for e in eps) + (0 if sh["nfo"] else 1),
+                     "noScore": sum(not e["imdb"] for e in eps), "duplicates": len(_duplicates(eps)),
+                     "damaged": sum(1 for e in eps if e["damaged"] or e["season"] is None), "loose": len(sh["loose"])},
+    }
+
+
+def _film_summary(f: dict, films: list[dict]) -> dict:
+    ids = {(k, v) for k, v in f["ids"].items() if k in ("tmdb", "imdb")}
+    twins = sum(1 for g in films if g is not f and ids & {(k, v) for k, v in g["ids"].items() if k in ("tmdb", "imdb")})
+    return {**f, "problems": {"noNfo": int(not f["nfo"]), "noScore": int(not f["imdb"]), "duplicates": twins,
+                              "damaged": len([x for x in f["flags"] if x != "multiple-main-videos"]), "loose": 0}}
+
+
 def _path_state(path: str) -> dict:
     exists = os.path.isdir(path)
     return {"path": path, "exists": exists, "readable": exists and os.access(path, os.R_OK),
@@ -92,6 +127,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     journal = Journal(store)
     imdb = Imdb(store)
     watched = Watched(store)
+    index = Index(store, cfg.tv, cfg.film)
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
@@ -314,6 +350,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             except Exception:  # Kodi off or busy: the Dashboard shows when the last backup was
                 pass
             try:
+                lib, saved = store.snapshot("library")
+                if not saved or time.time() - saved > 86400:  # the index is a day old: build it again
+                    start_library()
+            except Exception:
+                pass
+            try:
                 if imdb.due():
                     start_scores()
             except Exception:  # never let the schedule die; the Dashboard shows when the last refresh was
@@ -322,6 +364,51 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
+
+    # -- library ------------------------------------------------------------------
+    def start_library():
+        def work(job):
+            store.save_snapshot("library", index.build(watched.latest(), job))
+
+        return jobs.start("library", work)
+
+    @app.post("/api/library/scan", status_code=202)
+    def library_scan():
+        job = start_library()
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/library")
+    def library():
+        lib, _ = store.snapshot("library")
+        if not lib:
+            return {"at": None, "shows": [], "films": []}
+        return {"at": lib["at"], "shows": [_show_summary(sh) for sh in lib["shows"]], "films": [_film_summary(f, lib["films"]) for f in lib["films"]]}
+
+    @app.get("/api/library/show")
+    def library_show(folder: str):
+        lib, _ = store.snapshot("library")
+        show = next((sh for sh in (lib or {}).get("shows", []) if sh["folder"] == folder), None)
+        if not show:
+            raise HTTPException(404, "That show isn't in the index. Index the library again.")
+        dup = _duplicates(show["episodes"])
+        return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup} for e in show["episodes"]], "loose": show["loose"]}
+
+    ART_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".tbn": "image/jpeg"}
+
+    @app.get("/api/library/art")
+    def library_art(path: str):
+        """An image from the library ('TV/Show/poster.jpg'), for the Library page. Nothing else is served."""
+        lib_name, _, rest = path.partition("/")
+        root = {"TV": cfg.tv, "Film": cfg.film}.get(lib_name)
+        ext = os.path.splitext(rest)[1].lower()
+        if not root or ext not in ART_TYPES:
+            raise HTTPException(404, "Not an image in the library.")
+        full = os.path.realpath(os.path.join(root, *rest.split("/")))
+        if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
+            raise HTTPException(404, "Not an image in the library.")
+        return FileResponse(full, media_type=ART_TYPES[ext], headers={"Cache-Control": "max-age=3600"})
 
     @app.get("/api/jobs/current")
     def current_job():

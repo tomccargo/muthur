@@ -17,6 +17,7 @@ export const JOBS: Record<string, string> = {
   apply: 'Moving downloads into the library',
   undo: 'Putting a run back',
   scores: 'Refreshing IMDb scores',
+  library: 'Indexing the library',
 };
 
 // Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.
@@ -68,4 +69,14 @@ export function when(epochSeconds: number | null): string {
     return `${d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}, ${time}`;
   }
   return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+// 'IMDb 8.4 · 41k votes' (DESIGN.md §1.10: a score names its source).
+const SOURCES: Record<string, string> = { imdb: 'IMDb', themoviedb: 'TMDB', tmdb: 'TMDB', tvdb: 'TVDB', trakt: 'Trakt', default: 'Score' };
+export function votes(n: number): string {
+  return n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}k` : String(n);
+}
+export function score(s: [string, number, number] | null | undefined): string {
+  if (!s) return '';
+  return `${SOURCES[s[0]] ?? s[0]} ${s[1].toFixed(1)}${s[2] ? ` · ${votes(s[2])} votes` : ''}`;
 }

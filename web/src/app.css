@@ -150,6 +150,13 @@ a.tile:hover { background: var(--surface-muted); }
 .inline .field { flex: 1 1 200px; width: auto; }
 .inline .field.year { flex: 0 0 96px; }
 
+/* ---- Library: poster grid (§8) ------------------------------------------------- */
+.posters { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 16px 14px; }
+.poster-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }
+.poster-tile .poster { width: 100%; }
+.poster-tile:hover .poster-title { color: var(--accent-text); }
+.poster-title { font-weight: 600; font-size: 14px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+
 /* ---- Progress ------------------------------------------------------------------ */
 .track { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .fill { display: block; height: 100%; border-radius: 3px; background: var(--mark); transition: width 0.3s ease; }

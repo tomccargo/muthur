@@ -347,7 +347,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup with restore: done (0.6).
-5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
+5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation. Library: done (0.7). An index of every show, episode and film (NFO facts, the score Kodi shows, watched status from the backup, problems) is built daily and on demand; NFOs are cached by modification time, so a re-index of the real library takes about 30 s. Library images are served only from the TV and Film folders, and only as images.
 
 ## 16. Decisions on the former open questions (2026-10-24)
 

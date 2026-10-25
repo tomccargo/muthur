@@ -9,12 +9,14 @@ import { InboxPage } from './pages/Inbox';
 import { SettingsPage } from './pages/Settings';
 import { HistoryPage } from './pages/History';
 import { ReviewPage } from './pages/Review';
+import { LibraryPage } from './pages/Library';
 
 // Only pages that exist are in the navigation (DESIGN.md §1.5).
 const SECTIONS = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/inbox', label: 'Inbox', icon: 'inbox' },
   { to: '/review', label: 'Review', icon: 'review' },
+  { to: '/library', label: 'Library', icon: 'library' },
   { to: '/history', label: 'History', icon: 'history' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ] as const;
@@ -109,6 +111,7 @@ export function App() {
         {current.to === '/' && <Dashboard {...hook} />}
         {current.to === '/inbox' && <InboxPage {...hook} />}
         {current.to === '/review' && <ReviewPage {...hook} />}
+        {current.to === '/library' && <LibraryPage {...hook} />}
         {current.to === '/history' && <HistoryPage {...hook} />}
         {current.to === '/settings' && <SettingsPage {...hook} />}
       </main>

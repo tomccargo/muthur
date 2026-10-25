@@ -19,6 +19,11 @@ class NfoInfo:
     duration_s: int | None = None
     kind: str | None = None  # root tag: movie, tvshow, episodedetails
     readable: bool = True
+    ratings: dict[str, tuple[float, int]] = field(default_factory=dict)  # 'imdb': (8.4, 41000)
+    default_rating: str | None = None  # the rating Kodi shows
+    season: int | None = None
+    episode: int | None = None
+    muthur: bool = False  # written by muthur
 
 
 def _text(root, tag):
@@ -46,7 +51,26 @@ def parse_nfo_text(text: str) -> NfoInfo:
         return info
 
     info.kind = root.tag.lower()
+    info.muthur = "written by muthur" in text[:400]
     info.title = _text(root, "title")
+    for tag in ("season", "episode"):
+        v = _text(root, tag)
+        if v and v.lstrip("-").isdigit():
+            setattr(info, tag, int(v))
+    for r in root.findall("ratings/rating"):
+        name = (r.get("name") or "").lower().strip()
+        try:
+            info.ratings[name] = (float(_text(r, "value") or ""), int(float(_text(r, "votes") or 0)))
+        except ValueError:
+            continue
+        if r.get("default") == "true":
+            info.default_rating = name
+    if not info.ratings and (v := _text(root, "rating")):  # the old single <rating> tag
+        try:
+            info.ratings["default"] = (float(v), int(float(_text(root, "votes") or 0)))
+            info.default_rating = "default"
+        except ValueError:
+            pass
     year = _text(root, "year") or (_text(root, "premiered") or "")[:4]
     info.year = int(year) if year and year.isdigit() else None
 

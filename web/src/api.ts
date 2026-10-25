@@ -64,6 +64,26 @@ export type Run = {
 };
 export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine' | 'update'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };
 
+// The library index (Library, Duplicates, Health). A score is [source, value, votes].
+export type Score = [string, number, number] | null;
+export type LibProblems = { noNfo: number; noScore: number; duplicates: number; damaged: number; loose: number };
+export type ShowSummary = {
+  folder: string; title: string; year: number | null; ids: Record<string, string>; nfo: boolean; poster: boolean; rating: Score;
+  count: number; seasons: number; watched: number; size: number; problems: LibProblems;
+};
+export type LibEpisode = {
+  file: string; size: number; season: number | null; episodes: number[]; nfo: boolean; muthur: boolean; title: string | null;
+  rating: Score; imdb: [number, number] | null; thumb: boolean; subs: number; damaged: boolean; sample: boolean; mismatch: boolean;
+  watched: number | null; duplicate: boolean;
+};
+export type ShowDetail = Omit<ShowSummary, never> & { episodes: LibEpisode[]; loose: string[] };
+export type Film = {
+  key: string; folder: boolean; file: string | null; size: number; others: string[]; title: string; year: number | null;
+  ids: Record<string, string>; nfo: boolean; muthur: boolean; rating: Score; imdb: [number, number] | null; poster: boolean;
+  flags: string[]; watched: number | null; problems: LibProblems;
+};
+export type Library = { at: number | null; shows: ShowSummary[]; films: Film[] };
+
 export class ApiError extends Error {}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -106,6 +126,9 @@ export const api = {
   acceptWatched: () => call<unknown>('/api/watched/accept', { method: 'POST' }),
   restorePreview: () => call<{ count: number; watched: number; resume: number; sample: string[] }>('/api/watched/restore/preview', { method: 'POST' }),
   restore: (expect: number) => call<{ done: number; failed: number }>('/api/watched/restore', { method: 'POST', body: JSON.stringify({ expect }) }),
+  library: () => call<Library>('/api/library'),
+  libraryShow: (folder: string) => call<ShowDetail>(`/api/library/show?${new URLSearchParams({ folder })}`),
+  indexLibrary: () => call<Job>('/api/library/scan', { method: 'POST' }),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };
