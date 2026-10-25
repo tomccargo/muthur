@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type KodiState, type Settings } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer } from '../components';
+import { Dot, Footer, HowTo } from '../components';
 import { PasswordSettings } from './PasswordSettings';
 import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
 import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLanguage } from '../labels';
@@ -108,7 +108,7 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="tmdb-h">
         <h2 id="tmdb-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>TMDB</h2>
-        <p className="hint">muthur looks titles up on TMDB. A personal token is free: on themoviedb.org go to Settings, then API, and copy the “API Read Access Token”.</p>
+        <HowTo>A personal token is free: on themoviedb.org go to Settings, then API, and copy the “API Read Access Token”.</HowTo>
         <div className="actions">
           <span className="status small">
             {saved.tmdb.tokenFrom === 'settings' ? <><Dot kind="dot-success" />A token is saved</>
@@ -131,7 +131,7 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="kodi-h">
         <h2 id="kodi-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Kodi on the {saved.names.device}</h2>
-        <p className="hint">In Kodi: Settings, Services, Control, then turn on “Allow remote control via HTTP” and set a username and password.</p>
+        <HowTo>In Kodi: Settings, Services, Control, then turn on “Allow remote control via HTTP” and set a username and password.</HowTo>
         <label className="field-label">The {saved.names.device}’s address
           <input className="field" type="text" placeholder="for example 192.168.1.20" value={draft.host} onChange={(e) => edit({ host: e.target.value })} />
         </label>
@@ -157,11 +157,11 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="ds-h">
         <h2 id="ds-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Download Station</h2>
-        <p className="hint">
+        <HowTo>
           After a download is moved into the library, muthur removes its finished task from Download Station, so it doesn’t keep pointing at files
           that are gone. Use the DSM account that adds the downloads, because Download Station only shows an account its own tasks; it must not use
           two-step verification. Leave this empty to keep tasks as they are.
-        </p>
+        </HowTo>
         <label className="field-label">The NAS’s address
           <input className="field" type="text" placeholder="for example http://192.168.1.10:5000" value={draft.dsUrl} onChange={(e) => edit({ dsUrl: e.target.value })} />
         </label>
@@ -184,7 +184,7 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="titles-h">
         <h2 id="titles-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Which films keep their original title?</h2>
-        <p className="hint">Plots and genres come in the language chosen under TMDB. A language that’s on keeps the original title (Aguirre, der Zorn Gottes); one that’s off gets the English title (Spirited Away).</p>
+        <p className="hint">On: the original title (Aguirre, der Zorn Gottes). Off: the English title (Spirited Away).</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ALL_LANGUAGES.map((code) => (
             <button key={code} type="button" className="chip" aria-pressed={draft.keepOriginal.includes(code)} onClick={() => toggle(code)}>
@@ -196,7 +196,6 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="names-h">
         <h2 id="names-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Names</h2>
-        <p className="hint">What muthur’s pages call your NAS and the device Kodi runs on, as in “Kodi on the Shield”.</p>
         <div className="pair">
           <label className="field-label">Your NAS
             <input className="field" type="text" maxLength={40} placeholder="NAS" value={draft.nas} onChange={(e) => edit({ nas: e.target.value })} />
@@ -211,7 +210,6 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="dirs-h">
         <h2 id="dirs-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Folders</h2>
-        <p className="hint">Set when muthur was installed on the NAS.</p>
         <ul className="rows">
           <li><span>Finished downloads</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.downloads)}</span></li>
           <li><span>TV</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.tv)}</span></li>

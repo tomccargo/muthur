@@ -74,7 +74,7 @@ function IdentityQuestion({ item, busy, onChosen }: { item: Item; busy: boolean;
       <h2 id="q-h">{kind === 'tv' ? 'Which show is this?' : 'Which film is this?'}</h2>
       {found ? (
         <p className="hint">{found.label} · <button type="button" className="btn-link" onClick={() => { setFound(null); setPicked(null); }}>Back to muthur’s suggestions</button></p>
-      ) : cards.length > 0 ? <p className="hint">muthur’s best guesses, with how well each one fits the name.</p> : null}
+      ) : null}
       {cards.length > 0 ? (
         <div className="cards">
           {cards.map((c) => <TitleCard key={`${c.kind}${c.tmdbId}`} card={c} pressed={picked?.tmdbId === c.tmdbId && picked.kind === c.kind} onPick={() => setPicked(c)} />)}
@@ -331,7 +331,7 @@ export function ReviewPage({ status, refresh }: StatusHook) {
         <div>
           <p className="eyebrow">Needs you</p>
           <h1>Review</h1>
-          <p className="lede">Downloads muthur isn’t sure about. Nothing moves until you choose, and a choice can be forgotten until it’s applied.</p>
+          {items && items.length > 0 && <p className="lede">{items.length} to decide</p>}
         </div>
         {items && items.length > 1 && (
           <div className="actions">
@@ -353,7 +353,7 @@ export function ReviewPage({ status, refresh }: StatusHook) {
       {items && items.length === 0 && (
         <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
           <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing to review</h2>
-          <p className="hint">Every download muthur has checked is either ready or left alone on purpose.</p>
+          <p className="hint">Nothing needs you.</p>
         </section>
       )}
       {current && (

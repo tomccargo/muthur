@@ -36,7 +36,6 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
         <h2 id="q-h">Quarantine</h2>
         <span className="small muted">{days ? `${(days ?? []).reduce((n, d) => n + d.files, 0)} files · ${size((days ?? []).reduce((n, d) => n + d.size, 0) || 1)}` : ''}</span>
       </div>
-      <p className="hint">Everything muthur takes out of the library waits here, by the day it was moved, under its library path. Runs in History can put it back until it’s emptied.</p>
       {days && days.length === 0 && <p className="hint">Empty.</p>}
       {days && days.length > 0 && (
         <ul className="rows">

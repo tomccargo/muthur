@@ -22,7 +22,7 @@ export function PasswordSettings() {
   return (
     <section className="panel form" aria-labelledby="password-h">
       <h2 id="password-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Password</h2>
-      <p className="hint">muthur asks for it once per browser. A new password signs every other browser out.</p>
+      <p className="hint">A new password signs every other browser out.</p>
       <div className="pair">
         <label className="field-label">Current password
           <input className="field" type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />

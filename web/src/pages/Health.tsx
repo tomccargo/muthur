@@ -88,7 +88,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
         <div>
           <p className="eyebrow">Library health</p>
           <h1>Health</h1>
-          <p className="lede">{data?.at ? `What’s wrong in the library and what muthur can fix safely · checked ${when(data.at)}, again every day` : 'Not checked yet.'}</p>
+          <p className="lede">{data?.at ? `Checked ${when(data.at)} · daily` : 'Not checked yet'}</p>
         </div>
         <div className="actions">
           {!asking && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Check the library'}</button>}
@@ -137,7 +137,6 @@ export function HealthPage({ status, refresh }: StatusHook) {
               </label>
               <span className="num">{f.count.toLocaleString('en-GB')}</span>
             </div>
-            <p className="hint">{FIX[k].what}</p>
             <ul className="rows">
               {f.sample.map((x) => (
                 <li key={x.path}>
@@ -156,7 +155,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Needs you'}</h2>
             {data.left > 0 || showLeft
               ? <button type="button" className="btn-link small" onClick={() => setShowLeft(!showLeft)}>{showLeft ? 'Show the open questions' : `Show the ${data.left} left as is`}</button>
-              : <span className="small muted">muthur doesn’t guess these</span>}
+              : null}
           </div>
           {!Object.values(data.manual).some((v) => (v?.count ?? 0) > 0) && (
             <p className="hint" style={{ margin: 0 }}>{showLeft ? 'Nothing is left as is.' : 'No open questions.'}</p>

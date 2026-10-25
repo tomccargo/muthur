@@ -198,25 +198,19 @@ No other variants. A disabled button that has a standing reason is `aria-disable
 
 ## 6. Motion
 
-Motion explains a change. It never decorates.
+Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not its Zen or disco modes.
 
-**Allowed:**
-- Hover and press feedback: background, border and colour, `150ms`.
-- Page change: a plain crossfade of the content under the rail, at most `180ms`. No blur, scale or slide.
-- A bar or meter growing to its value (`transition: width 0.3s ease`).
-- Skeleton shimmer while a list loads.
-- A panel or banner appearing: fade in `150ms`.
-- A job's progress (scan, apply, score refresh) as a determinate bar that moves with real progress.
+- **Pages** change inside a view transition: the old page fades and settles (220 ms, slight blur), the new one fades in rising 28 px (420 ms). The rail, top bar and tab bar stay still. Browsers without view transitions switch instantly.
+- **Panels and page heads** rise 28 px and fade in as they come into view (700 ms, soft ease-out), once per page visit.
+- **Tiles and posters** drop in one after another, 60 ms apart, with a slight overshoot (600 ms).
+- **Numbers** in tiles and panels count up from 0 (1.2 s, ease-out) and always end on the real value; a newer value from the server wins at once.
+- **A poster flies** into its show or film page (560 ms); the page change waits at most 400 ms for the cover.
+- **Hover and press:** background, border and colour in 150 ms; buttons, tiles and posters press in to 97 %.
+- **Bars and job progress** move with real progress; a skeleton shimmers while a list loads.
 
-**Not allowed:**
-- Confetti, disco, cursor trails, shader or animated backdrops, intro sequences.
-- Count-up numbers. A number appears as itself.
-- Shared-element flights (a poster flying into the next page).
-- Parallax and scroll-linked effects.
-- Anything that loops while the page is idle. A spinner is only allowed while something is genuinely in progress, and only when no progress bar is possible.
+**Not allowed:** confetti, disco, cursor trails, shader or animated backdrops, intro sequences, parallax, and anything that loops while the page is idle.
 
-**Reduced motion:** when the system asks for it (`prefers-reduced-motion: reduce`), every transition and animation is off, the shimmer included. No separate in-app switch: the OS setting is enough for a tool like this.
-
+**Reduced motion:** when the system asks for it (`prefers-reduced-motion: reduce`), every transition and animation is off, the page change and the count-up included.
 ---
 
 ## 7. Application chrome

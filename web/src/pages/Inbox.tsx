@@ -129,7 +129,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
             <li><span>Written next to them</span><span>NFO files and artwork, only where none exist</span></li>
             <li><span>What’s left of each download</span><span>to quarantine, if it holds no video</span></li>
           </ul>
-          <p className="hint">Nothing is overwritten, and each download is checked against the disk again right before it moves. Everything can be put back from History.</p>
+          <p className="hint">Nothing is overwritten; History can put it back.</p>
           <div className="actions" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary" type="button" autoFocus onClick={() => setAsking(false)}>Cancel</button>
             <button className="btn btn-primary" type="button" onClick={apply}>Move them</button>
@@ -158,7 +158,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
       {data && data.items.length === 0 && !running ? (
         <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
           <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>{data.scannedAt ? 'Nothing waiting' : 'Not checked yet'}</h2>
-          <p className="hint">{data.scannedAt ? 'The downloads folder has nothing finished in it.' : 'Check the downloads to see what is there and where it would go.'}</p>
+          <p className="hint">{data.scannedAt ? 'Nothing finished yet.' : 'Check the downloads to see what’s there.'}</p>
         </section>
       ) : (
         <div className="split">
@@ -185,7 +185,10 @@ export function InboxPage({ status, refresh }: StatusHook) {
           {current && <Detail item={current} onChanged={(text, error) => {
             setNote(text);
             setMessage(error ?? null);
-            if (text) api.inbox().then(setData).catch(() => undefined);
+            if (text) {
+              api.inbox().then(setData).catch(() => undefined);
+              refresh();  // the counters, tabs and Dashboard banner come from the status, not the list
+            }
           }} />}
         </div>
       )}

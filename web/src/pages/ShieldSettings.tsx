@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { Dot } from '../components';
+import { Dot, HowTo } from '../components';
 
 export type ShieldDraft = { shieldOn: boolean; shieldPort: string; shieldApp: string };
 
@@ -32,11 +32,11 @@ export function ShieldSettings({ draft, edit, device }: { draft: ShieldDraft; ed
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10, paddingTop: 12, borderTop: '1px solid var(--border)' }}>
       <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 650 }}>Waking the {device}</h3>
-      <p className="hint">
+      <HowTo>
         When you start something that needs Kodi (Apply, Duplicates, a restore) and the {device} sleeps, muthur wakes it and starts Kodi first.
         This uses network debugging (Device Preferences, Developer options). The first time, the TV asks to allow muthur: tick “Always allow”.
         Only things you start wake it; the scheduled checks never do. Waking may switch the TV on and to the {device} (HDMI-CEC).
-      </p>
+      </HowTo>
       <label className="choice">
         <input type="checkbox" checked={draft.shieldOn} onChange={(e) => edit({ shieldOn: e.target.checked })} />
         <span>Wake the {device} when Kodi is needed</span>

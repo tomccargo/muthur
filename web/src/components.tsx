@@ -1,4 +1,5 @@
 // Small pieces shared by the pages.
+import type { ReactNode } from 'react';
 import type { Job } from './api';
 import { JOBS } from './labels';
 
@@ -35,4 +36,9 @@ export function Footer() {
       Data and images from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
     </p>
   );
+}
+
+// Set-up instructions: read once, so they stay folded until asked for (DESIGN.md §1.11).
+export function HowTo({ children }: { children: ReactNode }) {
+  return <details className="howto"><summary className="small">How to set this up</summary><p className="hint">{children}</p></details>;
 }

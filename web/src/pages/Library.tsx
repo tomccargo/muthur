@@ -5,6 +5,12 @@ import { Dot, Footer, JobProgress } from '../components';
 import { middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
+import { hero, heroClick, heroLanded, motionOn } from '../motion';
+
+// The page a poster was clicked for: its cover takes over the flying poster (motion.ts).
+const isFlying = () => motionOn() && hero.to === location.pathname + location.search;
+// A film's own folder: where its video is, which may be a folder deeper than the film's top folder.
+const filmDir = (f: Film) => (f.file && f.file.includes('/') ? f.file.split('/').slice(0, -1).join('/') : f.key);
 
 type Filter = 'all' | keyof LibProblems;
 const FILTERS: [Filter, string][] = [['all', 'All'], ['noNfo', 'Missing NFO'], ['noScore', 'No IMDb score'], ['duplicates', 'Duplicates'], ['damaged', 'Damaged names']];
@@ -12,13 +18,14 @@ const art = (path: string) => `/api/library/art?${new URLSearchParams({ path })}
 const code = (s: number | null, e: number[]) => (s == null ? '—' : `S${String(s).padStart(2, '0')}${e.map((n) => `E${String(n).padStart(2, '0')}`).join('')}`);
 
 // A poster from the library, or the title's initials when there is none (DESIGN.md §8).
-function Cover({ src, title, width = '100%' }: { src: string | null; title: string; width?: number | string }) {
+function Cover({ src, title, width = '100%', hero = false }: { src: string | null; title: string; width?: number | string; hero?: boolean }) {
   const [failed, setFailed] = useState(false);
+  const style = { width, ...(hero ? { viewTransitionName: 'hero' } : {}) };
   if (!src || failed) {
     const initials = title.split(/\s+/).filter((w) => /\w/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-    return <span className="poster" style={{ width }} aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
+    return <span className="poster" style={style} aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
   }
-  return <img className="poster" style={{ width }} src={src} alt="" loading="lazy" onError={() => setFailed(true)} />;
+  return <img className="poster" style={style} src={src} alt="" loading={hero ? 'eager' : 'lazy'} onError={() => setFailed(true)} />;
 }
 
 function Links({ ids, kind }: { ids: Record<string, string>; kind: 'tv' | 'movie' }) {
@@ -64,7 +71,9 @@ function ShowPage({ folder }: { folder: string }) {
   const [show, setShow] = useState<ShowDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
-  useEffect(() => { api.libraryShow(folder).then(setShow).catch((e: Error) => setError(e.message)); }, [folder]);
+  const [flying] = useState(isFlying);
+  useEffect(() => { api.libraryShow(folder).then(setShow).catch((e: Error) => { setError(e.message); heroLanded(); }); }, [folder]);
+  useEffect(() => { if (show && flying) heroLanded(); }, [show, flying]);
   const seasons = useMemo(() => {
     const m = new Map<number | null, LibEpisode[]>();
     for (const e of show?.episodes ?? []) m.set(e.season, [...(m.get(e.season) ?? []), e]);
@@ -78,7 +87,7 @@ function ShowPage({ folder }: { folder: string }) {
       {show && (
         <>
           <header style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
-            <Cover src={show.poster ? art(`TV/${show.folder}/poster.jpg`) : null} title={show.title} />
+            <Cover src={show.poster ? art(`TV/${show.folder}/poster.jpg`) : null} title={show.title} hero={flying} />
             <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
               <p className="eyebrow">Show</p>
               <h1 style={{ margin: 0, fontSize: '2rem', overflowWrap: 'anywhere' }}>{show.title}{show.year ? ` (${show.year})` : ''}</h1>
@@ -118,12 +127,14 @@ function ShowPage({ folder }: { folder: string }) {
 // ---- a film -------------------------------------------------------------------------------
 function FilmPage({ film }: { film: Film }) {
   const [note, setNote] = useState<string | null>(null);
+  const [flying] = useState(isFlying);
+  useEffect(() => { if (flying) heroLanded(); }, [flying]);
   const stem = film.file ? `Film/${film.file.replace(/\.[^.]+$/, '')}` : '';
   return (
     <div className="page">
       <Link to="/library?kind=film" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}>← Library</Link>
       <header style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
-        <Cover src={film.poster ? art(`Film/${film.key}/poster.jpg`) : null} title={film.title} />
+        <Cover src={film.poster ? art(`Film/${filmDir(film)}/poster.jpg`) : null} title={film.title} hero={flying} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
           <p className="eyebrow">Film</p>
           <h1 style={{ margin: 0, fontSize: '2rem', overflowWrap: 'anywhere' }}>{film.title}{film.year ? ` (${film.year})` : ''}</h1>
@@ -183,8 +194,8 @@ export function LibraryPage({ status, refresh }: StatusHook) {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Your library</p>
-          <h1>Library</h1>
+          <p className="eyebrow">Library</p>
+          <h1>Shows and films</h1>
           <p className="lede">
             {lib?.at ? `${lib.shows.length} shows · ${episodes.toLocaleString('en-GB')} episodes · ${lib.films.length} films · indexed ${when(lib.at)}` : 'Not indexed yet.'}
           </p>
@@ -212,14 +223,16 @@ export function LibraryPage({ status, refresh }: StatusHook) {
       {lib?.at && (kind === 'tv' ? shows : films).length === 0 && <p className="hint">Nothing here with this filter.</p>}
       <div className="posters">
         {kind === 'tv' ? shows.map((s) => (
-          <Link key={s.folder} className="poster-tile" to={`/library?${new URLSearchParams({ folder: s.folder })}`} title={s.title}>
+          <Link key={s.folder} className="poster-tile" to={`/library?${new URLSearchParams({ folder: s.folder })}`} title={s.title}
+            onClick={(e) => heroClick(e, `/library?${new URLSearchParams({ folder: s.folder })}`)}>
             <Cover src={s.poster ? art(`TV/${s.folder}/poster.jpg`) : null} title={s.title} />
             <span className="poster-title">{s.title}</span>
             <span className="small muted">{s.year ?? ''}{s.year ? ' · ' : ''}{s.count} ep · {s.watched} watched</span>
           </Link>
         )) : films.map((f) => (
-          <Link key={f.key} className="poster-tile" to={`/library?${new URLSearchParams({ kind: 'film', film: f.key })}`} title={f.title}>
-            <Cover src={f.poster ? art(`Film/${f.key}/poster.jpg`) : null} title={f.title} />
+          <Link key={f.key} className="poster-tile" to={`/library?${new URLSearchParams({ kind: 'film', film: f.key })}`} title={f.title}
+            onClick={(e) => heroClick(e, `/library?${new URLSearchParams({ kind: 'film', film: f.key })}`)}>
+            <Cover src={f.poster ? art(`Film/${filmDir(f)}/poster.jpg`) : null} title={f.title} />
             <span className="poster-title">{f.title}</span>
             <span className="small muted">{f.year ?? '—'}{f.imdb ? ` · IMDb ${f.imdb[0].toFixed(1)}` : ''}{f.watched ? ' · watched' : ''}</span>
           </Link>

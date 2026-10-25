@@ -177,3 +177,35 @@ a.tile:hover { background: var(--surface-muted); }
 input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
 .tiles { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
 @media (max-width: 960px) { .section-tabs { padding: 16px 16px 0; } }
+
+/* ---- Motion: Playlist Parser's normal mode (DESIGN.md §6; motion.ts) ----------------------------- */
+@media (prefers-reduced-motion: no-preference) {
+  /* Panels and page heads rise in as they come into view. */
+  [data-reveal='wait']:not(.tiles):not(.posters) { opacity: 0; transform: translateY(28px); }
+  [data-reveal='in']:not(.tiles):not(.posters) { animation: rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+  /* Tiles and posters drop in one after another, with a slight overshoot. */
+  .tiles[data-reveal='wait'] > *, .posters[data-reveal='wait'] > * { opacity: 0; }
+  .tiles[data-reveal='in'] > *, .posters[data-reveal='in'] > * {
+    animation: drop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) both; animation-delay: calc(min(var(--i, 0), 30) * 60ms);
+  }
+  /* Pages: the old one fades and settles, the new one fades in rising; the chrome stays still. */
+  ::view-transition-old(root) { animation: 220ms cubic-bezier(0.4, 0, 1, 1) both page-out; }
+  ::view-transition-new(root) { animation: 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both page-in; }
+  ::view-transition-group(hero) { animation-duration: 560ms; animation-timing-function: cubic-bezier(0.22, 1.2, 0.36, 1); z-index: 50; }
+  ::view-transition-old(hero), ::view-transition-new(hero) { animation: none; mix-blend-mode: normal; height: 100%; object-fit: cover; }
+  .rail { view-transition-name: rail; }
+  .topbar { view-transition-name: topbar; }
+  .tabbar { view-transition-name: tabbar; }
+  ::view-transition-group(rail), ::view-transition-group(topbar), ::view-transition-group(tabbar) { animation: none; }
+  /* Buttons and tiles answer a press. */
+  .btn:active:not(:disabled), a.tile:active, .poster-tile:active { transform: scale(0.97); }
+  .btn, a.tile, .poster-tile { transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s; }
+}
+@keyframes rise { from { opacity: 0; transform: translateY(28px); } }
+@keyframes drop { from { opacity: 0; transform: translateY(18px); } }
+@keyframes page-out { to { opacity: 0; transform: scale(0.985); filter: blur(2px); } }
+@keyframes page-in { from { opacity: 0; transform: translateY(28px) scale(1.01); } }
+
+/* 'How to set this up': folded instructions in Settings (DESIGN.md §1.11). */
+.howto summary { cursor: pointer; color: var(--accent-text); width: fit-content; padding: 4px 0; }
+.howto p { margin: 6px 0 0; }
