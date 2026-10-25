@@ -67,7 +67,8 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
       )}
       {status && !status.applying && (
         <div className="banner banner-note">
-          <span className="status"><Dot kind="dot-warning" />For now muthur only plans: it shows where every download would go, and moves nothing.</span>
+          <span className="status"><Dot kind="dot-warning" />Dry run is on: muthur shows what it would do and changes nothing.</span>
+          <Link to="/settings">Settings</Link>
         </div>
       )}
       <JobProgress job={job} />

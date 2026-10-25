@@ -57,6 +57,8 @@ export type Settings = {
   tmdb: { tokenSet: boolean };
   titles: { keepOriginal: string[] };
   downloadStation: { url: string; user: string; passwordSet: boolean };
+  dryRun: boolean;
+  quality: { preferHdr: boolean };
   paths: { downloads: string; tv: string; film: string };
 };
 

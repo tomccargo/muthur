@@ -145,3 +145,13 @@ def test_watched_status_goes_to_the_kept_copy(lib):
     sets = [p for m, p in kodi.calls if m == "VideoLibrary.SetEpisodeDetails"]
     assert sets == [{"episodeid": 12, "playcount": 2, "lastplayed": "2026-01-01 20:00:00"}]
     assert sorted(p["episodeid"] for m, p in kodi.calls if m == "VideoLibrary.RemoveEpisode") == [1, 2]
+
+
+def test_hdr_only_counts_when_wanted():
+    sdr = {**FACTS["2160p"], "hdr": False}
+    hdr = {**FACTS["2160p"], "hdr": True}
+    a = duplicates.quality("Film.2160p.WEB-DL.mkv", 1, sdr, 0)
+    b = duplicates.quality("Film.2160p.WEB-DL.HDR.mkv", 1, hdr, 0)
+    assert a["rank"] == b["rank"]  # by default HDR is no reason to win
+    assert duplicates.quality("Film.2160p.WEB-DL.HDR.mkv", 1, hdr, 0, prefer_hdr=True)["rank"] > a["rank"]
+    assert "HDR" in duplicates.describe(b)

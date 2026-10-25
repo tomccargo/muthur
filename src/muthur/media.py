@@ -25,7 +25,7 @@ def probe(path: str) -> dict | None:
         return None
     try:
         out = subprocess.run(["ffprobe", "-v", "error", "-show_entries",
-                              "format=duration:stream=codec_type,codec_name,profile,width,height,channels:stream_tags=language",
+                              "format=duration:stream=codec_type,codec_name,profile,width,height,channels,color_transfer:stream_tags=language",
                               "-of", "json", path], capture_output=True, text=True, timeout=120).stdout
         data = json.loads(out or "{}")
     except (subprocess.SubprocessError, ValueError):
@@ -42,5 +42,6 @@ def probe(path: str) -> dict | None:
     except ValueError:
         duration = 0.0
     return {"width": v.get("width") or 0, "height": v.get("height") or 0, "vcodec": v.get("codec_name"),
+            "hdr": v.get("color_transfer") in ("smpte2084", "arib-std-b67"),
             "acodec": a.get("codec_name"), "aprofile": a.get("profile"), "channels": a.get("channels") or 0,
             "duration": duration, "subtitles": sum(1 for x in streams if x.get("codec_type") == "subtitle")}

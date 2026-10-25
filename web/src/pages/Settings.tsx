@@ -6,14 +6,14 @@ import { ALL_LANGUAGES, language, libraryPath } from '../labels';
 
 type Draft = {
   host: string; port: string; user: string; password: string; token: string; keepOriginal: string[];
-  dsUrl: string; dsUser: string; dsPassword: string;
+  dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean;
 };
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 
 function toDraft(s: Settings): Draft {
   return {
     host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal,
-    dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '',
+    dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
   };
 }
 
@@ -42,6 +42,8 @@ export function SettingsPage({ refresh }: StatusHook) {
       kodi: { host: draft.host, port: draft.port, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
       titles: { keepOriginal: draft.keepOriginal },
       downloadStation: dsBody(),
+      dryRun: draft.dryRun,
+      quality: { preferHdr: draft.preferHdr },
       ...(draft.token ? { tmdb: { token: draft.token } } : {}),
     };
     api.saveSettings(body)
@@ -78,6 +80,18 @@ export function SettingsPage({ refresh }: StatusHook) {
         </div>
       </header>
       {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
+
+      <section className="panel form" aria-labelledby="changes-h">
+        <h2 id="changes-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Changes to the library</h2>
+        <label className="choice">
+          <input type="checkbox" checked={draft.dryRun} onChange={(e) => edit({ dryRun: e.target.checked })} />
+          <span><strong>Dry run: plan only.</strong> Everything is checked and shown, but nothing is moved, written or quarantined, and the weekly score refresh waits.</span>
+        </label>
+        <label className="choice">
+          <input type="checkbox" checked={draft.preferHdr} onChange={(e) => edit({ preferHdr: e.target.checked })} />
+          <span><strong>Duplicates: HDR counts as better.</strong> Off while the TV is SDR; then an HDR copy never wins only for being HDR.</span>
+        </label>
+      </section>
 
       <section className="panel form" aria-labelledby="tmdb-h">
         <h2 id="tmdb-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>TMDB</h2>

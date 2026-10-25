@@ -150,7 +150,7 @@ For each identified item: target path, the NFOs to write, the artwork to downloa
 - Every operation is written to a **journal** first (from, to, hash of the first and last 1 MB, timestamp), then executed.
 - **Undo** replays the journal in reverse, per item or per run.
 - Never overwrite, never delete: anything that would be lost goes to quarantine.
-- **Dry run** is a global switch. Everything up to Apply runs and the plan is shown, but nothing is written.
+- **Dry run** is a global switch. Everything up to Apply runs and the plan is shown, but nothing is written. *Built (0.15):* Settings → Changes to the library. While it is on, Apply, Duplicates, Health fixes, emptying the quarantine and the score refresh refuse with a sentence saying so; checks and Review choices still work.
 
 ### 5.6 Tell Kodi
 Kodi JSON-RPC on the Shield (Settings → Services → Control → *Allow remote control via HTTP*):
@@ -245,7 +245,7 @@ Each NFO carries a comment `<!-- muthur vX, tmdb:93740, 2026-10-24 -->` so the t
 **Quality score**, highest first:
 1. Source: Blu-ray remux > Blu-ray > WEB-DL > WEBRip > HDTV > DVD > TV/telesync
 2. Resolution: 2160p > 1080p > 720p > SD
-3. HDR: no bonus (the TV is SDR; setting can change this later)
+3. HDR: no bonus (the TV is SDR); *since 0.15 a setting, measured from the colour transfer (PQ, HLG) or read from the name*
 4. Video codec: AV1 ≈ HEVC > H.264 > older
 5. Audio: lossless/Atmos > 5.1 > stereo
 6. Bitrate per minute (a tiebreaker against over-compressed encodes)

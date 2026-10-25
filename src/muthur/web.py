@@ -151,6 +151,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         d = store.get("downloadstation", {})
         return DownloadStation(d["url"], d.get("user", ""), d.get("password", "")) if d.get("url") and d.get("user") else None
 
+    def not_dry():
+        if store.get("dryRun", False):
+            raise HTTPException(409, "Dry run is on: muthur only plans and changes nothing. Turn it off in Settings to make changes.")
+
     def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
         return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout) if k.get("host") else None
@@ -169,7 +173,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         k = kodi()
         return {
             "version": __version__,
-            "applying": True,
+            "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
             "kodi": k.check() if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
@@ -225,6 +229,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.post("/api/apply", status_code=202)
     def apply(body: dict | None = None):
+        not_dry()
         client = tmdb()
         if client is None:
             raise HTTPException(409, "Add your TMDB token in Settings first.")
@@ -313,6 +318,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.post("/api/scores/refresh", status_code=202)
     def scores_refresh():
+        not_dry()
         if tmdb() is None:
             raise HTTPException(409, "Add your TMDB token in Settings first.")
         job = start_scores()
@@ -382,7 +388,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             except Exception:
                 pass
             try:
-                if imdb.due():
+                if imdb.due() and not store.get("dryRun", False):  # the refresh rewrites NFOs: not in a dry run
                     start_scores()
             except Exception:  # never let the schedule die; the Dashboard shows when the last refresh was
                 pass
@@ -481,6 +487,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.post("/api/duplicates/apply", status_code=202)
     def duplicates_apply(body: dict):
+        not_dry()
         groups = chosen_groups(body.get("choices") or [])
         if not groups:
             raise HTTPException(422, "Choose at least one group.")
@@ -540,6 +547,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.post("/api/fixes/apply", status_code=202)
     def fixes_apply(body: dict):
+        not_dry()
         client = need_tmdb()
         kinds = [k for k in body.get("kinds") or [] if k in FIXES]
         plan, _ = store.snapshot("health")
@@ -631,6 +639,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.post("/api/quarantine/empty")
     def quarantine_empty(body: dict):
         """Deletes the chosen days for good. Only ever on the reader's explicit confirmation in the page."""
+        not_dry()
         not_busy()
         days = [d for d in body.get("days") or [] if isinstance(d, str) and DAY.match(d)]
         if not days or body.get("confirm") != "delete":
@@ -764,6 +773,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "tmdb": {"tokenSet": tmdb() is not None},
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
             "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
+            "dryRun": bool(store.get("dryRun", False)),
+            "quality": {"preferHdr": bool(store.get("quality.preferHdr", False))},
             "paths": {"downloads": cfg.downloads, "tv": cfg.tv, "film": cfg.film},
         }
 
@@ -783,6 +794,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if new.get("password"):
                 k["password"] = new["password"]
             store.put("kodi", k)
+        if isinstance(body.get("dryRun"), bool):
+            store.put("dryRun", body["dryRun"])
+        if isinstance((body.get("quality") or {}).get("preferHdr"), bool):
+            store.put("quality.preferHdr", body["quality"]["preferHdr"])
         if "downloadStation" in body:
             d = dict(store.get("downloadstation", {}))
             new = body["downloadStation"]

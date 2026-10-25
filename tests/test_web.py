@@ -192,3 +192,18 @@ def test_quarantine_lists_and_empties_only_on_confirmation(tmp_path, monkeypatch
     assert client.post("/api/quarantine/empty", json={"days": ["../config"], "confirm": "delete"}).status_code == 422
     assert client.post("/api/quarantine/empty", json={"days": ["2026-10-25"], "confirm": "delete"}).json()["freed"] == 10
     assert not (q / "2026-10-25").exists() and (q / "not-a-day").exists()
+
+
+def test_dry_run_plans_but_changes_nothing(tmp_path, monkeypatch):
+    for k, v in {"MUTHUR_CONFIG": tmp_path / "config", "MUTHUR_DOWNLOADS": tmp_path / "dl"}.items():
+        monkeypatch.setenv(k, str(v))
+    client = TestClient(create_app(Config(dotenv=False)))
+    assert client.get("/api/status").json()["applying"] is True
+    client.put("/api/settings", json={"dryRun": True, "quality": {"preferHdr": True}})
+    s = client.get("/api/settings").json()
+    assert s["dryRun"] is True and s["quality"] == {"preferHdr": True}
+    assert client.get("/api/status").json()["applying"] is False
+    for path, body in (("/api/apply", {}), ("/api/duplicates/apply", {"choices": []}), ("/api/fixes/apply", {"kinds": ["leftovers"]}),
+                       ("/api/quarantine/empty", {"days": ["2026-10-25"], "confirm": "delete"}), ("/api/scores/refresh", None)):
+        r = client.post(path, json=body) if body is not None else client.post(path)
+        assert r.status_code == 409 and "Dry run is on" in r.json()["detail"], path

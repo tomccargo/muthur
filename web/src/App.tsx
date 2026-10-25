@@ -67,7 +67,7 @@ function RailFoot({ status }: { status: Status | null }) {
       ) : (
         <span className="status"><span className="dot dot-danger" />Kodi unreachable</span>
       )}
-      {status && !status.applying && <span className="status"><span className="dot dot-warning" />Plans only, moves nothing</span>}
+      {status && !status.applying && <span className="status"><span className="dot dot-warning" />Dry run on</span>}
       {status?.watched.paused ? <span className="status"><span className="dot dot-danger" />Watched backup paused</span>
         : status?.watched.last ? <span className="status"><span className="dot dot-success" />Backed up {when(status.watched.last.at)}</span> : null}
       <ThemeSwitch />

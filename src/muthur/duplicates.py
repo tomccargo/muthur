@@ -59,10 +59,12 @@ def _resolution(width: int, height: int) -> int:
     return 0
 
 
-def quality(path: str, size: int, facts: dict | None, subs: int) -> dict:
+def quality(path: str, size: int, facts: dict | None, subs: int, prefer_hdr: bool = False) -> dict:
+    """prefer_hdr: HDR ranks above SDR at the same resolution. Off by default: the TV is SDR (§9)."""
     name = os.path.basename(path)
     src = _source(name)
-    q = {"source": src, "readable": facts is not None, "size": size, "subs": subs}
+    q = {"source": src, "readable": facts is not None, "size": size, "subs": subs,
+         "hdr": bool((facts or {}).get("hdr")) or bool(re.search(r"(?i)\b(hdr10\+?|hdr|dolby[ ._]?vision|dovi|dv)\b", name))}
     if facts:
         codec = (facts.get("vcodec") or "").lower()
         acodec = (facts.get("acodec") or "").lower()
@@ -70,7 +72,7 @@ def quality(path: str, size: int, facts: dict | None, subs: int) -> dict:
         q.update(width=facts["width"], height=facts["height"], vcodec=codec, acodec=acodec, channels=facts["channels"],
                  duration=facts["duration"], subs=subs + facts.get("subtitles", 0),
                  kbps=round(size * 8 / facts["duration"] / 1000) if facts["duration"] else 0)
-        q["rank"] = [dict(SOURCES)[src], _resolution(facts["width"], facts["height"]),
+        q["rank"] = [dict(SOURCES)[src], _resolution(facts["width"], facts["height"]), 1 if prefer_hdr and q["hdr"] else 0,
                      3 if codec in ("hevc", "av1") else 2 if codec == "h264" else 1,
                      3 if lossless else 2 if facts["channels"] >= 6 else 1 if facts["channels"] else 0,
                      q["kbps"], 1 if q["subs"] else 0]
@@ -84,8 +86,9 @@ def describe(q: dict) -> str:
     if not q.get("readable"):
         return "ffprobe can't read this file"
     res = {4: "2160p", 3: "1080p", 2: "720p", 1: "576p/480p", 0: "SD"}[_resolution(q["width"], q["height"])]
-    audio = "lossless" if q["rank"][3] == 3 else "5.1" if q["channels"] >= 6 else "stereo" if q["channels"] >= 2 else "mono" if q["channels"] else "no audio"
-    parts = [SOURCE_LABEL.get(q["source"], ""), res, {"hevc": "HEVC", "h264": "H.264", "av1": "AV1"}.get(q["vcodec"], (q["vcodec"] or "?").upper()),
+    audio = "lossless" if q["rank"][4] == 3 else "5.1" if q["channels"] >= 6 else "stereo" if q["channels"] >= 2 else "mono" if q["channels"] else "no audio"
+    parts = [SOURCE_LABEL.get(q["source"], ""), res, "HDR" if q.get("hdr") else "",
+             {"hevc": "HEVC", "h264": "H.264", "av1": "AV1"}.get(q["vcodec"], (q["vcodec"] or "?").upper()),
              audio, f"{q['kbps'] / 1000:.1f} Mbit/s" if q.get("kbps") else ""]
     return " · ".join(p for p in parts if p)
 
@@ -134,7 +137,7 @@ class Duplicates:
         for c in copies:
             rel = f"{show['folder']}/{c['file']}" if kind == "episode" else c["file"]
             full = os.path.join(root, *rel.split("/"))
-            q = quality(full, c["size"], self._probe(full), c.get("subs", 0))
+            q = quality(full, c["size"], self._probe(full), c.get("subs", 0), bool(self.store.get("quality.preferHdr", False)))
             items.append({"path": f"{lib}/{rel}", "nfo": c["nfo"], "muthur": c.get("muthur", False), "watched": c.get("watched"),
                           "unit": c.get("key"), "folder": c.get("folder", False), "quality": q, "label": describe(q)})
         # Best quality first; between equals, the copy with an NFO in a proper season or show folder.
