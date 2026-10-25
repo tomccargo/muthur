@@ -64,8 +64,8 @@ class Health:
             # Look it up on TMDB by the folder name, as for a download; only a certain match counts.
             p = parse_show_folder(folder)
             wanted = {(e["season"], n) for e in eps if e["season"] and not e["damaged"] for n in e["episodes"]}
-            m = identify_show(self.tmdb, p.title, p.year, p.country, wanted)
-            if m.status == "auto":
+            m = identify_show(self.tmdb, p.title or folder, p.year, p.country, wanted)
+            if m.status == "auto" and m.best:
                 tmdb_id, imdb_id = m.best.tmdb_id, m.best.imdb_id
             else:
                 guess = f" Its best guess, {m.best.title} ({m.best.year}), isn't certain." if m.best else ""
@@ -142,7 +142,7 @@ class Health:
             # Look it up on TMDB by its name and length, as for a download; only a certain match counts.
             p = self.store.parsed("movie", f["file"].split("/"))
             m = identify_movie(self.tmdb, [p.title or f["key"], *p.alt_titles], p.year, probe_duration(self._full(f"Film/{f['file']}")))
-            if m.status == "auto":
+            if m.status == "auto" and m.best:
                 fixes["film-nfos"].append({**fix, "tmdb": m.best.tmdb_id,
                                            "label": f"{m.best.title} ({m.best.year})" if m.best.year else m.best.title})
             else:
@@ -159,7 +159,7 @@ class Health:
         if job:
             job.total, job.done = len(items), 0
         run = self.journal.start("health")
-        done, failed, nfos = {k: 0 for k in kinds}, [], []
+        done, failed, nfos = {k: 0 for k in kinds}, [], []  # type: ignore[var-annotated]
         for kind, x in items:
             try:
                 getattr(self, "_" + kind.replace("-", "_"))(run, x, nfos)

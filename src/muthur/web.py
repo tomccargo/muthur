@@ -231,7 +231,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         sh = shield()
         if not sh:
             raise ShieldError(f"Waking the {names()['device']} isn't set up in Settings.")
-        sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool(kodi().check().get("connected")))
+        sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool((k := kodi()) and k.check().get("connected")))
 
     def kodi_ready(timeout: float = 90) -> Kodi:
         """Kodi, answering: woken first when it sleeps and waking is set up. Otherwise a 409 that says why."""

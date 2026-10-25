@@ -26,10 +26,14 @@ class DownloadStation:
         self.user, self.password, self.timeout = user, password, timeout
         self.sid: str | None = None
 
-    def _get(self, path: str, **params) -> dict:
+    def _get(self, path: str, post: bool = False, **params) -> dict:
+        """post: send the fields in the body, not the URL (the login: a password in a URL ends up in logs)."""
         try:
             # Certificates are checked: the account's password must not go to a machine posing as the NAS.
-            r = requests.get(self.base + path, params=params, timeout=self.timeout)
+            if post:
+                r = requests.post(self.base + path, data=params, timeout=self.timeout)
+            else:
+                r = requests.get(self.base + path, params=params, timeout=self.timeout)
             r.raise_for_status()
             body = r.json()
         except requests.exceptions.SSLError as e:
@@ -39,13 +43,15 @@ class DownloadStation:
             raise DownloadStationError(f"The NAS didn't answer at {self.base} ({type(e).__name__}).") from e
         if not body.get("success"):
             code = (body.get("error") or {}).get("code")
-            raise DownloadStationError(AUTH_ERRORS.get(code, f"Download Station answered with error {code}.") if path == "entry.cgi"
+            raise DownloadStationError(AUTH_ERRORS.get(int(code or 0), f"Download Station answered with error {code}.") if path == "entry.cgi"
                                        else f"Download Station answered with error {code}.")
         return body.get("data") or {}
 
     def login(self) -> None:
-        data = self._get("entry.cgi", api="SYNO.API.Auth", version=7, method="login", account=self.user, passwd=self.password,
-                         session="DownloadStation", format="sid")
+        # Synology's guide shows the login as a GET; DSM's entry.cgi takes the same fields as a form POST
+        # (checked on DSM 7.3 with SYNO.API.Info), which keeps the password out of URLs and DSM's logs.
+        data = self._get("entry.cgi", post=True, api="SYNO.API.Auth", version=7, method="login", account=self.user,
+                         passwd=self.password, session="DownloadStation", format="sid")
         self.sid = data.get("sid")
 
     def tasks(self) -> list[dict]:

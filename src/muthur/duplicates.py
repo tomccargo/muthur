@@ -136,7 +136,7 @@ class Duplicates:
         root = self.roots[lib]
         items = []
         for c in copies:
-            rel = f"{show['folder']}/{c['file']}" if kind == "episode" else c["file"]
+            rel = f"{show['folder']}/{c['file']}" if show is not None and kind == "episode" else c["file"]
             full = os.path.join(root, *rel.split("/"))
             q = quality(full, c["size"], self._probe(full), c.get("subs", 0), bool(self.store.get("quality.preferHdr", False)))
             items.append({"path": f"{lib}/{rel}", "nfo": c["nfo"], "muthur": c.get("muthur", False), "watched": c.get("watched"),
@@ -144,7 +144,7 @@ class Duplicates:
         # Best quality first; between equals, the copy with an NFO in a proper season or show folder.
         items.sort(key=lambda x: (x["quality"]["rank"], x["nfo"], _proper(x["path"]), x["muthur"]), reverse=True)
         keep = items[0]
-        if kind == "episode":
+        if kind == "episode" and show is not None:
             e = copies[0]
             label = f"{show['title']} S{e['season']:02d}" + "".join(f"E{n:02d}" for n in e["episodes"])
         else:

@@ -1,7 +1,8 @@
 # syntax=docker/dockerfile:1
 
 # ---- The web UI --------------------------------------------------------------
-FROM node:26-alpine AS web
+# Base images pinned by digest: every build of a commit gets the same layers; Dependabot proposes new digests.
+FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS web
 WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
@@ -9,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- The app -------------------------------------------------------------------
-FROM python:3.12-alpine
+FROM python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
 # ffprobe (from ffmpeg) reads durations; tini forwards signals; tzdata for local times;
 # adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it.
 RUN apk add --no-cache ffmpeg tini tzdata android-tools

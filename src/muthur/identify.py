@@ -74,8 +74,9 @@ def _finish(cands: list[Candidate], weights: dict, popularity: dict[int, float])
     """Final score: the weighted signals plus a small share for popularity relative to the other candidates."""
     top = max((math.log10(1 + p) for p in popularity.values()), default=0) or 1
     for c in cands:
-        c.signals["popularity"] = math.log10(1 + popularity.get(c.tmdb_id, 0)) / top
-        c.score = round((1 - POPULARITY_WEIGHT) * _combine(c.signals, weights) + POPULARITY_WEIGHT * c.signals["popularity"], 4)
+        pop = math.log10(1 + popularity.get(c.tmdb_id, 0)) / top
+        c.signals["popularity"] = pop
+        c.score = round((1 - POPULARITY_WEIGHT) * _combine(c.signals, weights) + POPULARITY_WEIGHT * pop, 4)
 
 
 def _alt_titles(details: dict, key: str) -> list[str]:
@@ -97,14 +98,16 @@ def _decide(cands: list[Candidate], gate: str | None) -> Match:
     m = Match("auto", best, cands)
     if best.score < AUTO_SCORE:
         m.reasons.append(f"best score {best.score:.2f} < {AUTO_SCORE}")
-    if best.signals.get("title", 0) < EXACT_TITLE:
-        m.reasons.append(f"title not an exact match ({best.signals['title']:.2f})")
-    exact = best.signals.get("title", 0) >= EXACT_TITLE
-    rivals = [c for c in cands[1:] if not exact or c.signals.get("title", 0) >= RIVAL_TITLE]
+    title = best.signals.get("title") or 0.0  # a missing signal counts as no match
+    if title < EXACT_TITLE:
+        m.reasons.append(f"title not an exact match ({title:.2f})")
+    exact = title >= EXACT_TITLE
+    rivals = [c for c in cands[1:] if not exact or (c.signals.get("title") or 0.0) >= RIVAL_TITLE]
     if rivals and best.score - rivals[0].score < AUTO_MARGIN:
         m.reasons.append(f"runner-up too close ({rivals[0].title} {rivals[0].year}: {rivals[0].score:.2f})")
-    if gate and best.signals.get(gate) is not None and best.signals[gate] < EPISODE_GATE:
-        m.reasons.append(f"{gate} missing on the best match ({best.signals[gate]:.2f})")
+    gated = best.signals.get(gate) if gate else None
+    if gated is not None and gated < EPISODE_GATE:
+        m.reasons.append(f"{gate} missing on the best match ({gated:.2f})")
     if best.signals.get("year") is None:
         # A title shared by another plausible entry, with nothing to tell them apart, always needs a human.
         for other in cands[1:]:
@@ -131,7 +134,7 @@ def _search(search, title: str, year: int | None) -> list[dict]:
                 results.append(r)
     words = title.split()
     if not results and len(words) > 1:
-        seen = {}
+        seen: dict = {}
         for i in range(len(words)):
             for r in search(" ".join(words[:i] + words[i + 1:]), None)[:10]:
                 name = r.get("name") or r.get("title") or ""
@@ -180,7 +183,8 @@ def identify_movie(source, title: str | list[str], year: int | None = None, dura
     """source: an object with search_movie(query, year) and movie(id) (see Tmdb).
     title: one query, or several (the first preferred) when a name can be read more than one way."""
     queries = [title] if isinstance(title, str) else [t for t in title if t]
-    results, seen = [], set()
+    results: list = []
+    seen: set = set()
     for q in queries:
         found = _search(source.search_movie, q, year)
         results += [r for r in found[:MAX_CANDIDATES] if r["id"] not in seen]

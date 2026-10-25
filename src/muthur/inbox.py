@@ -308,7 +308,7 @@ class Inbox:
             item.files.append(self._episode(folder, shown, show_year, e, parts, size, mapping, counts, titles, absolute))
 
         placed = [f for f in item.files if f.target]
-        if not folder and placed:
+        if not folder and placed and placed[0].target:
             show_dir = placed[0].target.split("/", 1)[0]
             placed[0].writes = ["tvshow.nfo", "poster.jpg", "fanart.jpg", "clearlogo.png"] + placed[0].writes
             item.notes.append(f"New show: TV/{show_dir}/ will be created.")
@@ -384,7 +384,7 @@ class Inbox:
         folder = os.path.join(self.tv_root, *target.split("/")[:-1])
         if not os.path.isdir(folder):
             return set()
-        taken = set()
+        taken: set[int] = set()
         for name in os.listdir(folder):
             if is_video(name) and (m := EPISODE_NUMBERS.search(name)) and int(m.group(1)) == season:
                 taken.update(int(n) for n in re.findall(r"\d+", m.group(2)))

@@ -11,6 +11,7 @@ import os
 import re
 import time
 from dataclasses import asdict
+from typing import Any
 
 from .library import scan_film
 from .nfo import NfoInfo, read_nfo
@@ -88,7 +89,7 @@ class Index:
         present = set(files)
         info = self.nfo(os.path.join(base, "tvshow.nfo")) if "tvshow.nfo" in present else None
         ids = info.ids if info else {}
-        show = {"folder": folder, "title": (info.title if info and info.title else folder), "year": info.year if info else None,
+        show: dict[str, Any] = {"folder": folder, "title": (info.title if info and info.title else folder), "year": info.year if info else None,
                 "ids": ids, "nfo": info is not None, "muthur": bool(info and info.muthur),
                 "poster": "poster.jpg" in present, "fanart": "fanart.jpg" in present, "rating": _shown(info),
                 "episodes": [], "loose": []}
@@ -159,7 +160,7 @@ def _shown(info: NfoInfo | None) -> list | None:
 
 def _played(latest: dict) -> dict:
     """Play counts by every ID a backup row knows: ('tmdb', '2316', 4, 19) -> 1, ('imdb', 'tt0069293', None, None) -> 2."""
-    out = {}
+    out: dict = {}
     for row in latest.values():
         for kind, value in json.loads(row["ids"]).items():
             key = (kind, str(value), row["season"], row["episode"])

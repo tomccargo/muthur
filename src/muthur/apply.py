@@ -192,7 +192,9 @@ class Applier:
                 continue
             own = os.path.join(base, stem)
             source = own if os.path.isdir(own) else base if single else None
-            for name in sorted(os.listdir(source)) if source else []:
+            if source is None:
+                continue
+            for name in sorted(os.listdir(source)):
                 if not name.lower().endswith(SUBTITLE_EXTS) or not os.path.isfile(os.path.join(source, name)):
                     continue
                 label = re.sub(r"^\d+[_ .-]*", "", os.path.splitext(name)[0]) or "sub"

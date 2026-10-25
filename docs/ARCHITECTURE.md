@@ -88,7 +88,7 @@ volumes:
 | **TMDB API** | Identification, titles, plots, cast, artwork, TMDB scores, season/episode structure, specials, anime episode groups | Free for non-commercial use with attribution ([TMDB FAQ](https://developer.themoviedb.org/docs/faq)). Needs your own API key. The UI shows "Data from TMDB". |
 | **IMDb datasets** | IMDb scores for movies, shows **and episodes** | Free daily files for personal, non-commercial use ([IMDb](https://developer.imdb.com/non-commercial-datasets/)). Uses `title.episode` and `title.ratings`. |
 | Existing NFOs | ID memory: 179 shows already have TVDB/TMDB/IMDb IDs | Read once at import |
-| fanart.tv (optional) | `clearlogo.png`, `landscape.jpg`, `banner.jpg` | Free personal API key |
+| fanart.tv (optional, not built) | `clearlogo.png`, `landscape.jpg`, `banner.jpg` | Free personal API key. TMDB's logos cover `clearlogo.png`; nothing reads fanart.tv yet. |
 | TVDB | Not queried. Existing TVDB IDs stay in the NFOs as a second `uniqueid`. | — |
 
 ## 5. The pipeline
@@ -335,18 +335,18 @@ On the real library (2026-10-25): 4,462 IMDb scores, 82 episode NFOs, 158 leftov
 
 ## 13. UI
 
-A clickable mockup of all screens exists (private, because it shows real library data).
+A clickable mockup of all screens exists (private, because it shows real library data). The table says what each screen does as built (0.22); the look and rules are in [DESIGN.md](../DESIGN.md).
 
 | Screen | Purpose |
 |---|---|
-| **Dashboard** | Counts (inbox, review, duplicates, health issues), last run, next score refresh, Kodi connection status. A **Process downloads** button. |
+| **Dashboard** | Counts (ready, needs you, still downloading, ignored), Kodi's connection with a wake button, the watched-status backup, IMDb scores and their next refresh, the library's duplicates and fixes. One button: **Check downloads**. |
 | **Inbox** | Everything in `complete/` with its status: ready, needs review, ignored (with reason), in progress. Preview of the planned target per item. |
-| **Review** | One item at a time, keyboard-driven. Parsed info on the left, candidate cards (poster, year, plot, score breakdown) on the right. Pick one, search manually, or paste a TMDB/IMDb link. "Remember for this show" stores the alias. |
-| **Library** | Poster grid or list of TV and Film. Filters (no NFO, no IMDb score, duplicates, no year). Detail panel: change the match, edit the title and other fields, see files and artwork, choose a different poster. |
-| **Duplicates** | Side-by-side versions with quality details and the proposed winner. Confirm moves the loser to quarantine. |
-| **Health** | The live audit: missing videos, orphan files, junk, broken names, folders without NFOs. Each issue has a one-click proposed fix. |
+| **Review** | One item at a time, with keyboard shortcuts. What the name says, and candidate cards (poster, year, plot, why it matched). Pick one, search TMDB, or paste a TMDB/IMDb link; per episode, choose the TMDB episode and which number the file keeps. "Remember for this show" stores the alias. |
+| **Library** | TV and Film with posters, scores and watched status, searchable. Filters: missing NFO, no IMDb score, duplicates, damaged names. A show's page lists its episodes and loose files. Change a show's or film's match, its title, or its poster; each change can be put back from History. |
+| **Duplicates** | Each group's copies with measured quality and the proposed copy to keep (changeable). Confirming moves the others to quarantine and carries the watched status over; the Quarantine panel shows why each item is there and can empty days for good. |
+| **Health** | Checked daily and on demand. Fixes muthur can make without guessing (leftovers, empty film folders, missing NFOs, IMDb scores), applied in batches you choose; questions it can't answer alone (which show or film a folder is, numbering that differs from TMDB). |
 | **History** | Every run and item with what moved where. Undo per item or per run. |
-| **Settings** | Paths, TMDB/fanart keys, title rule and language list, quality preferences, Kodi connection, schedule, dry-run switch. |
+| **Settings** | Dry run and the HDR preference; the TMDB token (where it comes from, removing a saved one) and the language of plots and episode titles; Kodi (address, ports, login) and waking the Kodi box; Download Station; names; the password; which languages keep their original film title; the folders, read-only (they come from `.env`). No schedule setting: the schedule is fixed (§8, §11, §12). |
 
 ## 14. Security
 
@@ -369,7 +369,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 
 ## 16. Decisions on the former open questions (2026-10-24)
 
-1. **Torrent client: Download Station.** "Finished" is read from the Download Station Web API (`SYNO.DownloadStation.Task`, `list` with status `finished`/`seeding`) as well as the 10-minute stability check. After a successful move, muthur removes the task through the same API, never before. A Sonarr user reported that removing Download Station tasks too early confused the importer ([Sonarr forum](https://forums.sonarr.tv/t/synology-download-station-not-completing-imports-solved/19865)). The exact `delete` parameters are checked against Synology's [Download Station Web API guide](https://cndl.synology.cn/download/Document/Software/DeveloperGuide/Package/DownloadStation/All/enu/Synology_Download_Station_Web_API.pdf) and tested on Nostromo. This needs the DSM account that owns the tasks: Download Station shows an account only its own tasks. On Nostromo all tasks belong to `torrent` (checked 2026-10-25), the user muthur's container already runs as. **As built (0.11):** Settings take the NAS address, that account and its password; after an Apply, muthur logs in with `SYNO.API.Auth` v7 (`entry.cgi`), lists tasks with `SYNO.DownloadStation.Task` v1 (`DownloadStation/task.cgi`, which DSM 7.3 on Nostromo offers next to the newer `SYNO.DownloadStation2.Task`) and deletes, with `force_complete=false`, only the tasks that are finished or seeding and whose title is the name of a download it just moved. A task still downloading is left alone and reported.
+1. **Torrent client: Download Station.** "Finished" is read from the Download Station Web API (`SYNO.DownloadStation.Task`, `list` with status `finished`/`seeding`) as well as the 10-minute stability check. After a successful move, muthur removes the task through the same API, never before. A Sonarr user reported that removing Download Station tasks too early confused the importer ([Sonarr forum](https://forums.sonarr.tv/t/synology-download-station-not-completing-imports-solved/19865)). The exact `delete` parameters are checked against Synology's [Download Station Web API guide](https://cndl.synology.cn/download/Document/Software/DeveloperGuide/Package/DownloadStation/All/enu/Synology_Download_Station_Web_API.pdf) and tested on Nostromo. This needs the DSM account that owns the tasks: Download Station shows an account only its own tasks. On Nostromo all tasks belong to `torrent` (checked 2026-10-25), the user muthur's container already runs as. **As built (0.11):** Settings take the NAS address, that account and its password; after an Apply, muthur logs in with `SYNO.API.Auth` v7 (`entry.cgi`; since 0.23 as a form POST, so the password never sits in a URL or DSM's logs: Synology's guide shows GET, but DSM 7.3's `entry.cgi` takes the same fields as POST), lists tasks with `SYNO.DownloadStation.Task` v1 (`DownloadStation/task.cgi`, which DSM 7.3 on Nostromo offers next to the newer `SYNO.DownloadStation2.Task`) and deletes, with `force_complete=false`, only the tasks that are finished or seeding and whose title is the name of a download it just moved. A task still downloading is left alone and reported.
 2. **Watched status must be kept.** See §11: Kodi is the master and muthur keeps a synced backup with restore. A cleanup batch stops if Kodi can't be reached or the restore can't be verified.
 3. **No age ratings.** `mpaa` is not written.
 4. **Actor photos: TMDB image links** in `<actor><thumb>`. Kodi downloads each once and caches it ([Kodi forum](https://forum.kodi.tv/showthread.php?tid=153424)). No `.actors` folders.

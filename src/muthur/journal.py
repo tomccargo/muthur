@@ -179,7 +179,7 @@ class Journal:
     def undo(self, run_id: int, item: str | None = None) -> dict:
         """Put back what a run (or one item of it) did, newest change first. A file that changed
         since muthur touched it is left alone and reported, never overwritten or deleted."""
-        result = {"undone": 0, "skipped": [], "item": item}
+        result: dict = {"undone": 0, "skipped": [], "item": item}
         for o in reversed(self.ops(run_id, item)):
             if o["status"] != "done":
                 continue

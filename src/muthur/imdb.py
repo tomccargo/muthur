@@ -106,7 +106,8 @@ class Imdb:
         another episode."""
         if not show:
             return None
-        count = self._one("SELECT COUNT(*) FROM imdb_episodes WHERE parent = ? AND season = ?", (show, season))[0]
+        row = self._one("SELECT COUNT(*) FROM imdb_episodes WHERE parent = ? AND season = ?", (show, season))
+        count = row[0] if row else 0
         if not count or (tmdb_count is not None and count != tmdb_count):
             return None
         row = self._one("SELECT r.rating, r.votes FROM imdb_episodes e JOIN imdb_ratings r ON r.tconst = e.tconst "

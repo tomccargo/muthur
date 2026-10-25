@@ -31,7 +31,7 @@ def import_tv(tmdb, tv_root: str, store: Store, job=None) -> dict:
             continue
         folder = parse_show_folder(show.name)
         tmdb_id = int(row.best_ids["tmdb"])
-        for name in {folder.title, row.best_title}:
+        for name in {n for n in (folder.title, row.best_title) if n}:  # a folder name can parse to no title
             kept.add(store.remember("tv", name, tmdb_id, row.best_year, row.best_title, show.name, "library"))
         counts["remembered"] += 1
     if shows:  # an empty or unreachable TV folder must not wipe the memory

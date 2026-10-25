@@ -29,6 +29,7 @@ jobs:
         working-directory: web
       - run: pip install -e ".[dev]"
       - run: ruff check src tests scripts
+      - run: mypy src/muthur
       # The UI checks of DESIGN.md §10 open every page in Chromium.
       - run: python -m playwright install --with-deps chromium
       - run: pytest -q

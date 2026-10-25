@@ -133,13 +133,13 @@ class Watched:
         points filled in where Kodi has none. Never lowers anything."""
         backup = self.latest()
         by_ids: dict[str, dict] = {}
-        for b in backup.values():  # a second way in: any shared ID, for items Kodi now keys differently
-            for kind, v in json.loads(b["ids"]).items():
-                by_ids[_alt_key(b["kind"], kind, v, b["season"], b["episode"])] = b
+        for row in backup.values():  # a second way in: any shared ID, for items Kodi now keys differently
+            for kind, v in json.loads(row["ids"]).items():
+                by_ids[_alt_key(row["kind"], kind, v, row["season"], row["episode"])] = row
         now = _merged(items)  # two copies of one episode count as one: either copy having it is enough
         changes = []
         for i in items:
-            b = backup.get(i["key"]) or next((by_ids[a] for kind, v in i["ids"].items()
+            b: dict | None = backup.get(i["key"]) or next((by_ids[a] for kind, v in i["ids"].items()
                                               if (a := _alt_key(i["kind"], kind, v, i["season"], i["episode"])) in by_ids), None)
             if not b:
                 continue
