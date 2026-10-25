@@ -2,7 +2,7 @@
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork, Review) are done. Kodi on the Shield is set up as in §10. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
+Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork, Review) are done. Milestone 4 has IMDb scores (§8); the watched-status backup (§11) is next. Kodi on the Shield is set up as in §10. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
@@ -233,6 +233,13 @@ Each NFO carries a comment `<!-- muthur vX, tmdb:93740, 2026-10-24 -->` so the t
 - **Sanity check:** per season, IMDb and TMDB episode counts are compared. If they differ (common for anime, double episodes, specials), IMDb scores for that season are left out and TMDB becomes the default there. The UI shows this.
 - **Weekly refresh:** scores are recomputed. An NFO is only rewritten when a value changed by ≥ 0.1 or the votes changed by ≥ 10 %, then Kodi is told to refresh that item.
 
+**As built (0.5, 2026-10-25):**
+- The datasets are IMDb's [non-commercial datasets](https://data.imdb.com/non-commercial-datasets/), for personal, non-commercial use. Both files (about 64 MB together) are streamed and filtered line by line, so memory stays small; on the PC a full refresh took 10 s.
+- Which shows: every folder in `TV/`. Its IMDb ID comes from `tvshow.nfo`, or, for NFOs without one (Sonarr writes TVDB IDs), through the TMDB ID in the NFO or in muthur's show memory and TMDB's external IDs. Films: the IMDb IDs in the films' NFOs.
+- New NFOs get IMDb as `default="true"` and TMDB second. An episode filed under another number than TMDB's (Review's numbering choice, §5.3) gets no IMDb score, because nothing in the datasets confirms which IMDb episode it is.
+- The weekly refresh (and *Refresh scores now* on the Dashboard) only rewrites NFOs **muthur wrote**: found through the journal's `write` operations and still carrying muthur's comment. Each rewrite is journalled as an `update` with a copy of the old file in `/config/backups/<run>/`, so a refresh run can be put back from History. NFOs from other tools wait for phase 3.
+- An episode NFO is checked against TMDB before its score changes: the TMDB episode at the NFO's number must be the one in its `uniqueid`, or it is left alone.
+
 ## 9. Duplicates and quality
 
 **Quality score**, highest first:
@@ -331,7 +338,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
-4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).**
+4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup: next.
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
 
 ## 16. Decisions on the former open questions (2026-10-24)

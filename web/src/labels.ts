@@ -16,6 +16,7 @@ export const JOBS: Record<string, string> = {
   memory: 'Learning the shows in your library',
   apply: 'Moving downloads into the library',
   undo: 'Putting a run back',
+  scores: 'Refreshing IMDb scores',
 };
 
 // Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.

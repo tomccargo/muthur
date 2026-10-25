@@ -12,6 +12,7 @@ export type Status = {
   paths: { downloads: PathState; tv: PathState; film: PathState };
   inbox: { counts: Partial<Record<ItemStatus, number>>; scannedAt: number | null };
   memory: { shows: number };
+  scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
 
@@ -55,9 +56,9 @@ export type ApplyResult = { id: string; ok: boolean; files?: number; why?: strin
 export type Run = {
   id: number; kind: string; started: number; finished: number | null; undone: number | null;
   summary: { applied: number; stopped: number; items: ApplyResult[] } | null;
-  counts: { move: number; write: number; quarantine: number; mkdir: number };
+  counts: { move: number; write: number; quarantine: number; mkdir: number; update: number };
 };
-export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };
+export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine' | 'update'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };
 
 export class ApiError extends Error {}
 
@@ -97,5 +98,6 @@ export const api = {
   preview: (id: string, choice: Choice) => call<Item>('/api/review/preview', { method: 'POST', body: JSON.stringify({ id, choice }) }),
   choose: (id: string, choice: Choice, remember: boolean) =>
     call<Item>('/api/review/choose', { method: 'POST', body: JSON.stringify({ id, choice, remember }) }),
+  refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };

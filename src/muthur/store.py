@@ -100,6 +100,12 @@ class Store:
                                   "ORDER BY source = 'library' DESC LIMIT 1", (kind, tmdb_id)).fetchone()
         return row["folder"] if row else None
 
+    def tmdb_for_folder(self, kind: str, folder: str) -> int | None:
+        """The TMDB ID muthur remembers for a library folder, if any."""
+        with self.lock:
+            row = self.db.execute("SELECT tmdb_id FROM aliases WHERE kind = ? AND folder = ? LIMIT 1", (kind, folder)).fetchone()
+        return row["tmdb_id"] if row else None
+
     def alias_count(self, kind: str | None = None) -> int:
         with self.lock:
             q = "SELECT COUNT(DISTINCT tmdb_id) FROM aliases" + (" WHERE kind = ?" if kind else "")

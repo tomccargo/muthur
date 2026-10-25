@@ -31,6 +31,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
   const scanned = status?.inbox.scannedAt;
   const waiting = (counts.ready ?? 0) + (counts.review ?? 0);
   const k = status?.kodi;
+  const sc = status?.scores;
 
   return (
     <div className="page">
@@ -114,6 +115,28 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           </p>
           <button className="btn btn-secondary btn-sm" type="button" disabled={busy || !status?.tmdb.configured} onClick={() => start(api.learnShows)}>
             Learn shows from the library
+          </button>
+        </section>
+
+        <section className="panel" aria-labelledby="scores-h">
+          <div className="panel-head"><h2 id="scores-h">IMDb scores</h2></div>
+          {sc?.refreshed ? (
+            <ul className="rows" style={{ marginBottom: 12 }}>
+              <li><span>Downloaded from IMDb</span><span>{when(sc.refreshed)}</span></li>
+              <li><span>Kept for your library</span><span className="num">{sc.ratings.toLocaleString('en-GB')} scores · {sc.episodes.toLocaleString('en-GB')} episodes</span></li>
+              <li><span>Next refresh</span><span>{when(sc.next)}</span></li>
+              {sc.checked != null && <li><span>Last refresh</span><span className="num">{sc.updated} of {sc.checked} muthur NFOs updated</span></li>}
+            </ul>
+          ) : (
+            <p className="hint" style={{ marginBottom: 12 }}>
+              Not downloaded yet. Once a week muthur reads IMDb’s public datasets (about 64 MB, personal use only) and keeps the scores of what’s in your library.
+            </p>
+          )}
+          <p className="hint" style={{ marginBottom: 12 }}>
+            IMDb’s score is the one Kodi shows. An episode only gets one when IMDb and TMDB number its season the same way; otherwise TMDB’s score stays.
+          </p>
+          <button className="btn btn-secondary btn-sm" type="button" disabled={busy || !status?.tmdb.configured} onClick={() => start(api.refreshScores)}>
+            Refresh scores now
           </button>
         </section>
 

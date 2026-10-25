@@ -4,7 +4,7 @@ import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
 import { libraryPath, middle, size, splitId, when } from '../labels';
 
-const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder' };
+const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder', update: 'New scores in' };
 
 function Ops({ run }: { run: Run }) {
   const [ops, setOps] = useState<Op[] | null>(null);
@@ -20,9 +20,9 @@ function Ops({ run }: { run: Run }) {
             {o.status === 'undone' ? `${VERB[o.op]}, then put back` : o.status === 'failed' ? `${VERB[o.op]}: didn’t happen` : VERB[o.op]}
             {o.size ? <span className="muted">· {size(o.size)}</span> : null}
           </span>
-          {o.src && <span className="mono small muted" style={{ wordBreak: 'break-all' }}>{libraryPath(o.src)}</span>}
+          {o.src && o.op !== 'update' && <span className="mono small muted" style={{ wordBreak: 'break-all' }}>{libraryPath(o.src)}</span>}
           <span className="mono small" style={{ wordBreak: 'break-all', textDecoration: o.status === 'undone' ? 'line-through' : undefined }}>
-            {o.src ? '→ ' : ''}{libraryPath(o.dst)}
+            {o.src && o.op !== 'update' ? '→ ' : ''}{libraryPath(o.dst)}
           </span>
           {o.error && <span className="small" style={{ color: 'var(--warn-text)' }}>Not put back: {o.error}</span>}
         </li>
@@ -41,11 +41,15 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
       <div className="panel-head" style={{ marginBottom: 0 }}>
         <h2>{new Date(run.started * 1000).toDateString() === new Date().toDateString() ? `Today, ${when(run.started)}` : when(run.started)}</h2>
         <span className="status small">
-          {run.undone ? <><Dot />Put back {when(run.undone)}</> : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
+          {run.undone ? <><Dot />Put back {when(run.undone)}</>
+            : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
+              : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
         </span>
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        {run.counts.move} file{run.counts.move === 1 ? '' : 's'} moved · {run.counts.write} written · {run.counts.quarantine} to quarantine
+        {run.kind === 'scores'
+          ? `${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} got new IMDb scores; the old files are kept for putting back`
+          : `${run.counts.move} file${run.counts.move === 1 ? '' : 's'} moved · ${run.counts.write} written · ${run.counts.quarantine} to quarantine`}
       </p>
       {stopped.length > 0 && (
         <ul className="rows">
@@ -60,7 +64,11 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
       {asking && (
         <div className="banner banner-warn" role="group" aria-label="Put this run back" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
           <strong>Put everything from this run back?</strong>
-          <span>The {run.counts.move} moved file{run.counts.move === 1 ? '' : 's'} go back to the downloads folder, the {run.counts.write} file{run.counts.write === 1 ? '' : 's'} muthur wrote are removed, and quarantined leftovers return. A file changed since then is left alone and listed.</span>
+          <span>
+            {run.kind === 'scores'
+              ? `The ${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} get their earlier scores back. A file changed since then is left alone and listed.`
+              : `The ${run.counts.move} moved file${run.counts.move === 1 ? '' : 's'} go back to the downloads folder, the ${run.counts.write} file${run.counts.write === 1 ? '' : 's'} muthur wrote are removed, and quarantined leftovers return. A file changed since then is left alone and listed.`}
+          </span>
           <div className="actions" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" type="button" autoFocus onClick={() => setAsking(false)}>Cancel</button>
             <button className="btn btn-sm" type="button" style={{ background: 'var(--danger-text)', color: 'var(--bg)' }} onClick={() => { setAsking(false); onUndo(); }}>Put it back</button>

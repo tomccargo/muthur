@@ -2,8 +2,8 @@
 
 Formats per the Kodi wiki: NFO_files/TV_shows, NFO_files/Episodes, NFO_files/Movies.
 Kodi reads season and episode numbers from the file name, so the NFO only adds
-the rest. IMDb scores join the ratings block in milestone 4; until then TMDB's
-own score is the default rating.
+the rest. IMDb's score is the default rating when muthur has one (§8); TMDB's
+score comes second, or first when IMDb's is left out.
 """
 from __future__ import annotations
 
@@ -20,10 +20,19 @@ def _add(parent, tag: str, value) -> None:
         ET.SubElement(parent, tag).text = str(value)
 
 
-def _ratings(parent, average, votes) -> None:
+def _ratings(parent, average, votes, imdb: tuple[float, int] | None = None) -> None:
+    """imdb: (rating, votes) from the IMDb datasets, or None when muthur has no trustworthy one."""
+    if not average and not imdb:
+        return
+    ratings = ET.SubElement(parent, "ratings")
+    if imdb:
+        r = ET.SubElement(ratings, "rating", name="imdb", max="10", default="true")
+        _add(r, "value", round(float(imdb[0]), 1))
+        _add(r, "votes", int(imdb[1]))
     if average:
-        ratings = ET.SubElement(parent, "ratings")
-        r = ET.SubElement(ratings, "rating", name="themoviedb", max="10", default="true")
+        r = ET.SubElement(ratings, "rating", name="themoviedb", max="10")
+        if not imdb:
+            r.set("default", "true")
         _add(r, "value", round(float(average), 1))
         _add(r, "votes", int(votes or 0))
 
@@ -53,7 +62,7 @@ def _serialise(root: ET.Element, source: str) -> bytes:
     return (head + body + "\n").encode("utf-8")
 
 
-def tvshow_nfo(show: dict, title: str) -> bytes:
+def tvshow_nfo(show: dict, title: str, imdb: tuple[float, int] | None = None) -> bytes:
     """show: TMDB /tv/{id} with external_ids and aggregate_credits."""
     root = ET.Element("tvshow")
     _add(root, "title", title)
@@ -68,7 +77,7 @@ def tvshow_nfo(show: dict, title: str) -> bytes:
         _add(root, "genre", g.get("name"))
     for n in show.get("networks", [])[:2]:
         _add(root, "studio", n.get("name"))
-    _ratings(root, show.get("vote_average"), show.get("vote_count"))
+    _ratings(root, show.get("vote_average"), show.get("vote_count"), imdb)
     ext = show.get("external_ids") or {}
     _ids(root, show["id"], ext.get("imdb_id"), ext.get("tvdb_id"))
     cast = (show.get("aggregate_credits") or {}).get("cast", [])
@@ -77,7 +86,7 @@ def tvshow_nfo(show: dict, title: str) -> bytes:
 
 
 def episode_nfo(show_title: str, season: int, episode: dict, show_id: int, number: int | None = None,
-                title: str | None = None) -> bytes:
+                title: str | None = None, imdb: tuple[float, int] | None = None) -> bytes:
     """episode: one entry of TMDB /tv/{id}/season/{n} 'episodes'.
     number, title: the file's own episode number and title when the library numbers the show
     differently from TMDB (the second half of a split episode is 'Goodbye Toby (2)', S04E19)."""
@@ -89,7 +98,7 @@ def episode_nfo(show_title: str, season: int, episode: dict, show_id: int, numbe
     _add(root, "aired", episode.get("air_date"))
     _add(root, "plot", episode.get("overview"))
     _add(root, "runtime", episode.get("runtime"))
-    _ratings(root, episode.get("vote_average"), episode.get("vote_count"))
+    _ratings(root, episode.get("vote_average"), episode.get("vote_count"), imdb)
     if episode.get("id"):
         ET.SubElement(root, "uniqueid", type="tmdb", default="true").text = str(episode["id"])
     for c in episode.get("crew", []):
@@ -100,7 +109,7 @@ def episode_nfo(show_title: str, season: int, episode: dict, show_id: int, numbe
     return _serialise(root, f"TMDB tv/{show_id} season {season}")
 
 
-def movie_nfo(movie: dict, title: str) -> bytes:
+def movie_nfo(movie: dict, title: str, imdb: tuple[float, int] | None = None) -> bytes:
     """movie: TMDB /movie/{id} with external_ids and credits."""
     root = ET.Element("movie")
     _add(root, "title", title)
@@ -127,7 +136,7 @@ def movie_nfo(movie: dict, title: str) -> bytes:
     if movie.get("belongs_to_collection"):
         s = ET.SubElement(root, "set")
         _add(s, "name", movie["belongs_to_collection"].get("name"))
-    _ratings(root, movie.get("vote_average"), movie.get("vote_count"))
+    _ratings(root, movie.get("vote_average"), movie.get("vote_count"), imdb)
     _ids(root, movie["id"], movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id"))
     _actors(root, (movie.get("credits") or {}).get("cast", []), lambda p: p.get("character"))
     return _serialise(root, f"TMDB movie/{movie['id']}")

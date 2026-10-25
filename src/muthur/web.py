@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -14,12 +15,14 @@ from fastapi.staticfiles import StaticFiles
 from . import __version__
 from .config import load_dotenv
 from .apply import Applier
+from .imdb import REFRESH_DAYS, Imdb
 from .inbox import Inbox
 from .jobs import Jobs
 from .journal import Journal
 from .kodi import Kodi
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
+from .scores import ScoreRefresh
 from .store import Store
 from .tmdb import Tmdb
 
@@ -36,6 +39,8 @@ class Config:
         self.film = os.environ.get("MUTHUR_FILM", "/data/Film")
         self.quarantine = os.environ.get("MUTHUR_QUARANTINE", "/data/_muthur-quarantine")
         self.web_dist = os.environ.get("MUTHUR_WEB", str(Path(__file__).resolve().parents[2] / "web" / "dist"))
+        # The weekly IMDb refresh runs on its own; tests and one-off tools switch it off.
+        self.scheduler = os.environ.get("MUTHUR_SCHEDULER", "1") != "0"
 
 
 TMDB_LINK = re.compile(r"themoviedb\.org/(tv|movie)/(\d+)")
@@ -84,6 +89,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     os.makedirs(cfg.config_dir, exist_ok=True)
     store = Store(os.path.join(cfg.config_dir, "muthur.db"))
     journal = Journal(store)
+    imdb = Imdb(store)
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
@@ -120,8 +126,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
+            "scores": scores_state(),
             "job": jobs.current.as_dict() if jobs.current else None,
         }
+
+    def scores_state() -> dict:
+        info = imdb.refreshed()
+        last, _ = store.snapshot("last-scores")
+        return {"refreshed": info["at"] if info else None, "next": info["at"] + REFRESH_DAYS * 86400 if info else None,
+                **imdb.counts(), "updated": (last or {}).get("updated"), "checked": (last or {}).get("checked")}
 
     # -- inbox ----------------------------------------------------------------
     @app.get("/api/inbox")
@@ -172,7 +185,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             inbox = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film)
             # Look again right before acting: the plan must match what is on disk now.
             fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
-            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine).apply(fresh, job)
+            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb).apply(fresh, job)
             store.save_snapshot("last-apply", result)
             _rescan(client)
             if result["applied"]:
@@ -188,7 +201,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         runs = journal.runs()
         for r in runs:
             ops = journal.ops(r["id"])
-            r["counts"] = {k: sum(1 for o in ops if o["op"] == k and o["status"] == "done") for k in ("move", "write", "quarantine", "mkdir")}
+            r["counts"] = {k: sum(1 for o in ops if o["op"] == k and o["status"] == "done") for k in ("move", "write", "quarantine", "mkdir", "update")}
         return {"runs": runs}
 
     @app.get("/api/history/{run_id}")
@@ -225,6 +238,41 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if job is None:
             raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
+
+    # -- scores (IMDb) ----------------------------------------------------------
+    def start_scores():
+        client = tmdb()
+        if client is None:
+            return None
+
+        def work(job):
+            refresh = ScoreRefresh(store, journal, imdb, client, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"), kodi())
+            store.save_snapshot("last-scores", refresh.run(job))
+
+        return jobs.start("scores", work)
+
+    @app.post("/api/scores/refresh", status_code=202)
+    def scores_refresh():
+        if tmdb() is None:
+            raise HTTPException(409, "Add your TMDB token in Settings first.")
+        job = start_scores()
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    def scheduler():
+        """Once a week, refresh the IMDb scores. Checked hourly; waits while another job runs."""
+        time.sleep(300)  # let a fresh start settle first
+        while True:
+            try:
+                if imdb.due():
+                    start_scores()
+            except Exception:  # never let the schedule die; the Dashboard shows when the last refresh was
+                pass
+            time.sleep(3600)
+
+    if cfg.scheduler:
+        threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
 
     @app.get("/api/jobs/current")
     def current_job():

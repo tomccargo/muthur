@@ -30,8 +30,9 @@ class Stop(Exception):
 
 
 class Applier:
-    def __init__(self, tmdb, journal: Journal, downloads: str, tv_root: str, film_root: str, quarantine: str):
-        self.tmdb, self.journal = tmdb, journal
+    def __init__(self, tmdb, journal: Journal, downloads: str, tv_root: str, film_root: str, quarantine: str, imdb=None):
+        """imdb: an Imdb (imdb.py) for IMDb scores in the NFOs; without it they carry TMDB's only."""
+        self.tmdb, self.journal, self.imdb = tmdb, journal, imdb
         self.downloads, self.roots, self.quarantine = downloads, {"TV": tv_root, "Film": film_root}, quarantine
 
     # -- one run --------------------------------------------------------------------
@@ -90,6 +91,13 @@ class Applier:
             if not movie:
                 raise Stop("TMDB didn't return the film's details. Try again later.")
 
+        # IMDb scores, where the datasets have one muthur can trust (§8).
+        imdb = self.imdb
+        if item["kind"] == "tv":
+            show_imdb = (show.get("external_ids") or {}).get("imdb_id")
+        else:
+            movie_imdb = movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id")
+
         # 2. Changes, each one journalled.
         count = 0
         for f, src, dst in moves:
@@ -102,15 +110,21 @@ class Applier:
                 ts, te = _tmdb_numbers(f)
                 ep = next((e for e in seasons[ts].get("episodes", []) if e.get("episode_number") == te), None)
                 if ep:
-                    nfo = nfo_write.episode_nfo(item["title"], f["season"], ep, item["tmdb_id"], number=f["episodes"][0], title=f.get("title"))
+                    # A file filed under another number than TMDB's gets no IMDb score: its numbering can't be checked.
+                    same = (f["season"], f["episodes"]) == (ts, [te])
+                    score = imdb.episode(show_imdb, ts, te, len(seasons[ts].get("episodes", []))) if imdb and same else None
+                    nfo = nfo_write.episode_nfo(item["title"], f["season"], ep, item["tmdb_id"], number=f["episodes"][0],
+                                                title=f.get("title"), imdb=score)
                     count += self._write(run, item["id"], stem + ".nfo", nfo)
                     count += self._image(run, item["id"], stem + "-thumb.jpg", ep.get("still_path"), "original")
             else:
-                count += self._write(run, item["id"], stem + ".nfo", nfo_write.movie_nfo(movie, item["title"]))
+                score = imdb.rating(movie_imdb) if imdb else None
+                count += self._write(run, item["id"], stem + ".nfo", nfo_write.movie_nfo(movie, item["title"], score))
 
         top = os.path.join(root, files[0]["target"].split("/")[0])
         if item["kind"] == "tv":
-            count += self._write(run, item["id"], os.path.join(top, "tvshow.nfo"), nfo_write.tvshow_nfo(show, item["title"]))
+            score = imdb.rating(show_imdb) if imdb else None
+            count += self._write(run, item["id"], os.path.join(top, "tvshow.nfo"), nfo_write.tvshow_nfo(show, item["title"], score))
             count += self._artwork(run, item["id"], top, show)
             for s, data in seasons.items():
                 name = "season-specials-poster.jpg" if s == 0 else f"season{s:02d}-poster.jpg"

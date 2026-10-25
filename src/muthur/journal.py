@@ -1,21 +1,23 @@
 """Every change muthur makes to the library, recorded before it happens, so any run can be undone.
 
 Operations: mkdir (a folder muthur created), move (a rename on the same disk; never
-copy-then-delete), write (a file muthur created; never an overwrite) and quarantine
-(a move into the quarantine folder). Undo replays a run backwards and only touches a
-file that is still exactly what muthur left there.
+copy-then-delete), write (a file muthur created; never an overwrite), quarantine
+(a move into the quarantine folder) and update (an NFO muthur wrote earlier, rewritten
+with new scores; src is a copy of the old file). Undo replays a run backwards and only
+touches a file that is still exactly what muthur left there.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import os
+import shutil
 import time
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind TEXT NOT NULL,           -- 'apply'
+    kind TEXT NOT NULL,           -- 'apply' | 'scores'
     started REAL NOT NULL,
     finished REAL,
     summary TEXT,                 -- JSON
@@ -25,7 +27,7 @@ CREATE TABLE IF NOT EXISTS ops (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     run_id INTEGER NOT NULL,
     item TEXT NOT NULL,           -- the inbox item this belongs to
-    op TEXT NOT NULL,             -- mkdir | move | write | quarantine
+    op TEXT NOT NULL,             -- mkdir | move | write | quarantine | update
     src TEXT,                     -- absolute path before
     dst TEXT NOT NULL,            -- absolute path after
     size INTEGER,
@@ -92,6 +94,14 @@ class Journal:
             out.append(d)
         return out
 
+    def written(self, ext: str) -> list[str]:
+        """Files with this extension that muthur created and that weren't undone, oldest first."""
+        with self.store.lock:
+            rows = self.store.db.execute(
+                "SELECT DISTINCT dst FROM ops WHERE op = 'write' AND status = 'done' AND lower(dst) LIKE ? ORDER BY id",
+                (f"%.{ext.lower()}",)).fetchall()
+        return [r[0] for r in rows if os.path.isfile(r[0])]
+
     def mark_run_undone(self, run_id: int) -> None:
         self._exec("UPDATE runs SET undone = ? WHERE id = ?", (time.time(), run_id))
 
@@ -132,6 +142,11 @@ class Journal:
             return "it changed after muthur wrote it"
         if op == "write":
             os.remove(dst)
+            return None
+        if op == "update":  # put the old NFO back from its copy
+            if not os.path.isfile(src):
+                return "the copy of the old file is gone"
+            shutil.copyfile(src, dst)
             return None
         # move / quarantine: back to where it came from, never over something new
         if os.path.lexists(src):

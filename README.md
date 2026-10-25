@@ -4,7 +4,7 @@ Sorts finished downloads into a Kodi library and writes Kodi-native `.nfo` files
 
 It's built for a Synology NAS running Container Manager, with Kodi reading the library over SMB, but nothing in it is Synology-specific apart from the Download Station integration.
 
-**Status:** version 0.4. muthur checks the downloads folder, shows what each download is and where it goes, and on your go-ahead moves ready ones into the library with Kodi NFOs and artwork. What it isn't sure about waits in Review, where you pick the show, film or episode (including shows your library numbers differently from TMDB), and it asks Kodi to scan after every run. Every change is journalled and a run can be put back from History. It flags programs disguised as episodes and never touches them, never overwrites a file, and learns the shows already in the library.
+**Status:** version 0.5. muthur checks the downloads folder, shows what each download is and where it goes, and on your go-ahead moves ready ones into the library with Kodi NFOs and artwork. What it isn't sure about waits in Review, where you pick the show, film or episode (including shows your library numbers differently from TMDB), and it asks Kodi to scan after every run. NFOs it writes carry IMDb's score (from IMDb's weekly datasets) as the one Kodi shows. Every change is journalled and a run can be put back from History. It flags programs disguised as episodes and never touches them, never overwrites a file, and learns the shows already in the library.
 
 ## What it will do
 - Identify movies and episodes from file and folder names (via [guessit](https://github.com/guessit-io/guessit) plus its own rules), using TMDB.
