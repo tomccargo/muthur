@@ -113,8 +113,8 @@ export function SettingsPage({ refresh }: StatusHook) {
         <h2 id="ds-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Download Station</h2>
         <p className="hint">
           After a download is moved into the library, muthur removes its finished task from Download Station, so it doesn’t keep pointing at files
-          that are gone. Give muthur its own DSM account that may only use Download Station, without two-step verification. Leave this empty to keep
-          tasks as they are.
+          that are gone. Use the DSM account that adds the downloads, because Download Station only shows an account its own tasks; it must not use
+          two-step verification. Leave this empty to keep tasks as they are.
         </p>
         <label className="field-label">The NAS’s address
           <input className="field" type="text" placeholder="for example http://192.168.1.10:5000" value={draft.dsUrl} onChange={(e) => edit({ dsUrl: e.target.value })} />
