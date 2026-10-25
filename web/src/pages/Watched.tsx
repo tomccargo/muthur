@@ -51,15 +51,11 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
           )}
         </div>
       ) : w?.last ? (
-        <ul className="rows">
-          <li><span>Backed up</span><span className="status"><Dot kind="dot-success" />{when(w.last.at)}</span></li>
-          <li><span>Watched in Kodi</span><span className="num">{w.last.watched.toLocaleString('en-GB')} of {w.last.items.toLocaleString('en-GB')}</span></li>
-          <li><span>Follows Kodi</span><span className="status">{w.live ? <><Dot kind="dot-success" />Within a minute of each change</> : <><Dot kind="dot-warning" />Every hour (no live connection now)</>}</span></li>
-        </ul>
+        <span className="status num"><Dot kind="dot-success" />Backed up {when(w.last.at)} · {w.last.watched.toLocaleString('en-GB')} of {w.last.items.toLocaleString('en-GB')} watched
+          · {w.live ? 'live' : 'hourly'}</span>
       ) : (
-        <p className="hint">{kodiSet ? 'Not backed up yet. muthur checks Kodi every hour; the first check runs a few minutes after it starts.' : 'Set up the Kodi connection in Settings to back up what you watched.'}</p>
+        <span className="status"><Dot />{kodiSet ? 'Not backed up yet' : 'Needs the Kodi connection'}</span>
       )}
-      <p className="hint">Kodi is the master. muthur keeps a history of every change, by show, season and episode rather than by file, so it survives renames and a lost Kodi database.</p>
 
       {preview && (
         <div className="banner banner-warn" role="group" aria-label="Restore watched status" style={{ flexDirection: 'column', alignItems: 'stretch' }}>

@@ -121,9 +121,9 @@ class Kodi:
             v = self.call("Application.GetProperties", {"properties": ["version"]})["version"]
             return {"connected": True, "version": f"{v['major']}.{v['minor']}"}
         except requests.exceptions.ConnectTimeout:
-            return {"connected": False, "problem": f"Kodi didn't answer. Is the {self.device} on?"}
+            return {"connected": False, "off": True, "problem": f"Kodi didn't answer. Is the {self.device} on?"}
         except requests.exceptions.ConnectionError:
-            return {"connected": False, "problem": f"Kodi isn't running on the {self.device} (asleep, or Kodi is closed). "
+            return {"connected": False, "off": True, "problem": f"Kodi isn't running on the {self.device} (asleep, or Kodi is closed). "
                                                   "If it is on, check “Allow remote control via HTTP” and the port."}
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 401:

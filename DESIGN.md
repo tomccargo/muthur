@@ -23,7 +23,7 @@ Section numbers are referenced from code comments; do not renumber.
 
 ### 1.2 One primary button per view
 
-- **Exactly one** solid `.btn-primary` per view or dialog that has an action: the thing the view is for. *Process downloads* on the dashboard, *Apply 17 ready items* in the inbox, *It's Solaris (1972)* in review, *Keep 1, quarantine 2* on a duplicate group, *Apply 3 fixes* on Health, *Save* in settings. A view that is only for reading (History) has none.
+- **Exactly one** solid `.btn-primary` per view or dialog that has an action: the thing the view is for. *Check downloads* on the dashboard, *Apply 17 ready items* in the inbox, *It's Solaris (1972)* in review, *Keep 1, quarantine 2* on a duplicate group, *Apply 3 fixes* on Health, *Save* in settings. A view that is only for reading (History) has none.
 - Everything else is `.btn-secondary`, `.btn-ghost` or `.btn-link`.
 - An action repeated per row is never primary.
 - **Destructive or hard-to-undo actions** are never a bare solid button. They sit behind `.btn-danger-outline` and are confirmed in the page (§7.3). Examples: *Empty quarantine*, *Restore watched status* (it writes to Kodi), *Undo whole run*.
@@ -84,6 +84,13 @@ muthur examples:
 - TMDB requires attribution: the footer says *Data and images from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.*
 - Scores name their source next to the number: *IMDb 8.4*, *TMDB 7.9*. Never a bare number.
 
+### 1.11 Status, not explanations (0.25)
+
+- A page shows **numbers, status and actions**. What a panel means is explained once, in Settings or the docs, not on every visit. *162 remembered*, not *162 shows remembered. New episodes of a remembered show go straight into its folder, without a search.*
+- A **problem keeps its sentence and its way out** (§1.5): a paused backup, a folder that can't be read, Kodi that doesn't answer (*Off (asleep, or Kodi closed)* with *Wake the Shield*).
+- A panel with **nothing to say is left out**: the Folders panel appears only when a folder has a problem.
+- Tiles are a label and a number; a status line joins its facts with ` · ` (*Backed up 20:38 · 783 of 5,335 watched · hourly*).
+
 ---
 
 ## 2. Design tokens
@@ -99,7 +106,7 @@ Declared once, in `web/src/theme.css`, under `:root` (dark) and again for light 
 | `--surface-muted` | `#1f2622` | `#e2e7e4` | Tonal step inside a panel, hover, segmented control |
 | `--surface-raised` | `#1b211e` | `#ffffff` | Menus, dialogs |
 | `--border` | `#2b342f` | `#9ba6a0` | Panel edge, dividers (2.5:1 on a panel) |
-| `--border-strong` | `#3b463f` | `#6f7b74` | Inputs, secondary buttons (at least 3:1 on what is behind them, WCAG 1.4.11) |
+| `--border-strong` | `#636f68` | `#6f7b74` | Inputs, secondary buttons (at least 3:1 on what is behind them, WCAG 1.4.11) |
 | `--text` | `#ecf1ed` | `#131a16` | Body text |
 | `--muted` | `#a1ada5` | `#535f58` | Secondary text (4.5:1 or better on `--surface`) |
 | `--faint` | `#6f7b74` | `#66726b` | Decoration only, never text a reader needs |
@@ -222,7 +229,7 @@ Motion explains a change. It never decorates.
   - Dry run (`● Dry run on`, only when on).
   - Watched-status backup (`● Backed up 21:14`).
   - The theme switch.
-- On a phone, the same footer items live in the top bar's menu.
+- On a phone, a status dot in the top bar stands for the footer: green when Kodi answers and the backup follows it, red otherwise; it opens Settings.
 
 ### 7.2 Way back
 
