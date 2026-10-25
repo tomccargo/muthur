@@ -14,15 +14,16 @@ FROM python:3.12-alpine
 # adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it.
 RUN apk add --no-cache ffmpeg tini tzdata android-tools
 WORKDIR /app
-COPY pyproject.toml README.md LICENSE ./
+COPY requirements.lock pyproject.toml README.md LICENSE ./
 COPY src ./src
-RUN pip install --no-cache-dir . && rm -rf /root/.cache
+# The exact packages first (requirements.lock), then muthur itself without letting pip pick others.
+RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps . && rm -rf /root/.cache
 COPY --from=web /web/dist ./web/dist
 
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
     MUTHUR_WEB=/app/web/dist MUTHUR_CONFIG=/config
-# Never root by default; compose.yaml sets the DSM user (PUID/PGID) that owns the folders.
-USER 1026:100
+# Never root; compose.yaml sets the user (PUID/PGID from .env) that owns the folders.
+USER 1000:1000
 EXPOSE 8580
 HEALTHCHECK --interval=60s --timeout=5s --start-period=20s \
   CMD wget -qO- http://127.0.0.1:8580/api/health >/dev/null || exit 1

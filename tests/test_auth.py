@@ -120,3 +120,27 @@ def test_the_shield_app_must_be_an_app(tmp_path, monkeypatch):
     with pytest.raises(ShieldError):
         s.wake_and_start("org.xbmc.kodi/.Splash && reboot", lambda: True)
     assert calls == []  # nothing reached the box
+
+
+def test_saved_secrets_can_be_forgotten_and_the_language_chosen(tmp_path, monkeypatch):
+    c = TestClient(_app(tmp_path, monkeypatch, auth=False))
+    monkeypatch.setenv("TMDB_READ_TOKEN", "from-the-install")
+    s = c.put("/api/settings", json={"tmdb": {"token": "saved-in-muthur", "language": "nl-BE"}}).json()
+    assert s["tmdb"]["tokenFrom"] == "settings" and s["tmdb"]["language"] == "nl-BE"
+    assert c.put("/api/settings", json={"tmdb": {"forget": True}}).json()["tmdb"]["tokenFrom"] == "install"
+    assert c.put("/api/settings", json={"tmdb": {"language": "dutch"}}).status_code == 422
+    c.put("/api/settings", json={"downloadStation": {"url": "http://nas:5000", "user": "dl", "password": "pw"}})
+    ds = c.put("/api/settings", json={"downloadStation": {"forget": True}}).json()["downloadStation"]
+    assert ds == {"url": "", "user": "", "passwordSet": False}
+    assert c.put("/api/settings", json={"kodi": {"tcpPort": "9777"}}).json()["kodi"]["tcpPort"] == 9777
+
+
+def test_migrations_run_once_and_a_new_database_starts_past_them(tmp_path, monkeypatch):
+    from muthur import store as store_module
+
+    old = Store(str(tmp_path / "old.db"))  # made before the migration existed
+    monkeypatch.setattr(store_module, "MIGRATIONS", ["CREATE TABLE added (x INTEGER);"])
+    assert Store(str(tmp_path / "old.db")).migrate() == 1
+    assert Store(str(tmp_path / "old.db")).migrate() == 0
+    assert Store(str(tmp_path / "new.db")).migrate() == 0  # new: already at the newest schema
+    del old

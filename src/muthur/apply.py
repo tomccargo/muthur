@@ -209,7 +209,7 @@ class Applier:
             return 0
         from .parse import is_video
 
-        for dirpath, _, names in os.walk(path):
+        for _, _, names in os.walk(path):
             if any(is_video(n) for n in names):
                 return 0  # something playable is still there: leave the folder for the reader
         day = time.strftime("%Y-%m-%d")

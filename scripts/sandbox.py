@@ -9,6 +9,7 @@ os.environ.update({
     "MUTHUR_CONFIG": str(sb / "config"), "MUTHUR_DOWNLOADS": str(sb / "complete"), "MUTHUR_TV": str(sb / "TV"),
     "MUTHUR_FILM": str(sb / "Film"), "MUTHUR_QUARANTINE": str(sb / "_muthur-quarantine"),
 })
+os.environ.setdefault("MUTHUR_AUTH", "0")  # it only listens on 127.0.0.1; MUTHUR_AUTH=1 to try signing in
 os.chdir(root)
 sys.path.insert(0, str(root / "src"))
 import uvicorn  # noqa: E402

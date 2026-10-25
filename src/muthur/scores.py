@@ -151,7 +151,7 @@ class ScoreRefresh:
         if run is not None:
             self.journal.finish(run, summary)
         if self.kodi and updated:
-            summary["kodi"] = self.kodi.refresh_files(updated, {self.tv_root: "TV", self.film_root: "Film"})
+            summary["kodi"] = self.kodi.refresh_files(updated, {"TV": self.tv_root, "Film": self.film_root})
         return summary
 
     def _score(self, path: str, text: str, ours: bool = True) -> tuple[float, int] | None:

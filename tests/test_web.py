@@ -142,7 +142,7 @@ def test_status_and_settings(client):
     assert s["applying"] is True and s["tmdb"]["configured"] is False and s["kodi"] is None
     r = client.put("/api/settings", json={"kodi": {"host": "shield", "port": "8080", "user": "kodi", "password": "pw"}})
     body = r.json()
-    assert body["kodi"] == {"host": "shield", "port": 8080, "user": "kodi", "passwordSet": True}
+    assert body["kodi"] == {"host": "shield", "port": 8080, "tcpPort": 9090, "user": "kodi", "passwordSet": True}
     assert "password" not in str(body).replace("passwordSet", "")
     assert client.put("/api/settings", json={"kodi": {"port": "abc"}}).status_code == 422
 

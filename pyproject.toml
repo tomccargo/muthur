@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "httpx>=0.28", "playwright>=1.64"]  # playwright: Apache-2.0, the UI checks
+dev = ["pytest>=8", "httpx>=0.28", "playwright>=1.64", "ruff>=0.17"]  # playwright: Apache-2.0, the UI checks; ruff: MIT
 
 [project.scripts]
 muthur = "muthur.cli:main"
@@ -28,6 +28,15 @@ version = {attr = "muthur.__version__"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.ruff]
+line-length = 160
+
+[tool.ruff.lint]
+# Rules that find bugs, not style: pyflakes, pycodestyle's errors, bugbear.
+select = ["E4", "E7", "E9", "F", "B"]
+# An HTTPException raised in an except block replaces the cause with a sentence for the reader on purpose.
+ignore = ["B904"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

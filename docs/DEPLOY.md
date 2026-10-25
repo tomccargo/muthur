@@ -1,91 +1,69 @@
-# Deploying muthur on a Synology NAS
+# Installing muthur
 
-For DSM 7.2.1 or later with Container Manager (it brings `docker compose`; [release notes](https://www.synology.com/en-uk/releaseNote/ContainerManager)). Commands that start with `sudo` run on the NAS over SSH; the rest run on your own computer.
+muthur is one Docker container. It needs:
 
-## 1. Two users, two jobs
+- **A machine that runs Docker Compose** and can reach your media folders: a Synology NAS with Container Manager (DSM 7.2 or later), or any Linux machine with Docker. Nothing in muthur is Synology-only except the optional Download Station clean-up.
+- **One folder that holds the finished downloads, the TV library and the Film library** (for example a shared folder `media` with `downloads/complete`, `TV` and `Film` in it). One mount, so a move is an instant rename, never a copy.
+- **Kodi** on any device (an NVIDIA Shield, a Fire TV, a LibreELEC box, a PC) that plays that library over the network.
+- A free **TMDB "API Read Access Token"**: themoviedb.org → Settings → API.
 
-| User | Group | What it's for |
-|---|---|---|
-| `muthur-deploy` | administrators | Signs in over SSH with a key to install and update the container. Docker on DSM needs root, so this user is powerful: no password login, key only. |
-| `muthur` | users | The account the **container runs as**. Not an administrator, so even a bug in muthur can only touch what this user may touch. |
+The image is built by GitHub Actions and published as [`tomccargo/muthur`](https://hub.docker.com/r/tomccargo/muthur); nothing is built on the NAS.
 
-In DSM: **Control Panel → User & Group → Create**.
+## 1. A user for muthur
 
-- `muthur-deploy`: a long random password (it's never typed after this), member of **administrators**.
-- `muthur`: a long random password, member of **users** only. Permissions:
-  - the media shared folder (the one holding `torrent-output`, `TV`, `Film`): **Read/Write**. muthur 0.2 mounts it read-only anyway; write access is for later versions.
-  - the `docker` shared folder: **Read/Write**.
-  - Applications: deny everything (it never signs in).
+muthur runs as a user **without admin rights**, so even a bug in muthur can only touch what that user may touch. On a Synology: **Control Panel → User & Group → Create**, member of `users` only, with:
 
-Also make sure **Control Panel → User & Group → Advanced → Enable user home service** is on: SSH keys live in the user's home folder.
+- **Read/Write** on the media shared folder and on the `docker` shared folder;
+- every application denied (it never signs in).
 
-## 2. Key-only SSH for `muthur-deploy`
+You need its numbers (`PUID`, `PGID`). Over SSH: `id <user>` prints for example `uid=1032(media) gid=100(users)`, so `PUID=1032`, `PGID=100`.
 
-1. **Control Panel → Terminal & SNMP → Enable SSH service**.
-2. On your computer, make a key (once):
-   ```bash
-   ssh-keygen -t ed25519 -f ~/.ssh/muthur_nostromo -C "muthur-deploy"
-   ```
-3. Sign in once with the password and install the key. DSM creates home folders with permissions that sshd refuses for key logins, so those are fixed too ([Synology KB](https://kb.synology.com/en-uk/DSM/tutorial/How_to_log_in_to_DSM_with_key_pairs_as_admin_or_root_permission_via_SSH_on_computers), [forum](https://www.synology-forum.de/threads/ssh-login-fuer-non-root-user-mit-key.81695)):
-   ```bash
-   ssh muthur-deploy@NAS "mkdir -p ~/.ssh && chmod 755 ~ && chmod 700 ~/.ssh && cat >> ~/.ssh/authorized_keys && chmod 600 ~/.ssh/authorized_keys" < ~/.ssh/muthur_nostromo.pub
-   ```
-4. Check that the key works without a password:
-   ```bash
-   ssh -i ~/.ssh/muthur_nostromo -o PasswordAuthentication=no muthur-deploy@NAS "id"
-   ```
+## 2. The project folder
 
-## 3. Find the IDs for `compose.yaml`
+Make a folder for the project, for example `/volume1/docker/muthur`, with a `config` folder in it (File Station works). Put two files in it:
 
-```bash
-ssh muthur-deploy@NAS "id muthur"
-```
+- `compose.yaml` from this repository;
+- `.env`, a copy of [`.env.example`](../.env.example) with your values: `PUID`, `PGID`, `MEDIA_SHARE` (the folder from above), the folders inside it (`DOWNLOADS_DIR`, `TV_DIR`, `FILM_DIR`), `CONFIG_DIR` and `TZ`.
 
-It prints something like `uid=1027(muthur) gid=100(users)`. Those numbers are `PUID` and `PGID`.
+Docker Compose reads `.env` next to `compose.yaml` for the `${…}` values ([Docker docs](https://docs.docker.com/compose/how-tos/environment-variables/variable-interpolation/)). If your Container Manager doesn't, write the values straight into `compose.yaml` instead.
 
-## 4. Install
+Give muthur's user the config folder (over SSH): `sudo chown -R <user>:users /volume1/docker/muthur/config`.
 
-Send the committed files only (no `node_modules`, no `.env`, no local reports):
+## 3. Start it
 
-```bash
-ssh muthur-deploy@NAS "mkdir -p /volume1/docker/muthur/config /volume1/docker/muthur/app"
-git archive HEAD | ssh muthur-deploy@NAS "tar -x -C /volume1/docker/muthur/app"
-```
+- **Synology:** Container Manager → **Project** → **Create**: name `muthur`, path `/volume1/docker/muthur`, use the existing `compose.yaml`, then **Done**. Container Manager pulls the image and starts it.
+- **Elsewhere:** `docker compose up -d` in the project folder.
 
-Make `/volume1/docker/muthur/app/.env` from `.env.example`:
+Open `http://<nas>:8580`. The first visit asks you to **choose a password**: do that right away, because until then anyone who opens the page can choose it. Then, in **Settings**: the TMDB token (unless it's in `.env`), the Kodi address, and whether to start in **dry run** (plans only, changes nothing).
 
-```bash
-PUID=1027
-PGID=100
-MEDIA_SHARE=/volume1/YourMediaShare
-CONFIG_DIR=/volume1/docker/muthur/config
-TMDB_READ_TOKEN=          # or enter it later in muthur's Settings
-```
+## 4. Kodi
 
-Give `muthur` its config folder, then build and start:
+In Kodi, **Settings → Services → Control**:
 
-```bash
-ssh muthur-deploy@NAS "sudo chown -R muthur:users /volume1/docker/muthur/config"
-ssh muthur-deploy@NAS "cd /volume1/docker/muthur/app && sudo docker compose up -d --build"
-```
+- **Allow remote control via HTTP** on, with a username and password: muthur asks Kodi to scan and to re-read the NFOs it changed.
+- **Allow remote control from applications on other systems** on: Kodi then tells muthur when something was watched (port 9090, settable in muthur).
 
-The first build takes several minutes on a small NAS. Then open `http://NAS:8580`.
+Add the TV and Film folders as **video sources** (over SMB or NFS), with **Local information only** as the information provider: muthur writes the NFOs and artwork, so Kodi never has to scrape. muthur finds each source by its folder's name, so the folder names on the NAS and in Kodi must be the same (`TV` and `TV`, `Series` and `Series`).
 
-## 5. Update
+**Waking an Android TV box (optional).** On an NVIDIA Shield or another Android TV device, muthur can wake the box and start Kodi when you start something that needs it. Turn on **Developer options → Network debugging** on the box, then in muthur's Settings read the box's apps, choose Kodi, and accept muthur on the TV once.
 
-```bash
-git archive HEAD | ssh muthur-deploy@NAS "tar -x -C /volume1/docker/muthur/app"
-ssh muthur-deploy@NAS "cd /volume1/docker/muthur/app && sudo docker compose up -d --build"
-```
+## 5. Updating
 
-## 6. Check the guardrails
+The project uses `tomccargo/muthur:latest` unless `.env` sets `MUTHUR_VERSION`.
 
-```bash
-ssh muthur-deploy@NAS "sudo docker stats muthur --no-stream"
-```
+- **Synology, from the NAS's own screens:** Container Manager → **Image**: `tomccargo/muthur` shows *Update available*; update it, then recreate the container (Project → muthur → stop and start, or Container → muthur → Action → Reset). This is how community guides describe it ([drfrankenstein](https://drfrankenstein.co.uk/updating-containers-in-the-synology-docker-package/comment-page-1)); Container Manager may take a day to notice a new image.
+- **Synology, over SSH (as root):** pull the image and let Container Manager rebuild the project with [`scripts/nas-update-project.py`](../scripts/nas-update-project.py), which finds the project by its name:
+  ```bash
+  docker pull tomccargo/muthur:latest && python3 /volume1/docker/muthur/nas-update-project.py /volume1/docker/muthur/compose.yaml
+  ```
+- **Elsewhere:** `docker compose pull && docker compose up -d`.
 
-Memory should be well under the 256 MB limit (about 50 MB idle). If DSM warns that the kernel doesn't support swap limits, that's expected: the memory limit still applies.
+The running version: `docker exec muthur python -c "import muthur; print(muthur.__version__)"`.
 
-## 7. Turn SSH off again (optional)
+## 6. Forgotten password
 
-When nothing needs deploying, **Control Panel → Terminal & SNMP → Enable SSH service** can be switched off. Container Manager keeps muthur running.
+Run `muthur password` inside the container: Container Manager → Container → muthur → **Open Terminal** (the image has `sh`, not `bash`), or over SSH `sudo docker exec -it muthur muthur password`. Every browser then signs in with the new one.
+
+## 7. Guardrails
+
+`docker stats muthur --no-stream` shows the memory in use: well under the 256 MB limit (`MEMORY_LIMIT` in `.env`), about 70 MB idle. If DSM warns that the kernel doesn't support swap limits, that's expected; the memory limit still applies.

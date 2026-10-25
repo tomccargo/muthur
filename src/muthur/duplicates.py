@@ -15,6 +15,7 @@ import re
 
 from guessit import guessit
 
+from .kodi import folder_name
 from .media import probe
 from .parse import SEASON_DIR, SPECIALS_DIR, is_video
 from .text import normalize
@@ -329,7 +330,7 @@ def apply_groups(dups: Duplicates, groups: list[dict], journal, quarantine: str,
 
     before, prefixes = {}, {}
     if kodi:
-        prefixes = {lib: kodi.source_prefix(lib) for lib in ("TV", "Film")}
+        prefixes = {lib: kodi.source_prefix(folder_name(dups.roots[lib])) for lib in ("TV", "Film")}
         for i in Watched.read_kodi(kodi):
             for lib, pre in prefixes.items():
                 if pre and (i["file"] or "").lower().startswith(pre.lower()):
@@ -414,7 +415,7 @@ def _carry(kodi, g: dict, before: dict, prefixes: dict) -> dict:
     lib, _, rel = g["plan"]["final"].partition("/")
     prefix = prefixes.get(lib)
     if not prefix:
-        return {"ok": False, "why": f"Kodi has no source called {lib}."}
+        return {"ok": False, "why": f"Kodi has no video source for the {lib} folder."}
     states = [before[c["path"].lower()] for c in g["copies"] if c["path"].lower() in before]
     playcount = max((s["playcount"] for s in states), default=0)
     lastplayed = max((s["lastplayed"] for s in states if s["lastplayed"]), default=None)

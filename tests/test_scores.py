@@ -1,6 +1,5 @@
 """IMDb datasets, scores in NFOs, and the weekly refresh of NFOs muthur wrote."""
 import gzip
-import os
 import xml.etree.ElementTree as ET
 
 import pytest

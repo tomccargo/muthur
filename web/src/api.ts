@@ -53,8 +53,8 @@ export type Season = {
 export type Inbox = { items: Item[]; scannedAt: number | null; job: Job | null };
 
 export type Settings = {
-  kodi: { host: string; port: number; user: string; passwordSet: boolean };
-  tmdb: { tokenSet: boolean };
+  kodi: { host: string; port: number; tcpPort: number; user: string; passwordSet: boolean };
+  tmdb: { tokenSet: boolean; tokenFrom: 'settings' | 'install' | null; language: string };
   titles: { keepOriginal: string[] };
   downloadStation: { url: string; user: string; passwordSet: boolean };
   dryRun: boolean;

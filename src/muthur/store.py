@@ -29,6 +29,11 @@ CREATE TABLE IF NOT EXISTS choices (    -- what the reader chose in Review, per 
 """
 
 
+# Changes to an existing database, oldest first; a new database is created at the newest schema and
+# starts past them. PRAGMA user_version counts the ones that ran. Never edit or reorder one that shipped.
+MIGRATIONS: list[str] = []
+
+
 def alias_key(title: str) -> str:
     return strip_article(normalize(title))
 
@@ -43,8 +48,21 @@ class Store:
         self.db.execute("PRAGMA synchronous=NORMAL")
         self.lock = threading.Lock()
         with self.lock:
+            fresh = not self.db.execute("SELECT name FROM sqlite_master WHERE name = 'settings'").fetchone()
             self.db.executescript(SCHEMA)
+            if fresh:
+                self.db.execute(f"PRAGMA user_version = {len(MIGRATIONS)}")
             self.db.commit()
+
+    def migrate(self) -> int:
+        """Run the migrations this database hasn't had, after every module created its tables. Returns how many ran."""
+        with self.lock:
+            done = self.db.execute("PRAGMA user_version").fetchone()[0]
+            for n, script in enumerate(MIGRATIONS[done:], start=done + 1):
+                self.db.executescript(script)
+                self.db.execute(f"PRAGMA user_version = {n}")
+            self.db.commit()
+        return max(0, len(MIGRATIONS) - done)
 
     # -- settings -----------------------------------------------------------
     def get(self, key: str, default=None):

@@ -74,9 +74,11 @@ volumes:
 ```
 `torrent-output`, `TV` and `Film` **must be under one bind mount**. Moving a file between two separate Docker bind mounts can't be a simple rename, even on the same disk. Docker falls back to copy-then-delete, which is slow and not atomic. With one mount, a move is an instant rename.
 
-- The container runs as a dedicated DSM user (PUID/PGID) with read/write on `Iedereen` only.
+- The container runs as a dedicated user without admin rights (PUID/PGID) with read/write on the media folder only.
 - The web UI is on the LAN only (for example `http://nostromo:8580`) and asks for a password (§14).
-- `quarantine` lives at `/data/_muthur-quarantine`.
+- `quarantine` lives at `/data/_muthur-quarantine` (`QUARANTINE_DIR`).
+- **Where settings live (0.21).** The install's settings are in `.env` next to `compose.yaml` (see `.env.example`): user, the media folder and the folders inside it, the config folder, port, time zone, image version. A missing required one stops `docker compose` with a message instead of guessing. Everything changed while using muthur is in Settings, stored in its database: Kodi (HTTP and notification ports), the box to wake, the TMDB token and the language of plots and episode titles, Download Station, the title rule, dry run. A TMDB token saved in Settings wins over the one in `.env`; removing it brings that one back. Saved secrets can be removed.
+- **Kodi's sources are found by folder name (0.21).** muthur matches each library folder to the Kodi video source ending in the same folder name, so `Series` and `Movies` work as well as `TV` and `Film`.
 
 ## 4. Data sources
 

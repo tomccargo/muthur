@@ -1,26 +1,27 @@
-# muthur as a Synology Container Manager project.
-# The image is built by GitHub Actions (.github/workflows/image.yml) and pulled from Docker Hub;
-# the NAS never builds anything. Settings come from .env next to this file (see .env.example).
+# muthur as a Docker Compose project; on a Synology NAS: Container Manager → Project → Create (docs/DEPLOY.md).
+# The image is built by GitHub Actions and pulled from Docker Hub. The install's settings come from .env next to
+# this file (copy .env.example); everything else is set in muthur's own Settings page.
 
 services:
   muthur:
-    image: tomccargo/muthur:latest
+    image: tomccargo/muthur:${MUTHUR_VERSION:-latest}
     container_name: muthur
     restart: unless-stopped
-    # A DSM user without admin rights that owns the config folder (docs/DEPLOY.md).
-    user: "${PUID:-1026}:${PGID:-100}"
+    # A user without admin rights that owns the config folder and may write the media folder (docs/DEPLOY.md).
+    user: "${PUID:?Set PUID in .env}:${PGID:?Set PGID in .env}"
     ports:
       - "${MUTHUR_PORT:-8580}:8580"
     environment:
-      TZ: ${TZ:-Europe/Brussels}
-      MUTHUR_DOWNLOADS: /data/torrent-output/complete
-      MUTHUR_TV: /data/TV
-      MUTHUR_FILM: /data/Film
+      TZ: ${TZ:-UTC}
+      MUTHUR_DOWNLOADS: /data/${DOWNLOADS_DIR:-downloads/complete}
+      MUTHUR_TV: /data/${TV_DIR:-TV}
+      MUTHUR_FILM: /data/${FILM_DIR:-Film}
+      MUTHUR_QUARANTINE: /data/${QUARANTINE_DIR:-_muthur-quarantine}
       TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
     volumes:
-      # One mount for downloads, TV and Film, so moves are instant renames (ARCHITECTURE.md §3).
-      - ${MEDIA_SHARE:-/volume1/Iedereen}:/data
-      - ${CONFIG_DIR:-/volume1/docker/muthur/config}:/config
-    # Guardrails for a 4 GB DS918+ (ARCHITECTURE.md §3).
-    mem_limit: 256m
+      # One mount for downloads, TV and Film, so a move is an instant rename (ARCHITECTURE.md §3).
+      - ${MEDIA_SHARE:?Set MEDIA_SHARE in .env}:/data
+      - ${CONFIG_DIR:?Set CONFIG_DIR in .env}:/config
+    # Guardrails for a small NAS (ARCHITECTURE.md §3).
+    mem_limit: ${MEMORY_LIMIT:-256m}
     cpu_shares: 512

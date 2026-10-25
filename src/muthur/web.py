@@ -43,13 +43,13 @@ from .watched import Listener, Watched
 
 
 class Config:
-    """Paths from the environment; the defaults match compose.yaml on the NAS."""
+    """Paths from the environment (compose.yaml sets them from .env); the defaults match compose.yaml's."""
 
     def __init__(self, dotenv: bool = True):
         if dotenv:
             load_dotenv()
         self.config_dir = os.environ.get("MUTHUR_CONFIG", "/config")
-        self.downloads = os.environ.get("MUTHUR_DOWNLOADS", "/data/torrent-output/complete")
+        self.downloads = os.environ.get("MUTHUR_DOWNLOADS", "/data/downloads/complete")
         self.tv = os.environ.get("MUTHUR_TV", "/data/TV")
         self.film = os.environ.get("MUTHUR_FILM", "/data/Film")
         self.quarantine = os.environ.get("MUTHUR_QUARANTINE", "/data/_muthur-quarantine")
@@ -61,6 +61,7 @@ class Config:
 
 
 TMDB_LINK = re.compile(r"themoviedb\.org/(tv|movie)/(\d+)")
+TMDB_LANGUAGE = re.compile(r"^[a-z]{2}-[A-Z]{2}$")  # 'en-US', 'nl-BE': what TMDB's language parameter takes
 IMDB_ID = re.compile(r"\b(tt\d{6,10})\b")
 
 
@@ -201,12 +202,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(409, BUSY)
 
     def tmdb() -> Tmdb | None:
+        """A token saved in Settings wins over the install's (.env); removing it in Settings brings that one back."""
         token = store.get("tmdb.token") or os.environ.get("TMDB_READ_TOKEN", "").strip()
         if not token:
             return None
         if tmdb_cache.get("token") != token:
             tmdb_cache.update(token=token, client=tmdb_factory(token, os.path.join(cfg.config_dir, "tmdb-cache.sqlite")))
-        return tmdb_cache["client"]
+        client = tmdb_cache["client"]
+        client.language = store.get("tmdb.language") or "en-US"  # cached answers are kept per language
+        return client
 
     def download_station() -> DownloadStation | None:
         d = store.get("downloadstation", {})
@@ -547,7 +551,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 _, checked = store.snapshot("health")
                 _, indexed = store.snapshot("library")
                 if client and (not checked or time.time() - checked > 86400):  # a day old: check again
-                    jobs.start("health", lambda j: check_health(client, j))
+                    jobs.start("health", lambda j, c=client: check_health(c, j))
                 elif not client and (not indexed or time.time() - indexed > 86400):
                     start_library()  # without TMDB only the index can be built
             except Exception:
@@ -564,7 +568,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if k:
             watched.follow(Watched.read_kodi(k))
 
-    listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back)
+    listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back,
+                        port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090))
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
         threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
@@ -589,7 +594,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if not lib:
             return {"at": None, "shows": [], "films": []}
         return {"at": lib["at"], "shows": [_show_summary(sh) for sh in lib["shows"]],
-                "films": [_film_summary(f, n) for f, n in zip(lib["films"], _twins(lib["films"]))]}
+                "films": [_film_summary(f, n) for f, n in zip(lib["films"], _twins(lib["films"]), strict=True)]}
 
     @app.get("/api/library/show")
     def library_show(folder: str):
@@ -608,7 +613,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """After an edit: Kodi re-reads the item if it answers, and the index is built again."""
         k = kodi()
         if k and result.get("nfo") and k.check().get("connected"):
-            result["kodi"] = k.refresh_files([editor().full(result["nfo"])], {cfg.tv: "TV", cfg.film: "Film"})
+            result["kodi"] = k.refresh_files([editor().full(result["nfo"])], {"TV": cfg.tv, "Film": cfg.film})
         start_library()
         return result
 
@@ -998,9 +1003,11 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         k = store.get("kodi", {})
         ds = store.get("downloadstation", {})
         return {
-            "kodi": {"host": k.get("host", ""), "port": k.get("port", 8080), "user": k.get("user", ""),
-                     "passwordSet": bool(k.get("password"))},
-            "tmdb": {"tokenSet": tmdb() is not None},
+            "kodi": {"host": k.get("host", ""), "port": k.get("port", 8080), "tcpPort": k.get("tcpPort", 9090),
+                     "user": k.get("user", ""), "passwordSet": bool(k.get("password"))},
+            "tmdb": {"tokenSet": tmdb() is not None,
+                     "tokenFrom": "settings" if store.get("tmdb.token") else "install" if os.environ.get("TMDB_READ_TOKEN", "").strip() else None,
+                     "language": store.get("tmdb.language") or "en-US"},
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
             "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
             "dryRun": bool(store.get("dryRun", False)),
@@ -1020,11 +1027,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             for key in ("host", "user"):
                 if key in new:
                     k[key] = str(new[key]).strip()
-            if "port" in new:
-                try:
-                    k["port"] = int(new["port"])
-                except (TypeError, ValueError):
-                    raise HTTPException(422, "The port must be a number, for example 8080.")
+            for key, example in (("port", 8080), ("tcpPort", 9090)):
+                if key in new:
+                    try:
+                        k[key] = int(new[key])
+                    except (TypeError, ValueError):
+                        raise HTTPException(422, f"The port must be a number, for example {example}.")
             if new.get("password"):
                 k["password"] = new["password"]
             store.put("kodi", k)
@@ -1048,7 +1056,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if isinstance((body.get("quality") or {}).get("preferHdr"), bool):
             store.put("quality.preferHdr", body["quality"]["preferHdr"])
         if "downloadStation" in body:
-            d = dict(store.get("downloadstation", {}))
+            d = {} if body["downloadStation"].get("forget") else dict(store.get("downloadstation", {}))
             new = body["downloadStation"]
             if "url" in new and str(new["url"]).strip() != d.get("url", ""):
                 d.pop("password", None)  # as for Kodi: never send the password to a new address
@@ -1058,8 +1066,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if new.get("password"):
                 d["password"] = new["password"]
             store.put("downloadstation", d)
-        if (token := (body.get("tmdb") or {}).get("token")):
+        t = body.get("tmdb") or {}
+        if t.get("forget"):
+            store.put("tmdb.token", None)
+        elif (token := t.get("token")):
             store.put("tmdb.token", token.strip())
+        if "language" in t:
+            if not TMDB_LANGUAGE.match(str(t["language"])):
+                raise HTTPException(422, "Choose a language from the list.")
+            store.put("tmdb.language", t["language"])
         if "titles" in body and isinstance(body["titles"].get("keepOriginal"), list):
             store.put("titles.keepOriginal", sorted({str(c) for c in body["titles"]["keepOriginal"]}))
         return get_settings()
@@ -1125,6 +1140,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 return FileResponse(f)
             return FileResponse(dist / "index.html")
 
+    store.migrate()  # every module has created its tables by now
     app.state.store, app.state.jobs, app.state.started = store, jobs, time.time()
     return app
 

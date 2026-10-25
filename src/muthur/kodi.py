@@ -6,6 +6,11 @@ import os
 import requests
 
 
+def folder_name(root: str) -> str:
+    """The last folder of a library root: '/data/Series' -> 'Series'. Kodi's source for it ends in that name."""
+    return os.path.basename(os.path.normpath(root))
+
+
 class Kodi:
     def __init__(self, host: str, port: int = 8080, user: str | None = None, password: str | None = None, timeout: float = 4):
         self.url = f"http://{host}:{port}/jsonrpc"
@@ -22,7 +27,7 @@ class Kodi:
         return body.get("result")
 
     def source_prefix(self, name: str) -> str | None:
-        """Kodi's path of the video source named like the library folder: 'TV' -> 'smb://nostromo/iedereen/TV/'."""
+        """Kodi's path of the video source whose folder has this name: 'Series' -> 'smb://nas/media/Series/'."""
         for s in (self.call("Files.GetSources", {"media": "video"}) or {}).get("sources", []):
             path = s.get("file", "")
             if path.rstrip("/").rsplit("/", 1)[-1].lower() == name.lower():
@@ -43,25 +48,26 @@ class Kodi:
             time.sleep(2)
         return False
 
-    def refresh_files(self, paths: list[str], shares: dict[str, str]) -> dict:
-        """Ask Kodi to re-read the NFOs at these paths. shares maps muthur's library roots to the
-        name of the same folder on the share ('/data/TV' -> 'TV'), so 'smb://nostromo/iedereen/TV/…'
-        matches. Returns counts; an item Kodi doesn't have is skipped."""
+    def refresh_files(self, paths: list[str], roots: dict[str, str]) -> dict:
+        """Ask Kodi to re-read the NFOs at these paths. roots maps each library ('TV', 'Film') to muthur's
+        folder for it ('/data/Series'); Kodi's path is matched by that folder's name ('smb://nas/media/Series/…'),
+        whatever the folders are called. Returns counts; an item Kodi doesn't have is skipped."""
         done = missing = 0
         for path in paths:
             try:
-                done += self._refresh_one(path, shares)
+                done += self._refresh_one(path, roots)
             except LookupError:
                 missing += 1
             except (requests.exceptions.RequestException, RuntimeError):
                 missing += 1
         return {"refreshed": done, "notInKodi": missing}
 
-    def _refresh_one(self, path: str, shares: dict[str, str]) -> int:
-        root = next((r for r in shares if path.startswith(r.rstrip("/") + "/")), None)
-        if root is None:
+    def _refresh_one(self, path: str, roots: dict[str, str]) -> int:
+        lib = next((k for k, r in roots.items() if path.startswith(r.rstrip("/\\") + os.sep) or path.startswith(r.rstrip("/") + "/")), None)
+        if lib is None:
             raise LookupError(path)
-        rel = shares[root] + "/" + os.path.relpath(path, root).replace(os.sep, "/")
+        root = roots[lib]
+        rel = folder_name(root) + "/" + os.path.relpath(path, root).replace(os.sep, "/")
         folder, name = rel.rsplit("/", 1)
 
         def ends(kodi_path: str, suffix: str) -> bool:
@@ -76,7 +82,7 @@ class Kodi:
         # Any other NFO sits next to its video, under the same name: an episode in TV, a film elsewhere.
         stem = name[:-4]
         method, key, refresh, id_key = (("VideoLibrary.GetEpisodes", "episodes", "VideoLibrary.RefreshEpisode", "episodeid")
-                                        if shares[root] == "TV" else
+                                        if lib == "TV" else
                                         ("VideoLibrary.GetMovies", "movies", "VideoLibrary.RefreshMovie", "movieid"))
         found = self.call(method, {"properties": ["file"], "filter": {"field": "filename", "operator": "startswith", "value": stem}})
         for x in (found or {}).get(key, []):

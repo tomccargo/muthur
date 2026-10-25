@@ -4,17 +4,18 @@ import type { StatusHook } from '../App';
 import { Dot, Footer } from '../components';
 import { PasswordSettings } from './PasswordSettings';
 import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
-import { ALL_LANGUAGES, language, libraryPath } from '../labels';
+import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLanguage } from '../labels';
 
 type Draft = {
-  host: string; port: string; user: string; password: string; token: string; keepOriginal: string[];
+  host: string; port: string; tcpPort: string; user: string; password: string; token: string; tmdbLanguage: string; keepOriginal: string[];
   dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean;
 } & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 
 function toDraft(s: Settings): Draft {
   return {
-    host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal,
+    host: s.kodi.host, port: String(s.kodi.port), tcpPort: String(s.kodi.tcpPort), user: s.kodi.user, password: '', token: '',
+    tmdbLanguage: s.tmdb.language, keepOriginal: s.titles.keepOriginal,
     dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
     shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app,
   };
@@ -42,13 +43,13 @@ export function SettingsPage({ refresh }: StatusHook) {
 
   const save = () => {
     const body: Record<string, unknown> = {
-      kodi: { host: draft.host, port: draft.port, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
+      kodi: { host: draft.host, port: draft.port, tcpPort: draft.tcpPort, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
       titles: { keepOriginal: draft.keepOriginal },
       downloadStation: dsBody(),
       dryRun: draft.dryRun,
       shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
-      ...(draft.token ? { tmdb: { token: draft.token } } : {}),
+      tmdb: { language: draft.tmdbLanguage, ...(draft.token ? { token: draft.token } : {}) },
     };
     api.saveSettings(body)
       .then((s) => { setSaved(s); setDraft(toDraft(s)); setDirty(false); refresh(); })
@@ -62,6 +63,13 @@ export function SettingsPage({ refresh }: StatusHook) {
     setDs(null);
     const go = dirty ? api.saveSettings({ downloadStation: dsBody() }) : Promise.resolve(saved);
     go.then(() => api.testDownloadStation()).then(setDs).catch((e: Error) => setDs({ connected: false, problem: e.message }));
+  };
+
+  // Removing a saved secret saves at once: it is its own action, not part of the draft.
+  const forget = (body: unknown) => {
+    api.saveSettings(body)
+      .then((s) => { setSaved(s); setDraft(toDraft(s)); setDirty(false); refresh(); })
+      .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
   };
 
   const test = () => {
@@ -100,9 +108,23 @@ export function SettingsPage({ refresh }: StatusHook) {
       <section className="panel form" aria-labelledby="tmdb-h">
         <h2 id="tmdb-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>TMDB</h2>
         <p className="hint">muthur looks titles up on TMDB. A personal token is free: on themoviedb.org go to Settings, then API, and copy the “API Read Access Token”.</p>
-        <span className="status small">{saved.tmdb.tokenSet ? <><Dot kind="dot-success" />A token is saved</> : <><Dot kind="dot-danger" />No token yet</>}</span>
+        <div className="actions">
+          <span className="status small">
+            {saved.tmdb.tokenFrom === 'settings' ? <><Dot kind="dot-success" />A token is saved</>
+              : saved.tmdb.tokenFrom === 'install' ? <><Dot kind="dot-success" />A token comes from the install settings (.env)</>
+                : <><Dot kind="dot-danger" />No token yet</>}
+          </span>
+          {saved.tmdb.tokenFrom === 'settings' && !dirty && (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => forget({ tmdb: { forget: true } })}>Remove the saved token</button>
+          )}
+        </div>
         <label className="field-label">{saved.tmdb.tokenSet ? 'Replace the token' : 'Token'}
           <input className="field" type="password" autoComplete="off" value={draft.token} onChange={(e) => edit({ token: e.target.value })} />
+        </label>
+        <label className="field-label">Language of plots, genres and episode titles
+          <select className="field" value={draft.tmdbLanguage} onChange={(e) => edit({ tmdbLanguage: e.target.value })}>
+            {METADATA_LANGUAGES.map((code) => <option key={code} value={code}>{metadataLanguage(code)}</option>)}
+          </select>
         </label>
       </section>
 
@@ -118,6 +140,10 @@ export function SettingsPage({ refresh }: StatusHook) {
         </div>
         <label className="field-label">{saved.kodi.passwordSet ? 'Password (saved; type to replace it)' : 'Password'}
           <input className="field" type="password" autoComplete="off" value={draft.password} onChange={(e) => edit({ password: e.target.value })} />
+        </label>
+        <label className="field-label">Port for notifications
+          <input className="field" type="text" inputMode="numeric" value={draft.tcpPort} onChange={(e) => edit({ tcpPort: e.target.value })} />
+          <span className="hint">9090 unless you changed it in Kodi. muthur hears through it when something was watched.</span>
         </label>
         <div className="actions">
           <button className="btn btn-secondary btn-sm" type="button" onClick={test} disabled={testing || !draft.host}>{testing ? 'Testing…' : 'Test the connection'}</button>
@@ -146,6 +172,9 @@ export function SettingsPage({ refresh }: StatusHook) {
         </div>
         <div className="actions">
           <button className="btn btn-secondary btn-sm" type="button" onClick={testDs} disabled={!draft.dsUrl || !draft.dsUser}>Test the connection</button>
+          {(saved.downloadStation.url || saved.downloadStation.user) && !dirty && (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => forget({ downloadStation: { forget: true } })}>Forget this account</button>
+          )}
           {ds && (ds.connected
             ? <span className="status small"><Dot kind="dot-success" />Connected · {ds.tasks} tasks</span>
             : <span className="status small"><Dot kind="dot-danger" />{ds.problem}</span>)}
@@ -154,7 +183,7 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="titles-h">
         <h2 id="titles-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Which films keep their original title?</h2>
-        <p className="hint">Plots and genres are always in English. A language that’s on keeps the original title (Aguirre, der Zorn Gottes); one that’s off gets the English title (Spirited Away).</p>
+        <p className="hint">Plots and genres come in the language chosen under TMDB. A language that’s on keeps the original title (Aguirre, der Zorn Gottes); one that’s off gets the English title (Spirited Away).</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ALL_LANGUAGES.map((code) => (
             <button key={code} type="button" className="chip" aria-pressed={draft.keepOriginal.includes(code)} onClick={() => toggle(code)}>

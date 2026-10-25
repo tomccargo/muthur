@@ -1,0 +1,17 @@
+# Weekly update proposals as pull requests; CI tests each one before it can be merged.
+version: 2
+updates:
+  - package-ecosystem: pip          # requirements.lock (the image) and pyproject.toml
+    directory: "/"
+    schedule: { interval: weekly }
+  - package-ecosystem: npm          # the web UI
+    directory: "/web"
+    schedule: { interval: weekly }
+    groups:
+      fontsource: { patterns: ["@fontsource*"] }
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule: { interval: weekly }
+  - package-ecosystem: docker       # the base images in the Dockerfile
+    directory: "/"
+    schedule: { interval: weekly }
