@@ -12,8 +12,10 @@ from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .config import load_dotenv
+from .apply import Applier
 from .inbox import Inbox
 from .jobs import Jobs
+from .journal import Journal
 from .kodi import Kodi
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
@@ -31,6 +33,7 @@ class Config:
         self.downloads = os.environ.get("MUTHUR_DOWNLOADS", "/data/torrent-output/complete")
         self.tv = os.environ.get("MUTHUR_TV", "/data/TV")
         self.film = os.environ.get("MUTHUR_FILM", "/data/Film")
+        self.quarantine = os.environ.get("MUTHUR_QUARANTINE", "/data/_muthur-quarantine")
         self.web_dist = os.environ.get("MUTHUR_WEB", str(Path(__file__).resolve().parents[2] / "web" / "dist"))
 
 
@@ -46,6 +49,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     tmdb_factory = tmdb_factory or Tmdb
     os.makedirs(cfg.config_dir, exist_ok=True)
     store = Store(os.path.join(cfg.config_dir, "muthur.db"))
+    journal = Journal(store)
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
@@ -76,7 +80,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         k = kodi()
         return {
             "version": __version__,
-            "applying": False,  # milestone 2: muthur only plans; nothing is moved yet
+            "applying": True,
             "tmdb": {"configured": tmdb() is not None},
             "kodi": k.check() if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
@@ -104,6 +108,71 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("inbox", [asdict(i) for i in items])
 
         job = jobs.start("inbox", work)
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    # -- apply, history, undo --------------------------------------------------------
+    def _rescan(client):
+        store.save_snapshot("inbox", [asdict(i) for i in Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan()])
+
+    def _tell_kodi():
+        k = kodi()
+        if k:
+            try:
+                k.call("VideoLibrary.Scan")
+            except Exception:  # Kodi being off must not fail the run; the Dashboard shows its state
+                pass
+
+    @app.post("/api/apply", status_code=202)
+    def apply(body: dict | None = None):
+        client = tmdb()
+        if client is None:
+            raise HTTPException(409, "Add your TMDB token in Settings first.")
+        items, _ = store.snapshot("inbox")
+        wanted = set((body or {}).get("ids") or [i["id"] for i in items or [] if i["status"] == "ready"])
+        if not wanted:
+            raise HTTPException(409, "Nothing is ready to apply. Check the downloads first.")
+
+        def work(job):
+            inbox = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film)
+            # Look again right before acting: the plan must match what is on disk now.
+            fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
+            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine).apply(fresh, job)
+            store.save_snapshot("last-apply", result)
+            _rescan(client)
+            if result["applied"]:
+                _tell_kodi()
+
+        job = jobs.start("apply", work)
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/history")
+    def history():
+        runs = journal.runs()
+        for r in runs:
+            ops = journal.ops(r["id"])
+            r["counts"] = {k: sum(1 for o in ops if o["op"] == k and o["status"] == "done") for k in ("move", "write", "quarantine", "mkdir")}
+        return {"runs": runs}
+
+    @app.get("/api/history/{run_id}")
+    def run_detail(run_id: int):
+        return {"ops": journal.ops(run_id)}
+
+    @app.post("/api/history/{run_id}/undo", status_code=202)
+    def undo(run_id: int, body: dict | None = None):
+        item = (body or {}).get("item")
+        client = tmdb()
+
+        def work(job):
+            store.save_snapshot("last-undo", journal.undo(run_id, item))
+            if client:
+                _rescan(client)
+            _tell_kodi()
+
+        job = jobs.start("undo", work)
         if job is None:
             raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()

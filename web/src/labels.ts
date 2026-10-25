@@ -14,7 +14,12 @@ export const STATUS: Record<ItemStatus, { label: string; dot: string }> = {
 export const JOBS: Record<string, string> = {
   inbox: 'Checking the downloads',
   memory: 'Learning the shows in your library',
+  apply: 'Moving downloads into the library',
+  undo: 'Putting a run back',
 };
+
+// Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.
+export const libraryPath = (p: string | null) => (p ?? '').replace(/^\/data\//, '');
 
 export const SIGNALS: Record<string, string> = {
   title: 'Title', year: 'Year', episodes: 'Episodes exist', runtime: 'Length', country: 'Country', popularity: 'Popularity',

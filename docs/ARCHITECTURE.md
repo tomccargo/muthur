@@ -2,7 +2,7 @@
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: 2026-10-25. Milestone 1 (read-only dry run) and milestone 2 (container, web UI, read-only inbox) are done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
+Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork) are done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
@@ -321,7 +321,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
-3. **Review + Apply + journal/undo + NFO/artwork writer**, then phase 1 on the leftover downloads.
+3. **Apply + journal/undo + NFO/artwork writer** (done; Review page still to come), then phase 1 on the leftover downloads.
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).**
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
 

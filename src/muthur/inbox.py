@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 
 from guessit import guessit
 
+from .apply import SUBTITLE_EXTS
 from .identify import identify_movie, identify_show
 from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title, episode_path, movie_path
@@ -29,6 +30,8 @@ class Planned:
     target: str | None = None  # path relative to TV/ or Film/
     library: str | None = None  # 'TV' | 'Film'
     writes: list[str] = field(default_factory=list)
+    season: int | None = None
+    episodes: list[int] = field(default_factory=list)
 
 
 @dataclass
@@ -126,7 +129,11 @@ class Inbox:
                 continue
             path = os.path.join(self.downloads, e)
             if os.path.isdir(path) and _is_category(path):
-                out += [f"{e}/{c}" for c in sorted(os.listdir(path)) if not c.startswith((".", "@", "#"))]
+                children = sorted(c for c in os.listdir(path) if not c.startswith((".", "@", "#")))
+                stems = [os.path.splitext(c)[0] for c in children if is_video(c)]
+                # A loose subtitle belongs to the video it is named after; it moves with that video.
+                out += [f"{e}/{c}" for c in children
+                        if not (c.lower().endswith(SUBTITLE_EXTS) and any(c.startswith(st) for st in stems))]
             else:
                 out.append(e)
         return out
@@ -243,7 +250,7 @@ class Inbox:
                         path = f"{folder}/{season_dir}/{path.rsplit('/', 1)[1]}"
                 else:
                     path = episode_path(shown, show_year, e.season, e.episodes, ep_title, ext)
-                p.target = path
+                p.target, p.season, p.episodes = path, e.season, list(e.episodes)
                 stem = os.path.splitext(path.rsplit("/", 1)[1])[0]
                 p.writes = [f"{stem}.nfo", f"{stem}-thumb.jpg"]
             item.files.append(p)

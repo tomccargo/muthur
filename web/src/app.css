@@ -33,7 +33,7 @@
   }
   .main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
   .tabbar {
-    position: fixed; inset: auto 0 0 0; z-index: 20; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr));
+    position: fixed; inset: auto 0 0 0; z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--border);
   }
   .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 48px; color: var(--muted); text-decoration: none; font-size: 11.5px; font-weight: 600; }

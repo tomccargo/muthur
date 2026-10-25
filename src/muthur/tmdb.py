@@ -14,6 +14,7 @@ from urllib.parse import urlencode
 import requests
 
 API = "https://api.themoviedb.org/3"
+IMAGES = "https://image.tmdb.org/t/p/"  # sizes from /configuration: posters w780, backdrops w1280, logos w500
 
 DAY = 86400
 FINISHED = {"Ended", "Canceled"}
@@ -106,6 +107,22 @@ class Tmdb:
 
     def movie(self, movie_id: int) -> dict:
         return self.get(f"/movie/{movie_id}", max_age=30 * DAY, append_to_response="external_ids,alternative_titles")
+
+    # Fuller answers for writing NFOs (cast, crew, logos); separate cache entries from the lookups above.
+    def tv_full(self, tv_id: int) -> dict:
+        return self.get(f"/tv/{tv_id}", max_age=_show_max_age, include_image_language="en,null",
+                        append_to_response="external_ids,aggregate_credits,images")
+
+    def movie_full(self, movie_id: int) -> dict:
+        return self.get(f"/movie/{movie_id}", max_age=30 * DAY, include_image_language="en,null",
+                        append_to_response="external_ids,credits,images")
+
+    def image(self, path: str | None, size: str) -> bytes | None:
+        """An image from TMDB's image server; it goes straight to disk, not into the cache."""
+        if not path:
+            return None
+        r = self.session.get(f"{IMAGES}{size}{path}", timeout=60)
+        return r.content if r.status_code == 200 and r.content else None
 
     def tv_season(self, tv_id: int, season: int) -> dict:
         return self.get(f"/tv/{tv_id}/season/{season}", max_age=_season_max_age)

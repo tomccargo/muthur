@@ -31,6 +31,14 @@ export type Settings = {
   paths: { downloads: string; tv: string; film: string };
 };
 
+export type ApplyResult = { id: string; ok: boolean; files?: number; why?: string };
+export type Run = {
+  id: number; kind: string; started: number; finished: number | null; undone: number | null;
+  summary: { applied: number; stopped: number; items: ApplyResult[] } | null;
+  counts: { move: number; write: number; quarantine: number; mkdir: number };
+};
+export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };
+
 export class ApiError extends Error {}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -57,4 +65,8 @@ export const api = {
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
   testKodi: () => call<KodiState>('/api/kodi/test', { method: 'POST' }),
+  apply: (ids?: string[]) => call<Job>('/api/apply', { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) }),
+  history: () => call<{ runs: Run[] }>('/api/history'),
+  run: (id: number) => call<{ ops: Op[] }>(`/api/history/${id}`),
+  undo: (id: number) => call<Job>(`/api/history/${id}/undo`, { method: 'POST', body: '{}' }),
 };

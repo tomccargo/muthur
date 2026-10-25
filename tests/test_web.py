@@ -31,6 +31,15 @@ class FakeTmdb:
     def movie(self, i):
         return {"id": 9, "runtime": 100, "imdb_id": "tt0000009"}
 
+    def tv_full(self, i):
+        return {**self.tv(i), "overview": "Plot.", "poster_path": "/p.jpg"}
+
+    def movie_full(self, i):
+        return {"id": 9, "title": "Some Film", "original_title": "Een Film", "release_date": "1999-05-01", "runtime": 100}
+
+    def image(self, path, size):
+        return b"img" if path else None
+
 
 def _old(path):
     t = time.time() - 3600
@@ -57,6 +66,7 @@ def client(tmp_path):
     (category / "Some.Show.S01E05.720p.HDTV").mkdir()
     cat_eps = [category / f"Some.Show.S01E0{n}.720p.HDTV" / f"some.show.s01e0{n}.mkv" for n in (4, 5)]
     cat_eps.append(category / "Some.Show.S01E06.1080p.WEB.h264-GRP.mkv")  # a loose file in the category
+    cat_eps.append(category / "Some.Show.S01E06.1080p.WEB.h264-GRP.en.srt")  # its subtitle: not an item of its own
     cat_eps.append(category / "Some Show S01E07 720p HDTV x264-GRP.exe")  # a program dressed up as an episode
     for p in cat_eps:
         p.write_bytes(b"c")
@@ -114,6 +124,7 @@ def test_inbox_plans_without_moving(client, tmp_path):
     assert items["tv-sonarr/Some.Show.S01E04.720p.HDTV"]["status"] == "ready"
     assert items["tv-sonarr/Some.Show.S01E05.720p.HDTV"]["status"] == "ready"
     assert items["tv-sonarr/Some.Show.S01E06.1080p.WEB.h264-GRP.mkv"]["status"] == "ready"
+    assert "tv-sonarr/Some.Show.S01E06.1080p.WEB.h264-GRP.en.srt" not in items
     assert items["tv-sonarr/Some Show S01E07 720p HDTV x264-GRP.exe"]["status"] == "suspicious"
     assert "tv-sonarr" not in items
     assert len(items["Some.Show.S02.COMPLETE"]["files"]) == 2
@@ -128,9 +139,36 @@ def test_inbox_plans_without_moving(client, tmp_path):
 
 def test_status_and_settings(client):
     s = client.get("/api/status").json()
-    assert s["applying"] is False and s["tmdb"]["configured"] is False and s["kodi"] is None
+    assert s["applying"] is True and s["tmdb"]["configured"] is False and s["kodi"] is None
     r = client.put("/api/settings", json={"kodi": {"host": "shield", "port": "8080", "user": "kodi", "password": "pw"}})
     body = r.json()
     assert body["kodi"] == {"host": "shield", "port": 8080, "user": "kodi", "passwordSet": True}
     assert "password" not in str(body).replace("passwordSet", "")
     assert client.put("/api/settings", json={"kodi": {"port": "abc"}}).status_code == 422
+
+
+def test_apply_then_undo_through_the_api(client, tmp_path):
+    client.put("/api/settings", json={"tmdb": {"token": "fake"}})
+    (tmp_path / "Film").mkdir()  # the library folder exists on a real NAS
+    _scan(client)
+    r = client.post("/api/apply", json={"ids": ["Some.Film.1999.1080p.BluRay.x264-GRP.mkv"]})
+    assert r.status_code == 202, r.text
+    for _ in range(100):
+        if not client.get("/api/jobs/current").json()["running"]:
+            break
+        time.sleep(0.05)
+    film = tmp_path / "Film" / "Een Film (1999)" / "Een Film (1999).mkv"
+    assert film.exists() and (film.parent / "Een Film (1999).nfo").exists()
+    assert not (tmp_path / "complete" / "Some.Film.1999.1080p.BluRay.x264-GRP.mkv").exists()
+
+    runs = client.get("/api/history").json()["runs"]
+    assert runs[0]["summary"]["applied"] == 1 and runs[0]["counts"]["move"] == 1
+
+    assert client.post(f"/api/history/{runs[0]['id']}/undo").status_code == 202
+    for _ in range(100):
+        if not client.get("/api/jobs/current").json()["running"]:
+            break
+        time.sleep(0.05)
+    assert (tmp_path / "complete" / "Some.Film.1999.1080p.BluRay.x264-GRP.mkv").exists()
+    assert not (tmp_path / "Film" / "Een Film (1999)").exists()
+    assert client.get("/api/history").json()["runs"][0]["undone"] is not None

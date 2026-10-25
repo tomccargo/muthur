@@ -6,11 +6,13 @@ import { useTheme, type ThemeChoice } from './theme';
 import { Dashboard } from './pages/Dashboard';
 import { InboxPage } from './pages/Inbox';
 import { SettingsPage } from './pages/Settings';
+import { HistoryPage } from './pages/History';
 
 // Only pages that exist are in the navigation (DESIGN.md §1.5).
 const SECTIONS = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/inbox', label: 'Inbox', icon: 'inbox' },
+  { to: '/history', label: 'History', icon: 'history' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ] as const;
 
@@ -101,6 +103,7 @@ export function App() {
       <main className="main" id="main">
         {current.to === '/' && <Dashboard {...hook} />}
         {current.to === '/inbox' && <InboxPage {...hook} />}
+        {current.to === '/history' && <HistoryPage {...hook} />}
         {current.to === '/settings' && <SettingsPage {...hook} />}
       </main>
 

@@ -3,7 +3,7 @@ import { api, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
 import { SIGNALS, STATUS, middle, size, splitId, when } from '../labels';
-import { navigate, useLocation } from '../nav';
+import { Link, navigate, useLocation } from '../nav';
 
 const FILTERS: [ItemStatus | 'all', string][] = [['all', 'All'], ['ready', 'Ready'], ['review', 'Needs you'], ['suspicious', 'Suspicious'], ['packed', 'Packed'], ['waiting', 'Still downloading'], ['ignored', 'Ignored']];
 
@@ -71,6 +71,17 @@ export function InboxPage({ status, refresh }: StatusHook) {
     api.scan().then(refresh).catch((e: Error) => setMessage(e.message));
   };
 
+  const ready = (data?.items ?? []).filter((i) => i.status === 'ready');
+  const [asking, setAsking] = useState(false);
+  const toTv = ready.filter((i) => i.kind === 'tv').reduce((n, i) => n + i.files.filter((f) => f.target).length, 0);
+  const toFilm = ready.filter((i) => i.kind === 'movie').length;
+  const newShows = new Set(ready.filter((i) => i.kind === 'tv' && !i.known).map((i) => i.files[0]?.target?.split('/')[0])).size;
+  const apply = () => {
+    setAsking(false);
+    setMessage(null);
+    api.apply().then(refresh).catch((e: Error) => setMessage(e.message));
+  };
+
   return (
     <div className="page">
       <header className="page-head">
@@ -82,12 +93,46 @@ export function InboxPage({ status, refresh }: StatusHook) {
           </p>
         </div>
         <div className="actions">
-          <button className="btn btn-primary" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check downloads</button>
+          {asking ? null : ready.length > 0 ? (
+            <>
+              <button className="btn btn-secondary btn-sm" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check again</button>
+              <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>
+                Apply {ready.length} ready {ready.length === 1 ? 'item' : 'items'}
+              </button>
+            </>
+          ) : (
+            <button className="btn btn-primary" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check downloads</button>
+          )}
         </div>
       </header>
 
+      {asking && (
+        <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--accent)' }}>
+          <h2 id="ask-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>
+            Move {ready.length} {ready.length === 1 ? 'download' : 'downloads'} into your library?
+          </h2>
+          <ul className="rows">
+            {toTv > 0 && <li><span>Episodes into TV</span><span className="num">{toTv}{newShows > 0 ? ` · ${newShows} new show folder${newShows === 1 ? '' : 's'}` : ''}</span></li>}
+            {toFilm > 0 && <li><span>Films into Film</span><span className="num">{toFilm}</span></li>}
+            <li><span>Written next to them</span><span>NFO files and artwork, only where none exist</span></li>
+            <li><span>What’s left of each download</span><span>to quarantine, if it holds no video</span></li>
+          </ul>
+          <p className="hint">Nothing is overwritten, and each download is checked against the disk again right before it moves. Everything can be put back from History.</p>
+          <div className="actions" style={{ justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" type="button" autoFocus onClick={() => setAsking(false)}>Cancel</button>
+            <button className="btn btn-primary" type="button" onClick={apply}>Move them</button>
+          </div>
+        </section>
+      )}
+
       {message && <div className="banner banner-error" role="alert">{message}</div>}
       <JobProgress job={status?.job} />
+      {status?.job && !status.job.running && status.job.name === 'apply' && !status.job.error && (
+        <div className="banner banner-note" role="status">
+          <span className="status"><Dot kind="dot-success" />Done. What moved, and the way to put it back, is in History.</span>
+          <Link to="/history">Open History</Link>
+        </div>
+      )}
 
       <div className="seg filters" role="group" aria-label="Show">
         {FILTERS.map(([k, label]) => (
