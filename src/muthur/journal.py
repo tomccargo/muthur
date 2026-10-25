@@ -102,6 +102,14 @@ class Journal:
                 (f"%.{ext.lower()}",)).fetchall()
         return [r[0] for r in rows if os.path.isfile(r[0])]
 
+    def updated(self, ext: str) -> list[str]:
+        """Existing files with this extension that muthur rewrote (and that weren't put back)."""
+        with self.store.lock:
+            rows = self.store.db.execute(
+                "SELECT DISTINCT dst FROM ops WHERE op = 'update' AND status = 'done' AND lower(dst) LIKE ? ORDER BY id",
+                (f"%.{ext.lower()}",)).fetchall()
+        return [r[0] for r in rows if os.path.isfile(r[0])]
+
     def mark_run_undone(self, run_id: int) -> None:
         self._exec("UPDATE runs SET undone = ? WHERE id = ?", (time.time(), run_id))
 

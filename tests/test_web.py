@@ -177,3 +177,18 @@ def test_apply_then_undo_through_the_api(client, tmp_path):
 def test_kodi_scan_needs_a_connection(client):
     r = client.post("/api/kodi/scan")
     assert r.status_code == 409 and "Settings" in r.json()["detail"]
+
+
+def test_quarantine_lists_and_empties_only_on_confirmation(tmp_path, monkeypatch):
+    q = tmp_path / "_q"
+    (q / "2026-10-25" / "TV" / "Show").mkdir(parents=True)
+    (q / "2026-10-25" / "TV" / "Show" / "old.mkv").write_bytes(b"x" * 10)
+    (q / "not-a-day").mkdir()
+    for k, v in {"MUTHUR_CONFIG": tmp_path / "config", "MUTHUR_DOWNLOADS": tmp_path / "dl", "MUTHUR_QUARANTINE": q}.items():
+        monkeypatch.setenv(k, str(v))
+    client = TestClient(create_app(Config(dotenv=False)))
+    assert client.get("/api/quarantine").json() == {"days": [{"day": "2026-10-25", "files": 1, "size": 10}]}
+    assert client.post("/api/quarantine/empty", json={"days": ["2026-10-25"]}).status_code == 422  # no confirmation
+    assert client.post("/api/quarantine/empty", json={"days": ["../config"], "confirm": "delete"}).status_code == 422
+    assert client.post("/api/quarantine/empty", json={"days": ["2026-10-25"], "confirm": "delete"}).json()["freed"] == 10
+    assert not (q / "2026-10-25").exists() and (q / "not-a-day").exists()

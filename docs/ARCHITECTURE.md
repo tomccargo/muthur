@@ -328,7 +328,7 @@ Target before phase 3: ≥ 98 % agreement on the phase 0 sample, zero wrong *aut
 
 Episodes are only written or scored when TMDB numbers their season the way the library does (no number beyond TMDB's count), they are single episodes, and the title in the file name doesn't belong to another TMDB episode. Everything else is listed under *Needs you*: shows muthur can't place, seasons numbered differently, damaged numbers, films without an NFO.
 
-On the real library (2026-10-25): 4,462 IMDb scores, 82 episode NFOs, 158 leftovers and 11 empty film folders can be fixed; 30 seasons, 134 episode numbers, 137 films and 19 shows need the reader. The weekly score refresh still only touches NFOs muthur wrote itself, so scores added to other tools' NFOs are not refreshed yet.
+On the real library (2026-10-25): 4,462 IMDb scores, 82 episode NFOs, 158 leftovers and 11 empty film folders can be fixed; 30 seasons, 134 episode numbers, 137 films and 19 shows need the reader. Since 0.10, shows and films without IDs are looked up on TMDB like downloads (name, year, episodes or length) and fixed only on a certain match; the weekly score refresh also updates the IMDb scores Health added to other tools' NFOs, and never removes one there. The quarantine is listed per day under Health; emptying a day deletes it for good and only happens on the reader's confirmation.
 
 ## 13. UI
 

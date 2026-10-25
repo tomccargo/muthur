@@ -98,7 +98,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'leftovers' | 'empty-films' | 'episode-nfos' | 'show-nfos' | 'imdb-scores';
+export type FixKind = 'leftovers' | 'empty-films' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'imdb-scores';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 export type Question = { path: string; why: string; season?: number };
 export type Fixes = {
@@ -163,6 +163,9 @@ export const api = {
   checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
   fixesLast: () => call<FixResult | Record<string, never>>('/api/fixes/last'),
+  quarantine: () => call<{ days: { day: string; files: number; size: number }[] }>('/api/quarantine'),
+  emptyQuarantine: (days: string[]) =>
+    call<{ emptied: string[]; freed: number }>('/api/quarantine/empty', { method: 'POST', body: JSON.stringify({ days, confirm: 'delete' }) }),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };

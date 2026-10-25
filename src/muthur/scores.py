@@ -122,7 +122,9 @@ class ScoreRefresh:
     def run(self, job=None) -> dict:
         shows, films = self.library_ids()
         info = self.imdb.refresh(shows, films, job)
-        paths = self.journal.written("nfo")
+        # NFOs muthur wrote, and other tools' NFOs that Health gave an IMDb score.
+        added = set(self.journal.updated("nfo"))
+        paths = list(dict.fromkeys(self.journal.written("nfo") + sorted(added)))
         if job:
             job.total, job.done = len(paths) + 2, 2
         run, updated = None, []
@@ -134,9 +136,13 @@ class ScoreRefresh:
                     text = f.read()
             except OSError:
                 continue
-            if MARK not in text:
+            ours = MARK in text
+            if not ours and path not in added:
                 continue  # replaced by hand or by another tool since: not muthur's any more
-            new = with_imdb(text, self._score(path, text))
+            score = self._score(path, text, ours)
+            if score is None and not ours:
+                continue  # another tool's NFO: muthur only ever updates the score it added, never removes it
+            new = with_imdb(text, score)
             if new is None:
                 continue
             if run is None:
@@ -150,7 +156,7 @@ class ScoreRefresh:
             summary["kodi"] = self.kodi.refresh_files(updated, {self.tv_root: "TV", self.film_root: "Film"})
         return summary
 
-    def _score(self, path: str, text: str) -> tuple[float, int] | None:
+    def _score(self, path: str, text: str, ours: bool = True) -> tuple[float, int] | None:
         info = read_nfo(path)
         if info.kind in ("tvshow", "movie"):
             return self.imdb.rating(info.ids.get("imdb"))
@@ -163,7 +169,7 @@ class ScoreRefresh:
         s, e = int(season.group(1)), int(episode.group(1))
         listed = (self.tmdb.tv_season(show_tmdb, s) or {}).get("episodes", [])
         at_number = next((x for x in listed if x.get("episode_number") == e), None)
-        if not at_number or str(at_number.get("id")) != info.ids.get("tmdb"):
+        if not at_number or (ours and str(at_number.get("id")) != info.ids.get("tmdb")):
             return None  # filed under another number than TMDB's (Review): IMDb's score can't be matched safely
         return self.imdb.episode(show_imdb, s, e, len(listed))
 

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import re
+import shutil
 import threading
 import time
 from dataclasses import asdict
@@ -532,6 +533,36 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def fixes_last():
         data, _ = store.snapshot("last-fixes")
         return data or {}
+
+    # -- quarantine ---------------------------------------------------------------
+    DAY = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+    @app.get("/api/quarantine")
+    def quarantine():
+        """What is in quarantine, per day it was put there."""
+        days = []
+        if os.path.isdir(cfg.quarantine):
+            for d in sorted(os.listdir(cfg.quarantine)):
+                path = os.path.join(cfg.quarantine, d)
+                if DAY.match(d) and os.path.isdir(path):
+                    files = [os.path.join(dp, n) for dp, _, names in os.walk(path) for n in names]
+                    days.append({"day": d, "files": len(files), "size": sum(os.path.getsize(f) for f in files if os.path.isfile(f))})
+        return {"days": days}
+
+    @app.post("/api/quarantine/empty")
+    def quarantine_empty(body: dict):
+        """Deletes the chosen days for good. Only ever on the reader's explicit confirmation in the page."""
+        not_busy()
+        days = [d for d in body.get("days") or [] if isinstance(d, str) and DAY.match(d)]
+        if not days or body.get("confirm") != "delete":
+            raise HTTPException(422, "Choose the days to empty, and confirm.")
+        freed = 0
+        for d in days:
+            path = os.path.join(cfg.quarantine, d)
+            if os.path.isdir(path):
+                freed += sum(os.path.getsize(os.path.join(dp, n)) for dp, _, names in os.walk(path) for n in names)
+                shutil.rmtree(path)
+        return {"emptied": days, "freed": freed}
 
     @app.get("/api/jobs/current")
     def current_job():

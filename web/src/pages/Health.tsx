@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { QuarantinePanel } from './Quarantine';
 import { api, type FixKind, type FixResult, type Fixes } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
@@ -9,10 +10,11 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'imdb-scores': { title: 'Add IMDb scores to NFOs', what: 'Adds IMDb’s score as the one Kodi shows. Other ratings in the NFO stay; a copy of each old NFO is kept. Kodi re-reads each item.' },
   'episode-nfos': { title: 'Write NFOs for episodes that have none', what: 'Writes an NFO (and a thumbnail where missing) from TMDB, with IMDb’s score. Only for seasons TMDB numbers the way your library does.' },
   'show-nfos': { title: 'Write tvshow.nfo for show folders that have none', what: 'Writes the show’s NFO, poster, fanart and logo from TMDB where they’re missing.' },
+  'film-nfos': { title: 'Write NFOs for films that have none', what: 'Writes the NFO, poster, fanart and logo from TMDB where missing, for films muthur recognises with certainty by name, year and length.' },
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db and NFOs or thumbnails of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
-const ORDER: FixKind[] = ['imdb-scores', 'episode-nfos', 'show-nfos', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'leftovers', 'empty-films'];
 const QUESTIONS: Record<string, string> = {
   seasons: 'Seasons numbered differently from TMDB',
   numbers: 'Episodes whose number can’t be trusted',
@@ -126,6 +128,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           ))}
         </section>
       )}
+      <QuarantinePanel busy={running} />
       <Footer />
     </div>
   );

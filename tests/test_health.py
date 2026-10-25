@@ -19,8 +19,29 @@ SONARR_EP = ('<?xml version="1.0" encoding="utf-8"?>\n<episodedetails>\n  <title
 
 class FakeTmdb:
     def tv(self, i):
+        if i == 8:
+            return {"id": 8, "name": "Other Show", "first_air_date": "2019-01-01", "seasons": [{"season_number": 1, "episode_count": 3}],
+                    "external_ids": {"imdb_id": "tt800"}}
         return {"id": 7, "name": "Some Show", "seasons": [{"season_number": 1, "episode_count": 3}, {"season_number": 2, "episode_count": 2}],
                 "external_ids": {"imdb_id": "tt100"}}
+
+    def search_tv(self, query, year=None):
+        return [{"id": 8, "name": "Other Show", "original_name": "Other Show", "first_air_date": "2019-01-01", "popularity": 5}]             if query.lower() == "other show" else []
+
+    def search_movie(self, query, year=None):
+        if query.lower() == "unknown film":
+            return [{"id": 50, "title": "Unknown Film", "original_title": "Unknown Film", "release_date": "2005-01-01", "popularity": 3}]
+        if query.lower() == "mystery":  # two films share the name and the file has no year: a question
+            return [{"id": 60, "title": "Mystery", "original_title": "Mystery", "release_date": "1990-01-01", "popularity": 3},
+                    {"id": 61, "title": "Mystery", "original_title": "Mystery", "release_date": "2012-01-01", "popularity": 3}]
+        return []
+
+    def movie(self, i):
+        return {"id": i, "runtime": None}
+
+    def movie_full(self, i):
+        return {"id": i, "title": "Unknown Film", "original_title": "Unknown Film", "original_language": "en", "release_date": "2005-01-01",
+                "poster_path": "/mp.jpg", "images": {"logos": []}}
 
     def tv_full(self, i):
         return {**self.tv(i), "first_air_date": "2021-01-01", "poster_path": "/p.jpg", "images": {"logos": []}}
@@ -55,7 +76,9 @@ def env(tmp_path):
     write(film / "Empty (2001)" / "poster.jpg")  # no video: a fix
     write(film / "Solaris (1972)" / "Solaris (1972).mkv")
     write(film / "Solaris (1972)" / "Solaris (1972).nfo", '<movie>\n  <title>Solaris</title>\n  <uniqueid type="imdb">tt900</uniqueid>\n</movie>\n')
-    write(film / "Unknown Film" / "Unknown.Film.mkv")  # no NFO: a question
+    write(film / "Unknown Film" / "Unknown.Film.mkv")  # no NFO, but TMDB knows it for certain: a fix
+    write(film / "Mystery" / "Mystery.mkv")  # no NFO, two films by that name: a question
+    write(tv / "Other Show (2019)" / "Season 01" / "Other Show - S01E01 - One.mkv")  # no NFOs, TMDB knows the show: fixes
     store = Store(str(tmp_path / "muthur.db"))
     files = {"title.episode.tsv.gz": EPISODES, "title.ratings.tsv.gz": RATINGS}
     imdb = Imdb(store, base="", opener=lambda url: __import__("io").BytesIO(gzip.compress(files[url].encode())))
@@ -70,20 +93,24 @@ def test_problems_sorted_into_fixes_and_questions(env):
     paths = {k: sorted(x["path"].rsplit("/", 1)[-1] for x in v) for k, v in plan["fixes"].items()}
     assert paths["leftovers"] == ["Downloaded from site.txt"]
     assert paths["empty-films"] == ["Empty (2001)"]
-    assert paths["episode-nfos"] == ["Some Show - S01E01 - One.nfo"]
+    assert paths["episode-nfos"] == ["Other Show - S01E01 - One.nfo", "Some Show - S01E01 - One.nfo"]
     assert paths["imdb-scores"] == ["Solaris (1972).nfo", "Some Show - S01E02 - Two.nfo", "tvshow.nfo"]
-    assert paths["show-nfos"] == []
+    assert paths["show-nfos"] == ["tvshow.nfo"]
+    assert paths["film-nfos"] == ["Unknown.Film.nfo"]
     m = plan["manual"]
     assert [x["season"] for x in m["seasons"]] == [2]
     assert sorted(x["path"].rsplit("/", 1)[-1] for x in m["numbers"]) == ["Some Show - S01E03 - Two.mkv", "Some.Show.S10E-1.mkv"]
-    assert [x["path"] for x in m["films"]] == ["Film/Unknown Film/Unknown.Film.mkv"]
+    assert [x["path"] for x in m["films"]] == ["Film/Mystery/Mystery.mkv"] and "isn't certain" in m["films"][0]["why"]
 
 
 def test_fixes_apply_and_can_be_put_back(env):
     tmp, health, plan = env
     before = {p: p.read_bytes() for p in tmp.rglob("*") if p.is_file() and "TV" in p.parts or "Film" in p.parts and p.is_file()}
-    result = health.apply(plan, ["leftovers", "empty-films", "episode-nfos", "imdb-scores"])
-    assert result["failed"] == [] and result["done"] == {"leftovers": 1, "empty-films": 1, "episode-nfos": 1, "imdb-scores": 3}
+    result = health.apply(plan, ["leftovers", "empty-films", "episode-nfos", "imdb-scores", "film-nfos", "show-nfos"])
+    assert result["failed"] == [] and result["done"] == {"leftovers": 1, "empty-films": 1, "episode-nfos": 2, "imdb-scores": 3,
+                                                         "film-nfos": 1, "show-nfos": 1}
+    assert ET.parse(tmp / "Film" / "Unknown Film" / "Unknown.Film.nfo").getroot().findtext("title") == "Unknown Film"
+    assert (tmp / "Film" / "Unknown Film" / "poster.jpg").exists() and (tmp / "TV" / "Other Show (2019)" / "tvshow.nfo").exists()
     s1 = tmp / "TV" / "Some Show" / "Season 01"
     nfo = ET.parse(s1 / "Some Show - S01E01 - One.nfo").getroot()
     assert nfo.findtext("title") == "One" and nfo.findtext("ratings/rating/value") == "7.1"  # IMDb's S01E01
@@ -95,3 +122,13 @@ def test_fixes_apply_and_can_be_put_back(env):
     health.journal.undo(result["run"])
     after = {p: p.read_bytes() for p in tmp.rglob("*") if p.is_file() and "TV" in p.parts or "Film" in p.parts and p.is_file()}
     assert after == before
+
+
+def test_weekly_refresh_keeps_scores_health_added(env):
+    tmp, health, plan = env
+    health.apply(plan, ["imdb-scores"])
+    nfo = tmp / "TV" / "Some Show" / "Season 01" / "Some Show - S01E02 - Two.nfo"
+    assert "7.2" in nfo.read_text(encoding="utf-8")
+    refresh = health.scores
+    summary = refresh.run()  # the same datasets: nothing changes, and the added score stays
+    assert summary["updated"] == 0 and "7.2" in nfo.read_text(encoding="utf-8")

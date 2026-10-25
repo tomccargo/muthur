@@ -15,13 +15,17 @@ import os
 import time
 
 from . import nfo_write
+from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare
 from .journal import fingerprint
+from .media import probe_duration
+from .naming import LATIN_SCRIPT, display_title
+from .parse import parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
-FIXES = ("leftovers", "empty-films", "episode-nfos", "show-nfos", "imdb-scores")
+FIXES = ("leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
 
 
 class Health:
@@ -57,9 +61,17 @@ class Health:
             fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": "junk" if JUNK.search(f) else "belongs to no video"})
         imdb_id, tmdb_id = self.scores.show_ids(folder)
         eps = show["episodes"]
+        if not tmdb_id and (not show["nfo"] or any(not e["nfo"] for e in eps)):
+            # Look it up on TMDB by the folder name, as for a download; only a certain match counts.
+            p = parse_show_folder(folder)
+            wanted = {(e["season"], n) for e in eps if e["season"] and not e["damaged"] for n in e["episodes"]}
+            m = identify_show(self.tmdb, p.title, p.year, p.country, wanted)
+            if m.status == "auto":
+                tmdb_id, imdb_id = m.best.tmdb_id, m.best.imdb_id
+            else:
+                guess = f" Its best guess, {m.best.title} ({m.best.year}), isn't certain." if m.best else ""
+                manual["shows"].append({"path": f"TV/{folder}", "why": f"muthur can't place this show on TMDB with certainty.{guess}"})
         if not tmdb_id:
-            if not show["nfo"] or any(not e["nfo"] for e in eps):
-                manual["shows"].append({"path": f"TV/{folder}", "why": "muthur doesn't know which show this is on TMDB, so it can't write NFOs for it."})
             return
         details = self.tmdb.tv(tmdb_id) or {}
         counts = {s["season_number"]: s.get("episode_count") or 0 for s in details.get("seasons", [])}
@@ -112,7 +124,17 @@ class Health:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
             return
         if not f["nfo"]:
-            manual["films"].append({"path": f"Film/{f['file']}", "why": "No NFO. Which film it is needs a check; it isn't guessed."})
+            # Look it up on TMDB by its name and length, as for a download; only a certain match counts.
+            p = self.store.parsed("movie", f["file"].split("/"))
+            m = identify_movie(self.tmdb, [p.title or f["key"], *p.alt_titles], p.year, probe_duration(self._full(f"Film/{f['file']}")))
+            if m.status == "auto":
+                stem = f"Film/{f['file'].rsplit('.', 1)[0]}"
+                fixes["film-nfos"].append({"path": stem + ".nfo", "video": f"Film/{f['file']}", "tmdb": m.best.tmdb_id,
+                                           "art": f"Film/{f['key']}/" if f["folder"] else stem + "-",
+                                           "label": f"{m.best.title} ({m.best.year})" if m.best.year else m.best.title})
+            else:
+                guess = f" Its best guess, {m.best.title} ({m.best.year}), isn't certain." if m.best else ""
+                manual["films"].append({"path": f"Film/{f['file']}", "why": f"No NFO, and muthur can't tell with certainty which film it is.{guess}"})
         elif not f["imdb"] and f["ids"].get("imdb") and f.get("nfoFile"):
             if score := self.imdb.rating(f["ids"]["imdb"]):
                 fixes["imdb-scores"].append({"path": f"Film/{f['nfoFile']}", "score": list(score),
@@ -200,6 +222,24 @@ class Health:
                 self._write(run, f"{folder}/{name}", self.tmdb.image(show[key], size))
         if logo := nfo_write.best_logo(show):
             self._write(run, f"{folder}/clearlogo.png", self.tmdb.image(logo, "w500"))
+
+    def _film_nfos(self, run, x, nfos):
+        if not os.path.isfile(self._full(x["video"])):
+            raise ValueError("the video isn't there any more")
+        movie = self.tmdb.movie_full(x["tmdb"])
+        if not movie:
+            raise ValueError("TMDB didn't return the film")
+        keep = set(self.store.get("titles.keepOriginal", sorted(LATIN_SCRIPT)))
+        title = display_title(movie.get("title") or x["label"], movie.get("original_title"), movie.get("original_language"), keep)
+        imdb_id = movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id")
+        if self._write(run, x["path"], nfo_write.movie_nfo(movie, title, self.imdb.rating(imdb_id))):
+            nfos.append(x["path"])
+        # Artwork: 'poster.jpg' in the film's own folder, '<name>-poster.jpg' next to a loose file.
+        for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
+            if movie.get(key):
+                self._write(run, x["art"] + name, self.tmdb.image(movie[key], size))
+        if logo := nfo_write.best_logo(movie):
+            self._write(run, x["art"] + "clearlogo.png", self.tmdb.image(logo, "w500"))
 
     def _imdb_scores(self, run, x, nfos):
         full = self._full(x["path"])
