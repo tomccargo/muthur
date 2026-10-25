@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, MotherConsole } from '../components';
+import { Dot, Footer, JobProgress } from '../components';
 import { SIGNALS, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
@@ -71,9 +71,7 @@ function IdentityQuestion({ item, busy, onChosen }: { item: Item; busy: boolean;
 
   return (
     <section className="panel wide question" aria-labelledby="q-h">
-      <MotherConsole lights={36} lit={Math.min(36, cards.length * 6)} label="Question">
-        <h2 id="q-h">{kind === 'tv' ? 'Which show is this?' : 'Which film is this?'}</h2>
-      </MotherConsole>
+      <h2 id="q-h">{kind === 'tv' ? 'Which show is this?' : 'Which film is this?'}</h2>
       {found ? (
         <p className="hint">{found.label} · <button type="button" className="btn-link" onClick={() => { setFound(null); setPicked(null); }}>Back to muthur’s suggestions</button></p>
       ) : cards.length > 0 ? <p className="hint">muthur’s best guesses, with how well each one fits the name.</p> : null}
@@ -172,9 +170,7 @@ function EpisodeQuestion({ item, busy, onChosen, onWrongShow }: { item: Item; bu
 
   return (
     <section className="panel wide question" aria-labelledby="q-h">
-      <MotherConsole lights={36} lit={Math.min(36, open.length * 6)} label="Question">
-        <h2 id="q-h">{open.length === 1 ? 'Which episode is this?' : `Which episodes are these? (${open.length})`}</h2>
-      </MotherConsole>
+      <h2 id="q-h">{open.length === 1 ? 'Which episode is this?' : `Which episodes are these? (${open.length})`}</h2>
       <p className="hint">
         {item.title}{item.year ? ` (${item.year})` : ''} · <button type="button" className="btn-link" onClick={onWrongShow}>Wrong show?</button>
       </p>

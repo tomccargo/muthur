@@ -6,8 +6,6 @@ What muthur does not take from either:
 - Playlist Parser's playful motion (confetti, disco ball, cursor trail, shader backdrops, count-up numbers, flying covers). See §6 for the motion that is allowed.
 - CloudLabs' flat GitHub look (3px corners, no pill buttons). Where the two clash, Playlist Parser's look wins.
 
-On top of that sits the **Nostromo theme** (§11): the materials of the ship in *Alien* (1979), keys, bulbs, light grilles and Mother's padded room, applied to the same pages and the same words.
-
 The UI is built in **React + TypeScript** (Vite). Playlist Parser is GPL-3.0 and muthur is MIT, so only its *design values* (colours, sizes, fonts, layout) are reused here. Its code is not copied: every muthur component is written for muthur.
 
 Section numbers are referenced from code comments; do not renumber.
@@ -144,7 +142,7 @@ No hand-rolled `rgba()` status colours.
 ### Shape
 
 - `--radius: 12px` for panels, tiles and dialogs; `--radius-sm: 8px` for banners, inputs, posters and menu rows.
-- Buttons are **keys** (§11.2): `--radius-sm` (8px). Counters and segmented controls stay **pills** (`999px`).
+- Buttons, counters and segmented controls are **pills** (`999px`).
 - `--shadow` only on menus and dialogs, never on panels.
 - Page: `max-width: 1180px`, padding `28px 32px 64px` (desktop), `20px 16px 48px` (phone).
 
@@ -154,8 +152,8 @@ No hand-rolled `rgba()` status colours.
 
 | Class | What it is |
 | :--- | :--- |
-| `.btn-primary` | The single solid action of the view (§1.2): the red key (§11.2) |
-| `.btn-secondary` | Standard and toolbar actions: the grey key (§11.2) |
+| `.btn-primary` | The single solid action of the view (§1.2) |
+| `.btn-secondary` | Standard and toolbar actions: outlined with `--border-strong` |
 | `.btn-ghost` | No fill; *← Library*, icon buttons |
 | `.btn-link` | Looks like a link, behaves as a button |
 | `.btn-danger-outline` / `.btn-danger` | Destructive: outline on the page, solid only inside its confirmation (§7.3) |
@@ -168,8 +166,6 @@ No other variants. A disabled button that has a standing reason is `aria-disable
 ---
 
 ## 4. Status dots (the complete set)
-
-Each dot is drawn as a lit bulb (§11.3); the meanings below don't change.
 
 | Dot | muthur meaning |
 | :--- | :--- |
@@ -235,7 +231,6 @@ Inside a show, a movie or a duplicate group: **← Library** (or **← Duplicate
 - Never `window.confirm`, `alert` or `prompt`.
 - The title is the question (*Move 2 copies of Dune (2021) to quarantine?*); the button is the action (*Move to quarantine*), never *OK* or *Yes*.
 - A destructive answer is the solid `.btn-danger`, and **Cancel has the focus**.
-- The confirmation is the ship's danger panel (§11.5): a dark plate, a red border, a caution stripe on top and the question in red capitals.
 - The body says what will happen in this case, computed: which files, how big, and what stays (*The 10.5 GB WEB-DL copy stays and is renamed to …*).
 
 ### 7.4 Dialogs
@@ -282,40 +277,3 @@ Planned with the web UI (architecture, milestone 2 onwards), modelled on the Clo
 - any animation running with `prefers-reduced-motion: reduce`
 
 Built (2026-10-25): `tests/test_ui.py` runs these checks with Playwright on every push, against sample data that includes a long path without hyphens and long release names. It is skipped locally when Playwright or the built UI is missing. Its first run caught the Inbox and Settings showing container paths that didn't wrap on a phone.
-
----
-
-## 11. The Nostromo's materials
-
-muthur is named after MU/TH/UR 6000, the Nostromo's computer in *Alien* (1979). The theme takes the **materials** of that ship, not its words: every page, section name, label and sentence stays as §1–§10 define them. The references were the film's corridor terminals (black padded panels, grey and orange-red keys, rows of blue and red bulbs, lit grilles, a red lamp), Mother's room (a white padded room lined with thousands of small lights, a green phosphor screen) and the self-destruct panel (red capitals, yellow caution). Typeset in the Future's write-up of the film's screens and prop photos were looked at as reference only. **No film still, prop photo, logo or font from the film ships with muthur**: every material below is drawn in CSS, and both fonts are SIL OFL 1.1.
-
-### 11.1 Two places
-
-- **The corridor** is everywhere: the dark (or light) surfaces of §2 with a soft padded edge (`--pad-shadow`) on panels and tiles, keys for buttons, bulbs for status, a light grille and a red lamp in the rail.
-- **Mother's room** appears only where muthur itself speaks: the Dashboard's summary and the question on Review. It is a cream padded panel (`--mother-room`) with banks of small lights on both sides and a phosphor screen between them (`.mother`, `MotherConsole`). A bank's lit lights count something real (the inbox, the choices left); while a job runs, every third lit light breathes. On a phone the banks fold into one row above the screen.
-
-### 11.2 Keys
-
-- `.btn-primary` is a red key (`--key-red`), `.btn-secondary` a grey key (`--key-grey`): solid, 8px corners, a lighter top edge and a darker bottom edge (`--key-hi`, `--key-lo`), the label in **Barlow Condensed** 600 capitals. A key moves 1px down while pressed.
-- The words on a key are the words of §3's buttons in capitals by CSS (`text-transform`), never rewritten in the source.
-
-### 11.3 Bulbs and the bulb strip
-
-- A status dot is a small bulb: a radial gradient from `--bulb-*-hi` to its colour, with a glow in that colour. An off bulb is `--bulb-off`.
-- Job progress is a **bulb strip** (`.bulb-strip`): 24 bulbs, lit blue in proportion, still a `role="progressbar"` with its value.
-
-### 11.4 Type
-
-- **Name plates** (eyebrows, keys, phone tab labels, counters): `Barlow Condensed` 500/600 (`--font-plate`).
-- **Mother's screen**: `VT323` (`--font-crt`) in `--crt-text` on `--crt-bg`, capitals, wide letter-spacing, a phosphor glow and faint scanlines. Only text inside `.crt` uses it.
-- Body text and headings stay Figtree and Bricolage Grotesque (§2). Fonts are self-hosted through `@fontsource/*`.
-
-### 11.5 The danger panel
-
-A confirmation group (`.banner[role='group']`, §7.3) is the self-destruct panel: a dark plate (`--danger-plate`), a red border (`--danger-red`), a yellow and dark caution stripe along the top (`--caution`), and its question in red capitals. It keeps its words and Cancel keeps the focus.
-
-### 11.6 Rules
-
-- Material tokens (`--key-*`, `--bulb-*`, `--mother-*`, `--crt-*`, `--danger-plate`, `--caution`) are the same in both themes: a key or a bulb is a physical object, not a surface.
-- Motion follows §6: breathing lights and key presses stop under `prefers-reduced-motion: reduce`.
-- Nothing here changes a word, a section or a layout. If a material makes text harder to read, the material gives way.

@@ -3,15 +3,15 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0f1011;
-  --surface: #1b1c1f;
-  --surface-muted: #25272b;
-  --surface-raised: #212327;
-  --border: #2e3135;
-  --border-strong: #43474d;
-  --text: #ebe8e1;
-  --muted: #a3a097;
-  --faint: #6e6c66;
+  --bg: #0e1210;
+  --surface: #161b18;
+  --surface-muted: #1f2622;
+  --surface-raised: #1b211e;
+  --border: #2b342f;
+  --border-strong: #3b463f;
+  --text: #ecf1ed;
+  --muted: #a1ada5;
+  --faint: #6f7b74;
   --accent: #f0a95b;
   --accent-hover: #f6bd7e;
   --accent-ink: #2a1606;
@@ -25,10 +25,9 @@
   --danger-bg: #3b1c18;
   --danger-text: #ffb3a7;
   --mark: #f0a95b;
-  --track: #2a2c30;
-  --poster-bg: #0a0a0b;
+  --track: #262e2a;
+  --poster-bg: #0a0c0b;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.28);
-  --pad-shadow: inset 0 1px 0 rgb(255 255 255 / 0.06), inset 0 -2px 0 rgb(0 0 0 / 0.55), 0 8px 18px -12px rgb(0 0 0 / 0.9);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -36,46 +35,6 @@
   --font-body: 'Figtree Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
   --font-display: 'Bricolage Grotesque Variable', 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
-
-  /* The Nostromo's materials (DESIGN.md §11): physical objects, the same in both themes. */
-  --key-red: #d9502f;
-  --key-red-hover: #e5613f;
-  --key-red-edge: #7d2915;
-  --key-red-ink: #ffffff;
-  --key-grey: #bdbcb6;
-  --key-grey-hover: #cbcac4;
-  --key-grey-edge: #6f6e69;
-  --key-grey-ink: #1c1d20;
-  --key-hi: rgb(255 255 255 / 0.32);
-  --key-lo: rgb(0 0 0 / 0.22);
-  --bulb-off: #2b2e33;
-  --bulb-green: #2fc56d;
-  --bulb-green-hi: #d9ffe6;
-  --bulb-amber: #f0b23a;
-  --bulb-amber-hi: #fff1c9;
-  --bulb-red: #e8402c;
-  --bulb-red-hi: #ffd0c7;
-  --bulb-blue: #3a4fd6;
-  --bulb-blue-hi: #c7d0ff;
-  --bulb-lo: rgb(0 0 0 / 0.55);
-  --lamp-red: #ff3b2f;
-  --grille-light: rgb(255 255 255 / 0.85);
-  --grille-bg: #0b0b0c;
-  --mother-room: #efe8da;
-  --mother-ink: #2b2721;
-  --mother-shade: rgb(140 120 90 / 0.22);
-  --mother-light: #fffaf0;
-  --mother-glow: rgb(255 236 190 / 0.9);
-  --mother-off: #d4cab6;
-  --crt-bg: #031008;
-  --crt-edge: #0b2416;
-  --crt-text: #8dfcae;
-  --crt-glow: rgb(80 255 150 / 0.5);
-  --danger-plate: #140806;
-  --danger-red: #ff4b3a;
-  --caution: #f2c230;
-  --font-plate: 'Barlow Condensed', 'Figtree Variable', ui-sans-serif, sans-serif;
-  --font-crt: 'VT323', ui-monospace, monospace;
 }
 
 @media (prefers-color-scheme: light) {
@@ -105,7 +64,6 @@
     --track: #c9d1cc;
     --poster-bg: #1a1f1c;
     --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
-    --pad-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -2px 0 rgb(16 24 40 / 0.08), 0 6px 14px -10px rgb(16 24 40 / 0.25);
   }
 }
 
@@ -135,7 +93,6 @@
   --track: #c9d1cc;
   --poster-bg: #1a1f1c;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
-  --pad-shadow: inset 0 1px 0 rgb(255 255 255 / 0.9), inset 0 -2px 0 rgb(16 24 40 / 0.08), 0 6px 14px -10px rgb(16 24 40 / 0.25);
 }
 
 /* ---- Base ---------------------------------------------------------------- */

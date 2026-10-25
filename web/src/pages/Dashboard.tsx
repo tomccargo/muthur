@@ -2,8 +2,8 @@ import { useState } from 'react';
 import { WatchedPanel } from './Watched';
 import { api, type PathState } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, MotherConsole } from '../components';
-import { JOBS, when } from '../labels';
+import { Dot, Footer, JobProgress } from '../components';
+import { when } from '../labels';
 import { Link } from '../nav';
 
 function pathLine(label: string, p: PathState | undefined, needWrite: boolean) {
@@ -52,14 +52,6 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         </div>
       </header>
 
-      {status && (
-        <MotherConsole lights={48} lit={Math.min(48, Object.values(counts).reduce((a, b) => a + (b ?? 0), 0))} busy={busy}>
-          {job?.running && <p>{JOBS[job.name] ?? job.name} · {job.total ? `${job.done} of ${job.total}` : 'starting'}</p>}
-          <p>{counts.ready ?? 0} ready to file · {counts.review ?? 0} need you</p>
-          <p>{k == null ? 'Kodi not set up' : k.connected ? `Kodi ${k.version} answers` : 'Kodi doesn’t answer'}</p>
-          {status.watched.last && <p>Watched status backed up {when(status.watched.last.at)}</p>}
-        </MotherConsole>
-      )}
       {error && <div className="banner banner-error" role="alert">muthur isn’t answering: {error}</div>}
       {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
       {status && !status.tmdb.configured && (
