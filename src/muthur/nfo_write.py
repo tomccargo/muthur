@@ -76,13 +76,16 @@ def tvshow_nfo(show: dict, title: str) -> bytes:
     return _serialise(root, f"TMDB tv/{show['id']}")
 
 
-def episode_nfo(show_title: str, season: int, episode: dict, show_id: int) -> bytes:
-    """episode: one entry of TMDB /tv/{id}/season/{n} 'episodes'."""
+def episode_nfo(show_title: str, season: int, episode: dict, show_id: int, number: int | None = None,
+                title: str | None = None) -> bytes:
+    """episode: one entry of TMDB /tv/{id}/season/{n} 'episodes'.
+    number, title: the file's own episode number and title when the library numbers the show
+    differently from TMDB (the second half of a split episode is 'Goodbye Toby (2)', S04E19)."""
     root = ET.Element("episodedetails")
-    _add(root, "title", episode.get("name"))
+    _add(root, "title", title or episode.get("name"))
     _add(root, "showtitle", show_title)
     _add(root, "season", season)
-    _add(root, "episode", episode.get("episode_number"))
+    _add(root, "episode", number if number is not None else episode.get("episode_number"))
     _add(root, "aired", episode.get("air_date"))
     _add(root, "plot", episode.get("overview"))
     _add(root, "runtime", episode.get("runtime"))

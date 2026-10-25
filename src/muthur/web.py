@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 import time
 from dataclasses import asdict
 from pathlib import Path
@@ -35,6 +36,39 @@ class Config:
         self.film = os.environ.get("MUTHUR_FILM", "/data/Film")
         self.quarantine = os.environ.get("MUTHUR_QUARANTINE", "/data/_muthur-quarantine")
         self.web_dist = os.environ.get("MUTHUR_WEB", str(Path(__file__).resolve().parents[2] / "web" / "dist"))
+
+
+TMDB_LINK = re.compile(r"themoviedb\.org/(tv|movie)/(\d+)")
+IMDB_ID = re.compile(r"\b(tt\d{6,10})\b")
+
+
+def _year(date: str | None) -> int | None:
+    return int(date[:4]) if date and date[:4].isdigit() else None
+
+
+def _card(kind: str, r: dict) -> dict:
+    """A TMDB search result or details as one card on the Review page."""
+    return {"kind": kind, "tmdbId": r["id"], "title": r.get("name") or r.get("title") or "",
+            "originalTitle": r.get("original_name") or r.get("original_title") or "",
+            "year": _year(r.get("first_air_date") or r.get("release_date")),
+            "overview": r.get("overview") or "", "poster": r.get("poster_path")}
+
+
+def _choice(body: dict) -> tuple[str, dict]:
+    """The item id and a cleaned-up choice from a Review request."""
+    item_id = str(body.get("id") or "")
+    c = body.get("choice") or {}
+    if c.get("kind") not in ("tv", "movie") or not str(c.get("tmdbId", "")).isdigit():
+        raise HTTPException(422, "Choose a show or a film first.")
+    episodes = {}
+    for source, m in (c.get("episodes") or {}).items():
+        try:
+            episodes[str(source)] = {"season": int(m["season"]), "episode": int(m["episode"]),
+                                     "part": int(m["part"]) if m.get("part") else None,
+                                     "number": "tmdb" if m.get("number") == "tmdb" else "file"}
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(422, "An episode choice is incomplete: pick the episode it is.")
+    return item_id, {"kind": c["kind"], "tmdbId": int(c["tmdbId"]), "episodes": episodes}
 
 
 def _path_state(path: str) -> dict:
@@ -195,6 +229,112 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.get("/api/jobs/current")
     def current_job():
         return jobs.current.as_dict() if jobs.current else None
+
+    # -- review -----------------------------------------------------------------
+    def need_tmdb() -> Tmdb:
+        client = tmdb()
+        if client is None:
+            raise HTTPException(409, "Add your TMDB token in Settings first.")
+        return client
+
+    def inbox_items(item_id: str) -> list[dict]:
+        items, _ = store.snapshot("inbox")
+        if not any(i["id"] == item_id for i in items or []):
+            raise HTTPException(404, "That download isn't in the inbox any more. Check the downloads again.")
+        return items
+
+    def examine(client, item_id: str, choice: dict | None = None) -> dict:
+        try:
+            return asdict(Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).examine(item_id, choice))
+        except OSError as e:
+            raise HTTPException(409, f"Couldn't read the download: {e.strerror or e}")
+
+    def not_busy():
+        if jobs.current and jobs.current.running:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+
+    def replace(items: list[dict], new: dict) -> None:
+        store.save_snapshot("inbox", [new if i["id"] == new["id"] else i for i in items])
+
+    @app.get("/api/tmdb/search")
+    def tmdb_search(kind: str, q: str, year: int | None = None):
+        client = need_tmdb()
+        if kind not in ("tv", "movie"):
+            raise HTTPException(422, "Search for a show or a film.")
+        if not q.strip():
+            raise HTTPException(422, "Type a title to search for.")
+        found = client.search_tv(q.strip(), year) if kind == "tv" else client.search_movie(q.strip(), year)
+        return {"results": [_card(kind, r) for r in found[:12]]}
+
+    @app.post("/api/tmdb/resolve")
+    def tmdb_resolve(body: dict):
+        """A pasted themoviedb.org or imdb.com link (or a bare IMDb tt-number) as a card."""
+        client = need_tmdb()
+        link = str(body.get("link") or "").strip()
+        if m := TMDB_LINK.search(link):
+            kind, tmdb_id = m.group(1), int(m.group(2))
+            d = client.tv(tmdb_id) if kind == "tv" else client.movie(tmdb_id)
+            if not (d or {}).get("id"):
+                raise HTTPException(404, "TMDB has no title at that link.")
+            return _card(kind, d)
+        if m := IMDB_ID.search(link):
+            found = client.find(m.group(1), "imdb_id") or {}
+            if found.get("tv_results"):
+                return _card("tv", found["tv_results"][0])
+            if found.get("movie_results"):
+                return _card("movie", found["movie_results"][0])
+            if found.get("tv_episode_results"):  # a link to one episode: the show it belongs to
+                return _card("tv", client.tv(found["tv_episode_results"][0]["show_id"]))
+            raise HTTPException(404, "TMDB doesn't know that IMDb title.")
+        raise HTTPException(422, "Paste a link to a title on themoviedb.org or imdb.com.")
+
+    @app.get("/api/tmdb/tv/{tv_id}/season/{season}")
+    def tmdb_season(tv_id: int, season: int):
+        client = need_tmdb()
+        d = client.tv(tv_id) or {}
+        data = client.tv_season(tv_id, season) or {}
+        return {
+            "seasons": [{"season": x["season_number"], "name": x.get("name"), "episodes": x.get("episode_count") or 0}
+                        for x in d.get("seasons", [])],
+            "episodes": [{"episode": e["episode_number"], "title": e.get("name"), "aired": e.get("air_date"),
+                          "runtime": e.get("runtime"), "overview": e.get("overview"), "still": e.get("still_path")}
+                         for e in data.get("episodes", [])],
+        }
+
+    @app.post("/api/review/preview")
+    def review_preview(body: dict):
+        """What a choice would do, without keeping it."""
+        client = need_tmdb()
+        item_id, choice = _choice(body)
+        inbox_items(item_id)
+        return examine(client, item_id, choice)
+
+    @app.post("/api/review/choose")
+    def review_choose(body: dict):
+        client = need_tmdb()
+        not_busy()
+        item_id, choice = _choice(body)
+        items = inbox_items(item_id)
+        new = examine(client, item_id, choice)
+        store.choose(item_id, choice)
+        title = new["parsed"].get("title")
+        if body.get("remember") and choice["kind"] == "tv" and title:
+            # 'Remember for this show': the next download with this name goes straight to this show.
+            store.remember("tv", title, choice["tmdbId"], new["year"], new["title"], store.folder_for("tv", choice["tmdbId"]), "confirmed")
+        replace(items, new)
+        return new
+
+    @app.post("/api/review/forget")
+    def review_forget(body: dict):
+        """Drop a choice: the item is planned again as if it had never been reviewed."""
+        client = need_tmdb()
+        not_busy()
+        item_id = str(body.get("id") or "")
+        items = inbox_items(item_id)
+        store.forget_choice(item_id)
+        new = examine(client, item_id)
+        replace(items, new)
+        return new
 
     # -- settings ---------------------------------------------------------------
     @app.get("/api/settings")

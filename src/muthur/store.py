@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS aliases (
 );
 CREATE TABLE IF NOT EXISTS parse_cache (key TEXT PRIMARY KEY, body TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS snapshots (name TEXT PRIMARY KEY, body TEXT NOT NULL, saved REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS choices (    -- what the reader chose in Review, per download
+    item TEXT PRIMARY KEY, body TEXT NOT NULL, saved REAL NOT NULL
+);
 """
 
 
@@ -90,6 +93,13 @@ class Store:
                 return list(same_year.values())
         return list(found.values())
 
+    def folder_for(self, kind: str, tmdb_id: int) -> str | None:
+        """The library folder a remembered show lives in, if muthur knows one."""
+        with self.lock:
+            row = self.db.execute("SELECT folder FROM aliases WHERE kind = ? AND tmdb_id = ? AND folder IS NOT NULL "
+                                  "ORDER BY source = 'library' DESC LIMIT 1", (kind, tmdb_id)).fetchone()
+        return row["folder"] if row else None
+
     def alias_count(self, kind: str | None = None) -> int:
         with self.lock:
             q = "SELECT COUNT(DISTINCT tmdb_id) FROM aliases" + (" WHERE kind = ?" if kind else "")
@@ -111,6 +121,30 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO parse_cache VALUES (?, ?)", (key, json.dumps(asdict(result), default=str)))
             self.db.commit()
         return result
+
+    # -- choices made in Review ------------------------------------------------
+    def choice(self, item: str) -> dict | None:
+        with self.lock:
+            row = self.db.execute("SELECT body FROM choices WHERE item = ?", (item,)).fetchone()
+        return json.loads(row["body"]) if row else None
+
+    def choose(self, item: str, body: dict) -> None:
+        with self.lock:
+            self.db.execute("INSERT OR REPLACE INTO choices VALUES (?, ?, ?)", (item, json.dumps(body), time.time()))
+            self.db.commit()
+
+    def forget_choice(self, item: str) -> None:
+        with self.lock:
+            self.db.execute("DELETE FROM choices WHERE item = ?", (item,))
+            self.db.commit()
+
+    def prune_choices(self, keep: set[str]) -> int:
+        """Drop choices for downloads that are gone (applied, or removed by hand)."""
+        with self.lock:
+            stale = [r["item"] for r in self.db.execute("SELECT item FROM choices").fetchall() if r["item"] not in keep]
+            self.db.executemany("DELETE FROM choices WHERE item = ?", [(s,) for s in stale])
+            self.db.commit()
+        return len(stale)
 
     # -- snapshots (last scan results etc.) ----------------------------------
     def save_snapshot(self, name: str, body) -> None:

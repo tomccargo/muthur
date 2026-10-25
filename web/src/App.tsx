@@ -7,11 +7,13 @@ import { Dashboard } from './pages/Dashboard';
 import { InboxPage } from './pages/Inbox';
 import { SettingsPage } from './pages/Settings';
 import { HistoryPage } from './pages/History';
+import { ReviewPage } from './pages/Review';
 
 // Only pages that exist are in the navigation (DESIGN.md §1.5).
 const SECTIONS = [
   { to: '/', label: 'Dashboard', icon: 'dashboard' },
   { to: '/inbox', label: 'Inbox', icon: 'inbox' },
+  { to: '/review', label: 'Review', icon: 'review' },
   { to: '/history', label: 'History', icon: 'history' },
   { to: '/settings', label: 'Settings', icon: 'settings' },
 ] as const;
@@ -68,7 +70,7 @@ export function App() {
   const { path } = useLocation();
   const hook = useStatus();
   const counts = hook.status?.inbox.counts ?? {};
-  const waiting = (counts.ready ?? 0) + (counts.review ?? 0);
+  const counter: Record<string, number> = { '/inbox': counts.ready ?? 0, '/review': counts.review ?? 0 };
   const current = SECTIONS.find((s) => s.to === path) ?? SECTIONS[0];
 
   useEffect(() => {
@@ -86,7 +88,7 @@ export function App() {
           {SECTIONS.map((s) => (
             <Link key={s.to} to={s.to} className="rail-link" aria-current={current.to === s.to ? 'page' : undefined}>
               <Icon name={s.icon} />{s.label}
-              {s.to === '/inbox' && waiting > 0 && <span className="counter">{waiting}</span>}
+              {(counter[s.to] ?? 0) > 0 && <span className="counter">{counter[s.to]}</span>}
             </Link>
           ))}
         </div>
@@ -103,6 +105,7 @@ export function App() {
       <main className="main" id="main">
         {current.to === '/' && <Dashboard {...hook} />}
         {current.to === '/inbox' && <InboxPage {...hook} />}
+        {current.to === '/review' && <ReviewPage {...hook} />}
         {current.to === '/history' && <HistoryPage {...hook} />}
         {current.to === '/settings' && <SettingsPage {...hook} />}
       </main>

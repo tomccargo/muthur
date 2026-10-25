@@ -42,9 +42,9 @@ function Detail({ item }: { item: Item }) {
               </li>
             ))}
           </ul>
-          <p className="hint" style={{ marginTop: 8 }}>Choosing the right one comes with the Review page, in the next version.</p>
         </div>
       )}
+      {item.status === 'review' && <Link to="/review" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>Choose in Review</Link>}
       <span className="small muted">{size(item.size)}</span>
     </aside>
   );

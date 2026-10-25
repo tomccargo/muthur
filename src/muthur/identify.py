@@ -35,6 +35,8 @@ class Candidate:
     tvdb_id: str | None = None
     language: str | None = None  # original language (ISO 639-1)
     titles: list[str] = field(default_factory=list)
+    poster: str | None = None  # TMDB image path, for the Review page
+    overview: str | None = None
 
 
 @dataclass
@@ -154,6 +156,7 @@ def identify_show(source, title: str, year: int | None = None, country: str | No
         ext = d.get("external_ids") or {}
         c.imdb_id, c.tvdb_id = ext.get("imdb_id"), (str(ext["tvdb_id"]) if ext.get("tvdb_id") else None)
         c.language = d.get("original_language") or r.get("original_language")
+        c.poster, c.overview = d.get("poster_path") or r.get("poster_path"), d.get("overview") or r.get("overview")
         alternative = _alt_titles(d, "results")
         c.titles = [c.title, c.original_title, *alternative]
         c.signals["title"] = _title_signal(title, [c.title, c.original_title], alternative)
@@ -188,6 +191,7 @@ def identify_movie(source, title: str | list[str], year: int | None = None, dura
     for i, r in enumerate(results[:MAX_CANDIDATES * len(queries)]):
         c = Candidate(r["id"], r.get("title", ""), r.get("original_title", ""), _year(r.get("release_date")))
         c.language = r.get("original_language")
+        c.poster, c.overview = r.get("poster_path"), r.get("overview")
         main = [c.title, c.original_title]
         alternative, runtime = [], None
         if i < 3 or max(best_similarity(q, main) for q in queries) >= 0.9:

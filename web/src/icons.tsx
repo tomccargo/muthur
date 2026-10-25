@@ -2,6 +2,7 @@
 const PATHS: Record<string, string[]> = {
   dashboard: ['M3 3h7v7H3z', 'M14 3h7v7h-7z', 'M3 14h7v7H3z', 'M14 14h7v7h-7z'],
   inbox: ['M3 13h5l2 3h4l2-3h5', 'M5.5 5h13L21 13v6H3v-6z'],
+  review: ['M9 11l3 3 8-8', 'M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9'],
   history: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3 2'],
   settings: ['M4 6h9', 'M17 6h3', 'M15 4v4', 'M4 12h3', 'M11 12h9', 'M9 10v4', 'M4 18h11', 'M19 18h1', 'M17 16v4'],
   monitor: ['M3 4h18v12H3z', 'M8 20h8', 'M12 16v4'],

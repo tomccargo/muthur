@@ -18,6 +18,13 @@ from .journal import Journal, fingerprint
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
 
 
+def _tmdb_numbers(f: dict) -> tuple[int, int]:
+    """The TMDB season and episode a file's NFO describes; its own numbers unless Review mapped it."""
+    if f.get("tmdb_season") is not None and f.get("tmdb_episode") is not None:
+        return f["tmdb_season"], f["tmdb_episode"]
+    return f["season"], f["episodes"][0]
+
+
 class Stop(Exception):
     """A reason not to apply an item, as a sentence for the reader."""
 
@@ -75,7 +82,7 @@ class Applier:
             moves.append((f, src, dst))
         if item["kind"] == "tv":
             show = self.tmdb.tv_full(item["tmdb_id"])
-            seasons = {s: self.tmdb.tv_season(item["tmdb_id"], s) for s in {f["season"] for f, _, _ in moves}}
+            seasons = {s: self.tmdb.tv_season(item["tmdb_id"], s) for s in {_tmdb_numbers(f)[0] for f, _, _ in moves}}
             if not show:
                 raise Stop("TMDB didn't return the show's details. Try again later.")
         else:
@@ -92,9 +99,11 @@ class Applier:
             count += self._subtitles(run, item["id"], src, dst)
             stem = os.path.splitext(dst)[0]
             if item["kind"] == "tv":
-                ep = next((e for e in seasons[f["season"]].get("episodes", []) if e.get("episode_number") == f["episodes"][0]), None)
+                ts, te = _tmdb_numbers(f)
+                ep = next((e for e in seasons[ts].get("episodes", []) if e.get("episode_number") == te), None)
                 if ep:
-                    count += self._write(run, item["id"], stem + ".nfo", nfo_write.episode_nfo(item["title"], f["season"], ep, item["tmdb_id"]))
+                    nfo = nfo_write.episode_nfo(item["title"], f["season"], ep, item["tmdb_id"], number=f["episodes"][0], title=f.get("title"))
+                    count += self._write(run, item["id"], stem + ".nfo", nfo)
                     count += self._image(run, item["id"], stem + "-thumb.jpg", ep.get("still_path"), "original")
             else:
                 count += self._write(run, item["id"], stem + ".nfo", nfo_write.movie_nfo(movie, item["title"]))

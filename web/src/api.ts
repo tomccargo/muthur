@@ -16,11 +16,31 @@ export type Status = {
 };
 
 export type ItemStatus = 'ready' | 'review' | 'ignored' | 'waiting' | 'suspicious' | 'packed' | 'error';
-export type Planned = { source: string; size: number; target: string | null; library: 'TV' | 'Film' | null; writes: string[] };
-export type Candidate = { tmdbId: number; title: string; originalTitle: string; year: number | null; score: number; signals: Record<string, number> };
+export type Problem = 'missing' | 'unnumbered' | 'other-episode' | 'exists';
+export type Suggestion = { season: number; episode: number; title: string; part: number | null };
+export type Planned = {
+  source: string; size: number; target: string | null; library: 'TV' | 'Film' | null; writes: string[];
+  season?: number | null; episodes?: number[]; tmdb_season?: number | null; tmdb_episode?: number | null; title?: string | null;
+  problem?: Problem | null; suggestion?: Suggestion | null;
+  parsed?: { season: number | null; episodes: number[]; episodeTitle: string | null; part: number | null; damaged: boolean };
+};
+export type Candidate = {
+  tmdbId: number; title: string; originalTitle: string; year: number | null; score: number; signals: Record<string, number>;
+  poster?: string | null; overview?: string | null;
+};
 export type Item = {
   id: string; status: ItemStatus; reason: string; kind: 'tv' | 'movie' | null; title: string | null; year: number | null;
-  tmdb_id: number | null; known: boolean; files: Planned[]; candidates: Candidate[]; notes: string[]; size: number;
+  tmdb_id: number | null; known: boolean; chosen?: boolean; parsed?: { title: string | null; year: number | null };
+  files: Planned[]; candidates: Candidate[]; notes: string[]; size: number;
+};
+export type Kind = 'tv' | 'movie';
+// A title on TMDB as Review shows it: from muthur's candidates, a search or a pasted link.
+export type Card = { kind: Kind; tmdbId: number; title: string; originalTitle: string; year: number | null; overview: string; poster: string | null; signals?: Record<string, number> };
+export type EpisodeChoice = { season: number; episode: number; part: number | null; number: 'file' | 'tmdb' };
+export type Choice = { kind: Kind; tmdbId: number; episodes?: Record<string, EpisodeChoice> };
+export type Season = {
+  seasons: { season: number; name: string | null; episodes: number }[];
+  episodes: { episode: number; title: string | null; aired: string | null; runtime: number | null; overview: string | null; still: string | null }[];
 };
 export type Inbox = { items: Item[]; scannedAt: number | null; job: Job | null };
 
@@ -70,4 +90,12 @@ export const api = {
   history: () => call<{ runs: Run[] }>('/api/history'),
   run: (id: number) => call<{ ops: Op[] }>(`/api/history/${id}`),
   undo: (id: number) => call<Job>(`/api/history/${id}/undo`, { method: 'POST', body: '{}' }),
+  search: (kind: Kind, q: string, year?: number) =>
+    call<{ results: Card[] }>(`/api/tmdb/search?${new URLSearchParams({ kind, q, ...(year ? { year: String(year) } : {}) })}`),
+  resolve: (link: string) => call<Card>('/api/tmdb/resolve', { method: 'POST', body: JSON.stringify({ link }) }),
+  season: (tvId: number, season: number) => call<Season>(`/api/tmdb/tv/${tvId}/season/${season}`),
+  preview: (id: string, choice: Choice) => call<Item>('/api/review/preview', { method: 'POST', body: JSON.stringify({ id, choice }) }),
+  choose: (id: string, choice: Choice, remember: boolean) =>
+    call<Item>('/api/review/choose', { method: 'POST', body: JSON.stringify({ id, choice, remember }) }),
+  forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };

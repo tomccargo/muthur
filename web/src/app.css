@@ -33,7 +33,7 @@
   }
   .main { padding-bottom: calc(64px + env(safe-area-inset-bottom, 0px)); }
   .tabbar {
-    position: fixed; inset: auto 0 0 0; z-index: 20; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+    position: fixed; inset: auto 0 0 0; z-index: 20; display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr);
     padding: 6px 4px calc(6px + env(safe-area-inset-bottom, 0px)); background: var(--surface); border-top: 1px solid var(--border);
   }
   .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 48px; color: var(--muted); text-decoration: none; font-size: 11.5px; font-weight: 600; }
@@ -124,6 +124,28 @@ a.tile:hover { background: var(--surface-muted); }
 .field { min-height: 44px; padding: 10px 12px; border-radius: var(--radius-sm); border: 1px solid var(--border-strong); background: var(--bg); color: var(--text); font: inherit; font-size: 14px; width: 100%; }
 .pair { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
 .hint { margin: 0; font-size: 13px; color: var(--muted); }
+
+/* ---- Review: candidate cards and posters (§8) ---------------------------------- */
+.cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 250px), 1fr)); gap: 10px; }
+.card {
+  display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 12px; align-items: start; padding: 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: transparent; color: var(--text); font: inherit; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.card:hover { background: var(--surface-muted); }
+.card[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); }
+.poster { width: 72px; aspect-ratio: 2 / 3; border-radius: var(--radius-sm); background: var(--poster-bg); object-fit: cover; display: grid; place-items: center; overflow: hidden; }
+.poster-initials { font-family: var(--font-display); font-weight: 700; font-size: 1.2rem; color: var(--muted); }
+.clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.question { display: flex; flex-direction: column; gap: 14px; }
+.question h2 { margin: 0; font-size: 1.3rem; font-weight: 650; }
+.subq { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--border); }
+.subq h3 { margin: 0; font-size: 1rem; font-weight: 650; }
+.choice { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; cursor: pointer; }
+.choice input { margin-top: 3px; accent-color: var(--accent); }
+.inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.inline .field { flex: 1 1 200px; width: auto; }
+.inline .field.year { flex: 0 0 96px; }
 
 /* ---- Progress ------------------------------------------------------------------ */
 .track { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }

@@ -14,7 +14,7 @@ from datetime import date
 from guessit import guessit
 
 # Bump when parsing rules change: cached results from an older version are parsed again.
-PARSER_VERSION = 5
+PARSER_VERSION = 6
 
 VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".wmv", ".mov", ".mpg", ".mpeg", ".webm", ".iso", ".divx", ".ogm"}
 
@@ -55,6 +55,7 @@ class Parsed:
     extra: bool = False
     sample: bool = False
     part: int | None = None
+    episode_title: str | None = None
     alt_titles: list[str] = field(default_factory=list)
     quality: dict = field(default_factory=dict)
     flags: list[str] = field(default_factory=list)
@@ -145,6 +146,8 @@ def parse_episode(parts: list[str]) -> Parsed:
     p.year = _int(g.get("year"))
     p.country = _country(g)
     p.quality = _quality(g)
+    p.episode_title = _text(g.get("episode_title"))
+    p.part = _int(g.get("part"))  # 'Goodbye Toby Part 2': one half of an hour-long episode
     if p.title and (m := COUNTRY_SUFFIX.search(p.title)):  # 'Ghosts US' is Ghosts, from the US
         code = m.group(1) or m.group(2)
         p.title, p.country = p.title[: m.start()].strip(), p.country or COUNTRY_CODES.get(code, code)

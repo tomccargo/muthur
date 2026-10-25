@@ -2,7 +2,7 @@
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork) are done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
+Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork, Review) are done. Kodi on the Shield is set up as in §10. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
@@ -134,6 +134,11 @@ In order, stopping at the first conclusive step:
 
 Anything else goes to **Review**, with the candidates shown (poster, year, plot, why they scored). This covers the *Inside Job* case (2010 documentary vs 2021 series) and the "1970 vs 2002" case. A guess is never made silently.
 
+**Episode numbering that differs from TMDB.** Some libraries and releases number a show differently from TMDB: *The Office* (US) season 4 has 19 split episodes in the library and in releases, and 14 hour-long ones on TMDB. None of TMDB's episode groups for that show uses the split order (checked 2026-10-25), so muthur maps per file instead:
+- When a file's number doesn't exist on TMDB, or the episode title in its name matches a *different* TMDB episode than the one at its number (S04E10 *Branch Wars* vs TMDB's S04E10 *Chair Model*), the item goes to Review with the matching TMDB episode suggested (title similarity ≥ 0.85, "Part 2" ignored).
+- In Review you pick the TMDB episode and the part. By default the file **keeps its own number**, so the season folder stays consistent; the NFO gets that TMDB episode's plot, date, score and ID under the file's number and title (*Goodbye Toby (2)*, S04E19).
+- A number already used in the library's season folder, under any file name, is refused: Kodi would list two S04E14s.
+
 ### 5.4 Plan
 For each identified item: target path, the NFOs to write, the artwork to download, and conflicts.
 
@@ -243,9 +248,12 @@ The tool proposes a winner and you confirm. The loser goes to `_muthur-quarantin
 
 ## 10. Kodi setup (one-time, on the Shield)
 
-1. For both sources (`TV` and `Film`): **Set content → Information provider → "Local information only"**. Items without an NFO are then not scraped at all ([Kodi wiki: NFO files](https://kodi.wiki/view/NFO_files)). The tool makes sure every item has one.
-2. Film source: "Movies are in separate folders that match the movie title" → **on**.
-3. `advancedsettings.xml` (keeps Extras out of the library, per the [Add-on:Extras](https://kodi.wiki/view/Add-on:Extras) example):
+Done on 2026-10-25 (Kodi 21.2), through Kodi's JSON-RPC from muthur's side; the state is noted per step.
+
+1. For both sources (`TV` and `Film`): **Change content → Information provider → "Local information only"**, answering **No** to *refresh information for all items*. Items without an NFO are then not scraped at all ([Kodi wiki: NFO files](https://kodi.wiki/view/NFO_files)). The tool makes sure every item it files has one. *Done.*
+2. The downloads source (`torrent-output`): **Change content → None**, answering **Yes** to *remove all items within this path*. Kodi had scraped downloads into the library itself (the `complete` folder as a show called *Complete Savages*). *Done: 6 stray shows and 15 episodes removed, none watched. Dark Winds lost its 7 episodes because its show entry pointed at the downloads; a scan brought them back from their NFOs.*
+3. Film source: "Movies are in separate folders that match the movie title" stays **off** as it was; muthur puts every film in its own folder either way, and the NFO next to the video wins.
+4. *Not set, not needed while muthur files no Extras:* `advancedsettings.xml` to keep Extras out of the library, per the [Add-on:Extras](https://kodi.wiki/view/Add-on:Extras) example:
    ```xml
    <advancedsettings>
      <video>
@@ -254,7 +262,8 @@ The tool proposes a winner and you confirm. The loser goes to `_muthur-quarantin
      </video>
    </advancedsettings>
    ```
-4. Enable *Allow remote control via HTTP* with a username and password, and enter those in muthur's settings.
+5. *Allow remote control via HTTP* with a username and password, entered in muthur's settings. *Done; muthur asks Kodi to scan after every Apply.*
+6. Left as they are: *date added* uses the file's modification date (Kodi's default `<dateadded>1`), so filed episodes sort by their own date in *Recently added*; *Update library on startup* and background updates are off; library *Export* to separate files would overwrite muthur's NFOs and isn't used.
 
 ## 11. Watched status: Kodi is the master, muthur keeps a synced backup
 
@@ -321,7 +330,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
-3. **Apply + journal/undo + NFO/artwork writer** (done; Review page still to come), then phase 1 on the leftover downloads.
+3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).**
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
 
