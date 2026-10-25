@@ -205,9 +205,10 @@ class Listener:
 
     TRIGGERS = {"VideoLibrary.OnUpdate", "Player.OnStop", "VideoLibrary.OnRemove", "VideoLibrary.OnScanFinished"}
 
-    def __init__(self, address, backup, settle: float = 30, port: int = 9090):
-        """address() -> the Shield's host or None (settings can change); backup() runs one backup."""
-        self.address, self.backup, self.settle, self.port = address, backup, settle, port
+    def __init__(self, address, backup, settle: float = 30, port: int = 9090, on_connect=None):
+        """address() -> the Shield's host or None (settings can change); backup() runs one backup;
+        on_connect() runs each time Kodi answers again (after the Shield slept), for work that waited."""
+        self.address, self.backup, self.settle, self.port, self.on_connect = address, backup, settle, port, on_connect
         self.last_event: float | None = None
         self.connected = False
 
@@ -226,6 +227,12 @@ class Listener:
                 with socket.create_connection((host, self.port), timeout=10) as conn:
                     conn.settimeout(600)  # Kodi is silent while nothing happens; a timeout just reconnects
                     self.connected, wait = True, 5
+                    self.last_event = time.time()  # things may have changed while Kodi was away: back up soon
+                    if self.on_connect:
+                        try:
+                            self.on_connect()
+                        except Exception:
+                            pass
                     self._read(conn)
             except OSError:
                 pass

@@ -127,3 +127,24 @@ def test_listener_backs_up_after_kodi_goes_quiet():
             break
         t.sleep(0.1)
     assert runs == [1]
+
+
+def test_listener_runs_waiting_work_when_kodi_is_back():
+    import socket
+    import threading
+    import time as t
+
+    from muthur.watched import Listener
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    back = []
+    threading.Thread(target=lambda: (server.accept(), t.sleep(2)), daemon=True).start()
+    listener = Listener(lambda: "127.0.0.1", lambda: None, port=server.getsockname()[1], on_connect=lambda: back.append(1))
+    threading.Thread(target=listener.run, daemon=True).start()
+    for _ in range(50):
+        if back:
+            break
+        t.sleep(0.1)
+    assert back == [1] and listener.last_event  # the waiting scan ran, and a backup follows

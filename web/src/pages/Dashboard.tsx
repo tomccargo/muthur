@@ -94,6 +94,9 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
                   : <span className="status"><Dot kind="dot-danger" />{k.problem}</span>}
             </li>
           </ul>
+          {k?.pendingScan && (
+            <p className="hint" style={{ marginBottom: 12 }}>Kodi was asleep after the last Apply ({when(k.pendingScan)}); it looks for the new files as soon as it answers again.</p>
+          )}
           {k?.connected ? (
             <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
               setMessage(null);

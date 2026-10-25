@@ -175,7 +175,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "version": __version__,
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
-            "kodi": k.check() if k else None,
+            "kodi": {**k.check(), "pendingScan": store.get("kodi.pendingScan")} if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
@@ -220,12 +220,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.save_snapshot("inbox", [asdict(i) for i in Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan()])
 
     def _tell_kodi():
+        """Ask Kodi to look for new files. When Kodi is asleep, the scan waits until it answers again."""
         k = kodi()
         if k:
             try:
                 k.call("VideoLibrary.Scan")
-            except Exception:  # Kodi being off must not fail the run; the Dashboard shows its state
-                pass
+                store.put("kodi.pendingScan", None)
+            except Exception:  # Kodi being off must not fail the run: the listener catches up later
+                store.put("kodi.pendingScan", time.time())
+
+    def kodi_back():
+        if store.get("kodi.pendingScan"):
+            _tell_kodi()
 
     @app.post("/api/apply", status_code=202)
     def apply(body: dict | None = None):
@@ -399,7 +405,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if k:
             watched.follow(Watched.read_kodi(k))
 
-    listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now)
+    listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back)
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
         threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
