@@ -95,3 +95,35 @@ def test_restore_never_lowers(env):
     w.follow(Watched.read_kodi(kodi))
     kodi.episodes[0]["playcount"] = 3  # watched again since the backup
     assert all(c["label"] != "The Office S04E01" for c in w.plan_restore(Watched.read_kodi(kodi)))
+
+
+def test_listener_backs_up_after_kodi_goes_quiet():
+    import socket
+    import threading
+    import time as t
+
+    from muthur.watched import Listener
+
+    server = socket.socket()
+    server.bind(("127.0.0.1", 0))
+    server.listen(1)
+    port = server.getsockname()[1]
+    runs = []
+
+    def kodi():
+        conn, _ = server.accept()
+        # Two notifications in one packet, the second split across two sends, plus one that doesn't matter.
+        conn.sendall(b'{"jsonrpc":"2.0","method":"GUI.OnScreensaverActivated","params":{}}{"jsonrpc":"2.0","method":"Player.On')
+        t.sleep(0.2)
+        conn.sendall(b'Stop","params":{"data":{"item":{"id":1,"type":"episode"}}}}')
+        t.sleep(3)
+        conn.close()
+
+    threading.Thread(target=kodi, daemon=True).start()
+    listener = Listener(lambda: "127.0.0.1", lambda: runs.append(1), settle=0.5, port=port)
+    threading.Thread(target=listener.run, daemon=True).start()
+    for _ in range(100):
+        if runs:
+            break
+        t.sleep(0.1)
+    assert runs == [1]

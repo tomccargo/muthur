@@ -196,3 +196,66 @@ def _state(x: dict) -> dict:
     resume = x.get("resume") or {}
     return {"playcount": int(x.get("playcount") or 0), "lastplayed": x.get("lastplayed") or None,
             "resume": float(resume.get("position") or 0), "total": float(resume.get("total") or 0), "file": x.get("file")}
+
+
+class Listener:
+    """Kodi's notifications over its TCP JSON-RPC port (9090, 'Allow remote control from applications on
+    other systems'). When something is watched, stopped or changed, a backup runs once Kodi has been quiet
+    for `settle` seconds; the hourly poll stays as the safety net. Reconnects by itself."""
+
+    TRIGGERS = {"VideoLibrary.OnUpdate", "Player.OnStop", "VideoLibrary.OnRemove", "VideoLibrary.OnScanFinished"}
+
+    def __init__(self, address, backup, settle: float = 30, port: int = 9090):
+        """address() -> the Shield's host or None (settings can change); backup() runs one backup."""
+        self.address, self.backup, self.settle, self.port = address, backup, settle, port
+        self.last_event: float | None = None
+        self.connected = False
+
+    def run(self) -> None:
+        import socket
+        import threading
+
+        threading.Thread(target=self._debounce, name="watched-debounce", daemon=True).start()
+        wait = 5
+        while True:
+            host = self.address()
+            if not host:
+                time.sleep(60)
+                continue
+            try:
+                with socket.create_connection((host, self.port), timeout=10) as conn:
+                    conn.settimeout(600)  # Kodi is silent while nothing happens; a timeout just reconnects
+                    self.connected, wait = True, 5
+                    self._read(conn)
+            except OSError:
+                pass
+            self.connected = False
+            time.sleep(wait)
+            wait = min(wait * 2, 300)
+
+    def _read(self, conn) -> None:
+        decoder, buffer = json.JSONDecoder(), ""
+        while True:
+            chunk = conn.recv(65536)
+            if not chunk:
+                return
+            buffer += chunk.decode("utf-8", errors="replace")
+            while buffer:
+                buffer = buffer.lstrip()
+                try:
+                    msg, end = decoder.raw_decode(buffer)
+                except ValueError:
+                    break  # an incomplete message: wait for the rest
+                buffer = buffer[end:]
+                if isinstance(msg, dict) and msg.get("method") in self.TRIGGERS:
+                    self.last_event = time.time()
+
+    def _debounce(self) -> None:
+        while True:
+            time.sleep(5)
+            if self.last_event and time.time() - self.last_event >= self.settle:
+                self.last_event = None
+                try:
+                    self.backup()
+                except Exception:
+                    pass  # Kodi busy or gone: the hourly poll catches up

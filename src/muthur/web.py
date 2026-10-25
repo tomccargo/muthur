@@ -32,7 +32,7 @@ from . import quarantine as quarantine_notes
 from .scores import ScoreRefresh
 from .store import Store
 from .tmdb import Tmdb
-from .watched import Watched
+from .watched import Listener, Watched
 
 
 class Config:
@@ -176,7 +176,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
             "scores": scores_state(),
-            "watched": watched.state(),
+            "watched": {**watched.state(), "live": listener.connected},
             "duplicates": len(((store.snapshot("duplicates")[0]) or {}).get("groups", [])),
             "fixes": sum(len(v) for v in (((store.snapshot("health")[0]) or {}).get("fixes") or {}).values()),
             "job": jobs.current.as_dict() if jobs.current else None,
@@ -388,8 +388,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 pass
             time.sleep(3600)
 
+    def backup_now():
+        k = kodi(timeout=90)
+        if k:
+            watched.follow(Watched.read_kodi(k))
+
+    listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now)
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
+        threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
 
     # -- library ------------------------------------------------------------------
     def start_library():

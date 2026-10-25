@@ -54,6 +54,7 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
         <ul className="rows">
           <li><span>Backed up</span><span className="status"><Dot kind="dot-success" />{when(w.last.at)}</span></li>
           <li><span>Watched in Kodi</span><span className="num">{w.last.watched.toLocaleString('en-GB')} of {w.last.items.toLocaleString('en-GB')}</span></li>
+          <li><span>Follows Kodi</span><span className="status">{w.live ? <><Dot kind="dot-success" />Within a minute of each change</> : <><Dot kind="dot-warning" />Every hour (no live connection now)</>}</span></li>
         </ul>
       ) : (
         <p className="hint">{kodiSet ? 'Not backed up yet. muthur checks Kodi every hour; the first check runs a few minutes after it starts.' : 'Set up the Kodi connection in Settings to back up what you watched.'}</p>

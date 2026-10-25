@@ -15,6 +15,7 @@ export type Status = {
   watched: {
     last: { at: number; items: number; watched: number; changes: number } | null;
     paused: { at: number; why: string; unwatched: number; items: number } | null;
+    live: boolean;  // listening to Kodi's notifications right now
   };
   duplicates: number;
   fixes: number;
