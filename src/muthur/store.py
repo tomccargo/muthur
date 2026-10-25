@@ -56,11 +56,28 @@ class Store:
 
     # -- ID memory ----------------------------------------------------------
     def remember(self, kind: str, title: str, tmdb_id: int, year: int | None, tmdb_title: str,
-                 folder: str | None, source: str) -> None:
+                 folder: str | None, source: str) -> tuple[str, str, int]:
+        """Add or refresh an entry. A choice confirmed in Review is never downgraded to 'library'."""
+        key = (kind, alias_key(title), tmdb_id)
         with self.lock:
-            self.db.execute("INSERT OR REPLACE INTO aliases VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                            (kind, alias_key(title), tmdb_id, year, tmdb_title, folder, source, time.time()))
+            self.db.execute(
+                """INSERT INTO aliases VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                   ON CONFLICT (kind, norm, tmdb_id) DO UPDATE SET
+                     year = excluded.year, title = excluded.title, folder = excluded.folder,
+                     source = CASE WHEN aliases.source = 'confirmed' THEN 'confirmed' ELSE excluded.source END""",
+                (*key, year, tmdb_title, folder, source, time.time()))
             self.db.commit()
+        return key
+
+    def forget_library_except(self, kind: str, keep: set[tuple[str, str, int]]) -> int:
+        """Drop entries learned from the library that the latest full run didn't confirm again
+        (folder gone or renamed, NFO now disagrees). Entries confirmed in Review stay."""
+        with self.lock:
+            rows = self.db.execute("SELECT kind, norm, tmdb_id FROM aliases WHERE kind = ? AND source = 'library'", (kind,)).fetchall()
+            stale = [tuple(r) for r in rows if tuple(r) not in keep]
+            self.db.executemany("DELETE FROM aliases WHERE kind = ? AND norm = ? AND tmdb_id = ?", stale)
+            self.db.commit()
+        return len(stale)
 
     def lookup(self, kind: str, title: str, year: int | None = None) -> list[dict]:
         """Remembered entries for a title. More than one means the title is ambiguous."""

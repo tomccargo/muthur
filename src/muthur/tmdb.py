@@ -15,6 +15,30 @@ import requests
 
 API = "https://api.themoviedb.org/3"
 
+DAY = 86400
+FINISHED = {"Ended", "Canceled"}
+
+
+def _show_max_age(body: dict) -> float | None:
+    """A running show changes (new seasons, new episodes); a finished one doesn't."""
+    return None if body.get("status") in FINISHED else DAY
+
+
+def _season_max_age(body: dict) -> float | None:
+    """A season with undated, upcoming or recent episodes still changes; an old complete one doesn't."""
+    episodes = body.get("episodes") or []
+    if not episodes:
+        return DAY
+    cutoff = time.strftime("%Y-%m-%d", time.gmtime(time.time() - 30 * DAY))
+    if any(not e.get("air_date") or e["air_date"] >= cutoff for e in episodes):
+        return DAY
+    return None
+
+
+def _search_max_age(body: dict) -> float | None:
+    """Nothing found today may exist tomorrow; found results stay good for a month."""
+    return DAY if not body.get("results") else 30 * DAY
+
 
 class Tmdb:
     def __init__(self, token: str, cache_path: str, language: str = "en-US", max_per_second: float = 20.0):
@@ -32,15 +56,20 @@ class Tmdb:
         self.calls = 0
         self.hits = 0
 
-    def get(self, path: str, **params) -> dict:
+    def get(self, path: str, max_age=None, **params) -> dict:
+        """max_age: seconds a cached answer stays valid, or a function of the cached answer that
+        returns them (None: valid forever)."""
         params = {k: v for k, v in params.items() if v is not None}
         params.setdefault("language", self.language)
         key = f"{path}?{urlencode(sorted(params.items()))}"
         with self.lock:
-            row = self.db.execute("SELECT body FROM cache WHERE key = ?", (key,)).fetchone()
+            row = self.db.execute("SELECT body, fetched FROM cache WHERE key = ?", (key,)).fetchone()
         if row:
-            self.hits += 1
-            return json.loads(row[0])
+            body = json.loads(row[0])
+            limit = max_age(body) if callable(max_age) else max_age
+            if limit is None or time.time() - row[1] < limit:
+                self.hits += 1
+                return body
 
         for attempt in range(5):
             with self.lock:
@@ -67,19 +96,19 @@ class Tmdb:
         return body
 
     def search_tv(self, query: str, year: int | None = None) -> list[dict]:
-        return self.get("/search/tv", query=query, first_air_date_year=year).get("results", [])
+        return self.get("/search/tv", max_age=_search_max_age, query=query, first_air_date_year=year).get("results", [])
 
     def search_movie(self, query: str, year: int | None = None) -> list[dict]:
-        return self.get("/search/movie", query=query, year=year).get("results", [])
+        return self.get("/search/movie", max_age=_search_max_age, query=query, year=year).get("results", [])
 
     def tv(self, tv_id: int) -> dict:
-        return self.get(f"/tv/{tv_id}", append_to_response="external_ids,alternative_titles")
+        return self.get(f"/tv/{tv_id}", max_age=_show_max_age, append_to_response="external_ids,alternative_titles")
 
     def movie(self, movie_id: int) -> dict:
-        return self.get(f"/movie/{movie_id}", append_to_response="external_ids,alternative_titles")
+        return self.get(f"/movie/{movie_id}", max_age=30 * DAY, append_to_response="external_ids,alternative_titles")
 
     def tv_season(self, tv_id: int, season: int) -> dict:
-        return self.get(f"/tv/{tv_id}/season/{season}")
+        return self.get(f"/tv/{tv_id}/season/{season}", max_age=_season_max_age)
 
     def find(self, external_id: str, source: str) -> dict:
         return self.get(f"/find/{external_id}", external_source=source)
