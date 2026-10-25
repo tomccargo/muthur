@@ -64,7 +64,7 @@ function RailFoot({ status, onChange }: { status: Status | null; onChange: () =>
       {k === undefined ? null : k === null ? (
         <span className="status"><span className="dot" />Kodi not set up</span>
       ) : k.connected ? (
-        <span className="status"><span className="dot dot-success" />Shield · Kodi {k.version}</span>
+        <span className="status"><span className="dot dot-success" />{status?.names.device} · Kodi {k.version}</span>
       ) : (
         <span className="status"><span className="dot dot-danger" />Kodi unreachable
           {k.canWake && <button type="button" className="btn-link small" onClick={() => { api.wakeShield().catch(() => undefined).finally(onChange); }}>Wake</button>}
@@ -108,7 +108,8 @@ function Shell() {
       <nav className="rail" aria-label="Main">
         <Link to="/" className="brand" aria-label="muthur, dashboard">
           <span className="brand-mark" aria-hidden="true" />
-          <span><span className="brand-name">MU/TH/UR</span><br /><span className="brand-sub">muthur · nostromo</span></span>
+          <span><span className="brand-name">MU/TH/UR</span><br />
+            <span className="brand-sub">{hook.status?.names.nas ? `muthur · ${hook.status.names.nas.toLowerCase()}` : 'muthur'}</span></span>
         </Link>
         <div className="rail-nav">
           {SECTIONS.map((s) => (

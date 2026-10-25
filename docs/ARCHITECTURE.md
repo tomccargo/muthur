@@ -78,6 +78,7 @@ volumes:
 - The web UI is on the LAN only (for example `http://nostromo:8580`) and asks for a password (§14).
 - `quarantine` lives at `/data/_muthur-quarantine` (`QUARANTINE_DIR`).
 - **Where settings live (0.21).** The install's settings are in `.env` next to `compose.yaml` (see `.env.example`): user, the media folder and the folders inside it, the config folder, port, time zone, image version. A missing required one stops `docker compose` with a message instead of guessing. Everything changed while using muthur is in Settings, stored in its database: Kodi (HTTP and notification ports), the box to wake, the TMDB token and the language of plots and episode titles, Download Station, the title rule, dry run. A TMDB token saved in Settings wins over the one in `.env`; removing it brings that one back. Saved secrets can be removed.
+- **Names (0.22).** The pages call the NAS and the box Kodi runs on by the names in Settings ("Kodi on the Shield", the Dashboard's small title); a new install says "Kodi device" and "NAS".
 - **Kodi's sources are found by folder name (0.21).** muthur matches each library folder to the Kodi video source ending in the same folder name, so `Series` and `Movies` work as well as `TV` and `Film`.
 
 ## 4. Data sources

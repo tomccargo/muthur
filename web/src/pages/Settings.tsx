@@ -8,7 +8,7 @@ import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLangu
 
 type Draft = {
   host: string; port: string; tcpPort: string; user: string; password: string; token: string; tmdbLanguage: string; keepOriginal: string[];
-  dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean;
+  dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean; device: string; nas: string;
 } & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 
@@ -17,7 +17,7 @@ function toDraft(s: Settings): Draft {
     host: s.kodi.host, port: String(s.kodi.port), tcpPort: String(s.kodi.tcpPort), user: s.kodi.user, password: '', token: '',
     tmdbLanguage: s.tmdb.language, keepOriginal: s.titles.keepOriginal,
     dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
-    shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app,
+    shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app, device: s.names.device, nas: s.names.nas,
   };
 }
 
@@ -49,6 +49,7 @@ export function SettingsPage({ refresh }: StatusHook) {
       dryRun: draft.dryRun,
       shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
+      names: { device: draft.device, nas: draft.nas },
       tmdb: { language: draft.tmdbLanguage, ...(draft.token ? { token: draft.token } : {}) },
     };
     api.saveSettings(body)
@@ -129,9 +130,9 @@ export function SettingsPage({ refresh }: StatusHook) {
       </section>
 
       <section className="panel form" aria-labelledby="kodi-h">
-        <h2 id="kodi-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Kodi on the Shield</h2>
+        <h2 id="kodi-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Kodi on the {saved.names.device}</h2>
         <p className="hint">In Kodi: Settings, Services, Control, then turn on “Allow remote control via HTTP” and set a username and password.</p>
-        <label className="field-label">The Shield’s address
+        <label className="field-label">The {saved.names.device}’s address
           <input className="field" type="text" placeholder="for example 192.168.1.20" value={draft.host} onChange={(e) => edit({ host: e.target.value })} />
         </label>
         <div className="pair">
@@ -151,7 +152,7 @@ export function SettingsPage({ refresh }: StatusHook) {
             ? <span className="status small"><Dot kind="dot-success" />Connected · Kodi {kodi.version}</span>
             : <span className="status small"><Dot kind="dot-danger" />{kodi.problem}</span>)}
         </div>
-        <ShieldSettings draft={draft} edit={edit} />
+        <ShieldSettings draft={draft} edit={edit} device={saved.names.device} />
       </section>
 
       <section className="panel form" aria-labelledby="ds-h">
@@ -190,6 +191,19 @@ export function SettingsPage({ refresh }: StatusHook) {
               {language(code)}
             </button>
           ))}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="names-h">
+        <h2 id="names-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Names</h2>
+        <p className="hint">What muthur’s pages call your NAS and the device Kodi runs on, as in “Kodi on the Shield”.</p>
+        <div className="pair">
+          <label className="field-label">Your NAS
+            <input className="field" type="text" maxLength={40} placeholder="NAS" value={draft.nas} onChange={(e) => edit({ nas: e.target.value })} />
+          </label>
+          <label className="field-label">The device Kodi runs on
+            <input className="field" type="text" maxLength={40} placeholder="Kodi device" value={draft.device} onChange={(e) => edit({ device: e.target.value })} />
+          </label>
         </div>
       </section>
 

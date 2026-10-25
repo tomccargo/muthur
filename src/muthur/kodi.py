@@ -12,7 +12,10 @@ def folder_name(root: str) -> str:
 
 
 class Kodi:
-    def __init__(self, host: str, port: int = 8080, user: str | None = None, password: str | None = None, timeout: float = 4):
+    def __init__(self, host: str, port: int = 8080, user: str | None = None, password: str | None = None, timeout: float = 4,
+                 device: str = "Kodi device"):
+        """device: what the reader calls the box Kodi runs on (Settings, Names), for the sentences below."""
+        self.device = device
         self.url = f"http://{host}:{port}/jsonrpc"
         self.auth = (user, password or "") if user else None
         self.timeout = timeout
@@ -99,7 +102,7 @@ class Kodi:
             v = self.call("Application.GetProperties", {"properties": ["version"]})["version"]
             return {"connected": True, "version": f"{v['major']}.{v['minor']}"}
         except requests.exceptions.ConnectTimeout:
-            return {"connected": False, "problem": "Kodi didn't answer. Is the Shield on?"}
+            return {"connected": False, "problem": f"Kodi didn't answer. Is the {self.device} on?"}
         except requests.exceptions.ConnectionError:
             return {"connected": False, "problem": "Nothing is listening there. Is “Allow remote control via HTTP” on in Kodi, and is the port right?"}
         except requests.exceptions.HTTPError as e:

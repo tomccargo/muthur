@@ -212,6 +212,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         client.language = store.get("tmdb.language") or "en-US"  # cached answers are kept per language
         return client
 
+    def names() -> dict:
+        """What the reader calls their NAS and the box Kodi runs on (Settings, Names); neutral until set."""
+        return {"device": store.get("names.device") or "Kodi device", "nas": store.get("names.nas") or "NAS"}
+
     def download_station() -> DownloadStation | None:
         d = store.get("downloadstation", {})
         return DownloadStation(d["url"], d.get("user", ""), d.get("password", "")) if d.get("url") and d.get("user") else None
@@ -219,13 +223,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def shield() -> Shield | None:
         """The box Kodi runs on, when waking it is set up in Settings."""
         sh, host = store.get("shield") or {}, (store.get("kodi") or {}).get("host")
-        return Shield(host, int(sh.get("port") or 5555), cfg.config_dir) if host and sh.get("enabled") and sh.get("app") else None
+        return (Shield(host, int(sh.get("port") or 5555), cfg.config_dir, device=names()["device"])
+                if host and sh.get("enabled") and sh.get("app") else None)
 
     def wake_kodi() -> None:
         """Wake the box and start the chosen app until Kodi answers. Only for things the reader started."""
         sh = shield()
         if not sh:
-            raise ShieldError("Waking the Shield isn't set up in Settings.")
+            raise ShieldError(f"Waking the {names()['device']} isn't set up in Settings.")
         sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool(kodi().check().get("connected")))
 
     def kodi_ready(timeout: float = 90) -> Kodi:
@@ -241,7 +246,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 wake_kodi()
                 return k
             except ShieldError as e:
-                raise HTTPException(409, f"Kodi doesn't answer, and waking the Shield didn't work: {e}")
+                raise HTTPException(409, f"Kodi doesn't answer, and waking the {names()['device']} didn't work: {e}")
         raise HTTPException(409, state.get("problem") or "Kodi doesn't answer.")
 
     def not_dry():
@@ -250,7 +255,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
-        return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout) if k.get("host") else None
+        return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout,
+                    device=names()["device"]) if k.get("host") else None
 
     # -- signing in (§14) -------------------------------------------------------
     def signed_in(request: Request, response: Response) -> dict:
@@ -328,6 +334,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         k = kodi()
         return {
             "version": __version__,
+            "names": names(),
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
             "kodi": {**kodi_state(k), "pendingScan": store.get("kodi.pendingScan"), "canWake": shield() is not None} if k else None,
@@ -1014,6 +1021,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "shield": {"enabled": bool((store.get("shield") or {}).get("enabled")), "port": int((store.get("shield") or {}).get("port") or 5555),
                        "app": (store.get("shield") or {}).get("app") or ""},
             "quality": {"preferHdr": bool(store.get("quality.preferHdr", False))},
+            "names": names(),
             "paths": {"downloads": cfg.downloads, "tv": cfg.tv, "film": cfg.film},
         }
 
@@ -1048,9 +1056,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if "app" in new:
                 component = str(new["app"]).strip()
                 if component and not COMPONENT.match(component):
-                    raise HTTPException(422, "Choose the app from the list the Shield gives.")
+                    raise HTTPException(422, f"Choose the app from the list the {names()['device']} gives.")
                 sh["app"] = component
             store.put("shield", sh)
+        for key, value in (body.get("names") or {}).items():
+            if key in ("device", "nas"):
+                store.put(f"names.{key}", str(value).strip()[:40])  # empty: back to the neutral name
         if isinstance(body.get("dryRun"), bool):
             store.put("dryRun", body["dryRun"])
         if isinstance((body.get("quality") or {}).get("preferHdr"), bool):
@@ -1089,8 +1100,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """The apps the Shield can start, and the one on screen now (connecting asks the TV once to allow muthur)."""
         host = (store.get("kodi") or {}).get("host")
         if not host:
-            raise HTTPException(409, "Enter the Shield's address under Kodi first.")
-        sh = Shield(host, int((store.get("shield") or {}).get("port") or 5555), cfg.config_dir)
+            raise HTTPException(409, f"Enter the {names()['device']}'s address under Kodi first.")
+        sh = Shield(host, int((store.get("shield") or {}).get("port") or 5555), cfg.config_dir, device=names()["device"])
         try:
             sh.connect()
             return {"apps": sh.apps(), "current": sh.current_app()}
@@ -1114,7 +1125,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def kodi_test():
         k = kodi()
         kodi_seen.clear()
-        return k.check() if k else {"connected": False, "problem": "Enter the Shield's address first."}
+        return k.check() if k else {"connected": False, "problem": f"Enter the {names()['device']}'s address first."}
 
     @app.post("/api/kodi/scan")
     def kodi_scan():

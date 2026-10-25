@@ -34,12 +34,13 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
   const waiting = (counts.ready ?? 0) + (counts.review ?? 0);
   const k = status?.kodi;
   const sc = status?.scores;
+  const device = status?.names.device ?? 'Kodi device';
 
   return (
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Nostromo</p>
+          <p className="eyebrow">{status?.names.nas ?? 'NAS'}</p>
           <h1>Dashboard</h1>
           <p className="lede">
             {scanned ? `${waiting} download${waiting === 1 ? '' : 's'} to file · checked ${when(scanned)}` : 'The downloads haven’t been checked yet.'}
@@ -86,7 +87,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
 
       <div className="grid-2">
         <section className="panel" aria-labelledby="kodi-h">
-          <div className="panel-head"><h2 id="kodi-h">Kodi on the Shield</h2><Link to="/settings" className="small">Settings</Link></div>
+          <div className="panel-head"><h2 id="kodi-h">Kodi on the {device}</h2><Link to="/settings" className="small">Settings</Link></div>
           <ul className="rows" style={{ marginBottom: 12 }}>
             <li>
               <span>Connection</span>
@@ -103,10 +104,10 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
               setMessage(null);
               setWaking(true);
               api.wakeShield()
-                .then(() => { setMessage({ kind: 'note', text: 'The Shield is awake and Kodi answers.' }); refresh(); })
+                .then(() => { setMessage({ kind: 'note', text: `The ${device} is awake and Kodi answers.` }); refresh(); })
                 .catch((e: Error) => setMessage({ kind: 'error', text: e.message }))
                 .finally(() => setWaking(false));
-            }}>{waking ? 'Waking the Shield…' : 'Wake the Shield'}</button>
+            }}>{waking ? `Waking the ${device}…` : `Wake the ${device}`}</button>
           )}
           {k?.connected ? (
             <button className="btn btn-secondary btn-sm" type="button" onClick={() => {

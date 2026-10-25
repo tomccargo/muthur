@@ -4,8 +4,11 @@ export type PathState = { path: string; exists: boolean; readable: boolean; writ
 export type Job = { name: string; started: number; finished: number | null; done: number; total: number; error: string | null; running: boolean };
 export type KodiState = ({ connected: true; version: string } | { connected: false; problem: string }) & { pendingScan?: number | null; canWake?: boolean };
 
+export type Names = { device: string; nas: string };  // what the reader calls the Kodi box and the NAS
+
 export type Status = {
   version: string;
+  names: Names;
   applying: boolean;
   tmdb: { configured: boolean };
   kodi: KodiState | null;
@@ -60,6 +63,7 @@ export type Settings = {
   dryRun: boolean;
   shield: { enabled: boolean; port: number; app: string };
   quality: { preferHdr: boolean };
+  names: Names;
   paths: { downloads: string; tv: string; film: string };
 };
 

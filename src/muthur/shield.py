@@ -35,8 +35,8 @@ def run_adb(args: list[str], home: str, timeout: float = 20) -> tuple[int, str]:
 
 
 class Shield:
-    def __init__(self, host: str, port: int, home: str, runner=run_adb):
-        self.serial, self.home, self.runner = f"{host}:{port}", home, runner
+    def __init__(self, host: str, port: int, home: str, runner=run_adb, device: str = "Kodi device"):
+        self.serial, self.home, self.runner, self.device = f"{host}:{port}", home, runner, device
 
     def _adb(self, *args: str, timeout: float = 20) -> str:
         code, out = self.runner(list(args), self.home, timeout)
@@ -75,7 +75,7 @@ class Shield:
     def wake_and_start(self, component: str, ready, wait: float = 60) -> dict:
         """Wake the box, start `component`, and wait until ready() is true (the app answers)."""
         if not COMPONENT.match(component):  # it ends up in a shell command on the box
-            raise ShieldError("The app in Settings isn't one from the Shield's list. Choose it again.")
+            raise ShieldError(f"The app in Settings isn't one from the {self.device}'s list. Choose it again.")
         self.connect()
         woke = False
         if not self.awake():
@@ -87,4 +87,4 @@ class Shield:
             if ready():
                 return {"ok": True, "woke": woke}
             time.sleep(2)
-        raise ShieldError(f"The box is awake and {component.split('/')[0]} was started, but it didn't answer within {int(wait)} seconds.")
+        raise ShieldError(f"The {self.device} is awake and {component.split('/')[0]} was started, but it didn't answer within {int(wait)} seconds.")

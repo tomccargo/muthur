@@ -144,3 +144,12 @@ def test_migrations_run_once_and_a_new_database_starts_past_them(tmp_path, monke
     assert Store(str(tmp_path / "old.db")).migrate() == 0
     assert Store(str(tmp_path / "new.db")).migrate() == 0  # new: already at the newest schema
     del old
+
+
+def test_names_are_neutral_until_the_reader_sets_them(tmp_path, monkeypatch):
+    c = TestClient(_app(tmp_path, monkeypatch, auth=False))
+    assert c.get("/api/status").json()["names"] == {"device": "Kodi device", "nas": "NAS"}
+    s = c.put("/api/settings", json={"names": {"device": " Shield ", "nas": "Nostromo"}}).json()
+    assert s["names"] == {"device": "Shield", "nas": "Nostromo"}
+    assert c.post("/api/kodi/test").json()["problem"] == "Enter the Shield's address first."
+    assert c.put("/api/settings", json={"names": {"device": ""}}).json()["names"]["device"] == "Kodi device"
