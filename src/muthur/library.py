@@ -103,11 +103,16 @@ def scan_film(root: str) -> list[MovieUnit]:
         else:
             unit.flags.append("missing-video")
 
-        nfos = [p for p, _ in files if p[-1].lower().endswith(".nfo") and len(p) == 2]
+        nfos = [p for p, _ in files if p[-1].lower().endswith(".nfo")]
+        top = [p for p in nfos if len(p) == 2]
         if unit.main is not None:
-            stem = os.path.splitext(unit.main.parts[-1])[0]
-            preferred = [p for p in nfos if p[-1][:-4] == stem] or [p for p in nfos if p[-1].lower() == "movie.nfo"]
-            nfos = preferred or nfos
+            # Kodi reads the NFO next to the video, which may sit a folder deeper ('Film/X (1999)/X (1999)/x.mkv').
+            here, stem = unit.main.parts[:-1], os.path.splitext(unit.main.parts[-1])[0]
+            beside = [p for p in nfos if p[:-1] == here]
+            preferred = [p for p in beside if p[-1][:-4] == stem] or [p for p in beside if p[-1].lower() == "movie.nfo"]
+            nfos = preferred or top
+        else:
+            nfos = top
         if nfos:
             unit.nfo = os.path.join(root, *nfos[0])
         units[f"{folder}/"] = unit

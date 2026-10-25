@@ -135,14 +135,13 @@ class Index:
         for unit in scan_film(self.film_root):
             info = self.nfo(unit.nfo) if unit.nfo else None
             ids = info.ids if info else {}
-            folder = os.path.join(self.film_root, unit.key) if unit.folder else self.film_root
             out.append({
                 "key": unit.key, "folder": unit.folder, "file": "/".join(unit.main.parts) if unit.main else None,
                 "size": unit.main.size if unit.main else 0, "others": ["/".join(o.parts) for o in unit.others],
                 "title": info.title if info and info.title else unit.key, "year": info.year if info else None,
                 "ids": ids, "nfo": info is not None, "muthur": bool(info and info.muthur), "rating": _shown(info),
                 "imdb": list(info.ratings["imdb"]) if info and "imdb" in info.ratings else None,
-                "poster": unit.folder and os.path.isfile(os.path.join(folder, "poster.jpg")),
+                "poster": bool(unit.folder and unit.main and os.path.isfile(os.path.join(self.film_root, *unit.main.parts[:-1], "poster.jpg"))),
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),
                 "nfoFile": os.path.relpath(unit.nfo, self.film_root).replace(os.sep, "/") if unit.nfo else None,
             })

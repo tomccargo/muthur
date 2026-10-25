@@ -134,7 +134,7 @@ class Health:
             return
         if not f["nfo"]:
             stem = f"Film/{f['file'].rsplit('.', 1)[0]}"
-            fix = {"path": stem + ".nfo", "video": f"Film/{f['file']}", "art": f"Film/{f['key']}/" if f["folder"] else stem + "-"}
+            fix = {"path": stem + ".nfo", "video": f"Film/{f['file']}", "art": f"Film/{f['file'].rsplit('/', 1)[0]}/" if f["folder"] else stem + "-"}  # beside the video, where Kodi looks
             chosen = (self.store.get("library.films") or {}).get(f"Film/{f['file']}")
             if chosen:  # the reader said which film it is
                 fixes["film-nfos"].append({**fix, "tmdb": chosen["tmdbId"], "label": chosen["label"]})

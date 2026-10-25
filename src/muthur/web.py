@@ -651,7 +651,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 raise HTTPException(422, "Not a show folder.")
             return edit(lambda: editor().match_show(folder, int(tmdb_id)))
         f = film_at(path)
-        prefix = f"Film/{f['key']}/" if f["folder"] else path.rsplit(".", 1)[0] + "-"
+        prefix = f"{path.rsplit('/', 1)[0]}/" if f["folder"] else path.rsplit(".", 1)[0] + "-"  # artwork beside the video
         return edit(lambda: editor().match_film(path, f"Film/{f['nfoFile']}" if f.get("nfoFile") else None, prefix, int(tmdb_id)))
 
     @app.post("/api/library/title")

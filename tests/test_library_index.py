@@ -68,3 +68,14 @@ def test_library_api(lib, monkeypatch):
     assert client.get("/api/library/art", params={"path": "TV/Some Show (2021)/poster.jpg"}).content == b"jpg"
     for bad in ("TV/../muthur.db", "TV/Some Show (2021)/Season 01/Some Show (2021) - S01E02 - Two.nfo", "config/x.jpg"):
         assert client.get("/api/library/art", params={"path": bad}).status_code == 404
+
+
+def test_a_film_a_folder_deeper_keeps_its_nfo(tmp_path):
+    from muthur.library import scan_film
+
+    inner = tmp_path / "Film" / "Best In Show (2000)" / "Best in Show (2000)"
+    inner.mkdir(parents=True)
+    (inner / "Best in Show (2000).mp4").write_bytes(b"v" * 10)
+    (inner / "Best in Show (2000).nfo").write_text("<movie><title>Best in Show</title></movie>")
+    [unit] = scan_film(str(tmp_path / "Film"))
+    assert unit.nfo and unit.nfo.endswith("Best in Show (2000).nfo")  # beside the video, not only at the top
