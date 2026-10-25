@@ -23,7 +23,7 @@ from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title
 from .parse import parse_show_folder
 from .scores import ScoreRefresh, with_imdb
-from .text import similarity
+from .text import normalize, similarity
 
 FIXES = ("leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
 
@@ -86,23 +86,33 @@ class Health:
         for e in eps:
             if e not in numbered:
                 manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", "why": "The episode number in the name is damaged or missing."})
+        titles: dict[int, dict[int, str]] = {}
+
+        def season(s: int) -> dict[int, str]:
+            if s not in titles:
+                titles[s] = {x["episode_number"]: x.get("name") for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])}
+            return titles[s]
+
         highest: dict[int, int] = {}
         for e in numbered:
             highest[e["season"]] = max(highest.get(e["season"], 0), max(e["episodes"]))
-        differs = {s for s, top in highest.items() if top > counts.get(s, 0)}
+        # The season's own list is fresher than the show's episode counts, which TMDB caches longer.
+        differs = {s for s, top in highest.items() if top > max(counts.get(s, 0), len(season(s)))}
         for s in sorted(differs):
             manual["seasons"].append({"path": f"TV/{folder}", "season": s,
-                                      "why": f"Your library numbers season {s} up to episode {highest[s]}; TMDB has {counts.get(s, 0)}. "
-                                             "muthur leaves this season's NFOs and scores alone."})
-        titles: dict[int, dict[int, str]] = {}
+                                      "why": f"Your library numbers season {s} up to episode {highest[s]}; TMDB has {len(season(s))}. "
+                                             "Episodes whose name confirms TMDB's title at their number are still fixed; the others are listed."})
         for e in numbered:
             s, n = e["season"], e["episodes"][0]
-            if s in differs or (e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1)):
+            if e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1):
                 continue
-            if s not in titles:
-                titles[s] = {x["episode_number"]: x.get("name") for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])}
             named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
-            if named and titles[s].get(n) and similarity(_bare(named), _bare(titles[s][n])) < OTHER_EPISODE and any(
+            if s in differs and not (named and season(s).get(n) and _same_title(named, season(s)[n])):
+                manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
+                                          "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
+                                                 f"TMDB's S{s:02d}E{n:02d} “{season(s).get(n) or 'nothing'}”."})
+                continue
+            if named and season(s).get(n) and similarity(_bare(named), _bare(titles[s][n])) < OTHER_EPISODE and any(
                     similarity(_bare(named), _bare(t or "")) >= SAME_EPISODE for k, t in titles[s].items() if k != n):
                 manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
                                           "why": f"Named “{named}”, but TMDB’s S{s:02d}E{n:02d} is “{titles[s][n]}”."})
@@ -249,3 +259,10 @@ class Health:
         if new is not None:
             self.scores._rewrite(run, full, text, new)
             nfos.append(x["path"])
+
+
+def _same_title(named: str, tmdb_title: str) -> bool:
+    """The title in a file name is TMDB's: nearly the same, or one contains the other ('The Gamble' in
+    'American Enthusiast: The Gamble')."""
+    a, b = normalize(_bare(named)), normalize(_bare(tmdb_title))
+    return similarity(a, b) >= SAME_EPISODE or (min(len(a), len(b)) >= 4 and (a in b or b in a))

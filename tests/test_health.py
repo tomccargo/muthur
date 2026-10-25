@@ -70,7 +70,8 @@ def env(tmp_path):
     write(s1 / "Some Show - S01E02 - Two.nfo", SONARR_EP)  # no IMDb score: a fix
     write(s1 / "Some Show - S01E03 - Two.mkv")  # named after TMDB's S01E02: a question
     write(s2 / "Some Show - S02E01 - Alpha.mkv")
-    write(s2 / "Some Show - S02E05 - Extra.mkv")  # season 2 goes beyond TMDB's 2: a question for the season
+    write(s2 / "Some Show - S02E02 - Beta.mkv")  # in a season numbered differently, but its title confirms it: a fix
+    write(s2 / "Some Show - S02E05 - Extra.mkv")  # season 2 goes beyond TMDB's 2: a question for this episode
     write(s1 / "Some.Show.S10E-1.mkv")  # damaged number: a question
     write(s1 / "Downloaded from site.txt")  # junk: a fix
     write(film / "Empty (2001)" / "poster.jpg")  # no video: a fix
@@ -93,13 +94,15 @@ def test_problems_sorted_into_fixes_and_questions(env):
     paths = {k: sorted(x["path"].rsplit("/", 1)[-1] for x in v) for k, v in plan["fixes"].items()}
     assert paths["leftovers"] == ["Downloaded from site.txt"]
     assert paths["empty-films"] == ["Empty (2001)"]
-    assert paths["episode-nfos"] == ["Other Show - S01E01 - One.nfo", "Some Show - S01E01 - One.nfo"]
+    assert paths["episode-nfos"] == ["Other Show - S01E01 - One.nfo", "Some Show - S01E01 - One.nfo", "Some Show - S02E01 - Alpha.nfo",
+                                     "Some Show - S02E02 - Beta.nfo"]
     assert paths["imdb-scores"] == ["Solaris (1972).nfo", "Some Show - S01E02 - Two.nfo", "tvshow.nfo"]
     assert paths["show-nfos"] == ["tvshow.nfo"]
     assert paths["film-nfos"] == ["Unknown.Film.nfo"]
     m = plan["manual"]
     assert [x["season"] for x in m["seasons"]] == [2]
-    assert sorted(x["path"].rsplit("/", 1)[-1] for x in m["numbers"]) == ["Some Show - S01E03 - Two.mkv", "Some.Show.S10E-1.mkv"]
+    assert sorted(x["path"].rsplit("/", 1)[-1] for x in m["numbers"]) == [
+        "Some Show - S01E03 - Two.mkv", "Some Show - S02E05 - Extra.mkv", "Some.Show.S10E-1.mkv"]
     assert [x["path"] for x in m["films"]] == ["Film/Mystery/Mystery.mkv"] and "isn't certain" in m["films"][0]["why"]
 
 
@@ -107,7 +110,7 @@ def test_fixes_apply_and_can_be_put_back(env):
     tmp, health, plan = env
     before = {p: p.read_bytes() for p in tmp.rglob("*") if p.is_file() and "TV" in p.parts or "Film" in p.parts and p.is_file()}
     result = health.apply(plan, ["leftovers", "empty-films", "episode-nfos", "imdb-scores", "film-nfos", "show-nfos"])
-    assert result["failed"] == [] and result["done"] == {"leftovers": 1, "empty-films": 1, "episode-nfos": 2, "imdb-scores": 3,
+    assert result["failed"] == [] and result["done"] == {"leftovers": 1, "empty-films": 1, "episode-nfos": 4, "imdb-scores": 3,
                                                          "film-nfos": 1, "show-nfos": 1}
     assert ET.parse(tmp / "Film" / "Unknown Film" / "Unknown.Film.nfo").getroot().findtext("title") == "Unknown Film"
     assert (tmp / "Film" / "Unknown Film" / "poster.jpg").exists() and (tmp / "TV" / "Other Show (2019)" / "tvshow.nfo").exists()
