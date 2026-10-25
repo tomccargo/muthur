@@ -171,7 +171,8 @@ No other variants. A disabled button that has a standing reason is `aria-disable
 | :--- | :--- |
 | `.dot-success` | Ready to apply, moved, Kodi connected, watched status backed up |
 | `.dot-warning` | Needs review, dry run is on, job running, score refresh overdue |
-| `.dot-danger` | Failed, video file missing, Kodi unreachable, watched-status backup paused by the mass-change guard |
+| `.dot-danger` | Failed, video file missing, Kodi unreachable, watched-status backup paused by the mass-change guard, **Suspicious** (a program or disc image named like an episode or film) |
+| `.dot-warning` (also) | **Packed**: a download inside an archive, which muthur doesn't unpack |
 | `.dot-neutral` | Ignored (not video), skipped, no ground truth |
 | `.dot-info` | A notice; prefer neutral |
 

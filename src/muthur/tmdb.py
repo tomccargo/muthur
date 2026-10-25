@@ -76,5 +76,8 @@ class Tmdb:
     def movie(self, movie_id: int) -> dict:
         return self.get(f"/movie/{movie_id}", append_to_response="external_ids,alternative_titles")
 
+    def tv_season(self, tv_id: int, season: int) -> dict:
+        return self.get(f"/tv/{tv_id}/season/{season}")
+
     def find(self, external_id: str, source: str) -> dict:
         return self.get(f"/find/{external_id}", external_source=source)

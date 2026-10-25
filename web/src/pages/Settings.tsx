@@ -1,0 +1,118 @@
+import { useEffect, useState } from 'react';
+import { api, type KodiState, type Settings } from '../api';
+import type { StatusHook } from '../App';
+import { Dot, Footer } from '../components';
+import { ALL_LANGUAGES, language } from '../labels';
+
+type Draft = { host: string; port: string; user: string; password: string; token: string; keepOriginal: string[] };
+
+function toDraft(s: Settings): Draft {
+  return { host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal };
+}
+
+export function SettingsPage({ refresh }: StatusHook) {
+  const [saved, setSaved] = useState<Settings | null>(null);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [dirty, setDirty] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'error' | 'note'; text: string } | null>(null);
+  const [kodi, setKodi] = useState<KodiState | null>(null);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    api.settings().then((s) => { setSaved(s); setDraft(toDraft(s)); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+  }, []);
+
+  if (!draft || !saved) {
+    return <div className="page">{message && <div className="banner banner-error" role="alert">{message.text}</div>}</div>;
+  }
+
+  const edit = (patch: Partial<Draft>) => { setDraft({ ...draft, ...patch }); setDirty(true); setMessage(null); };
+  const toggle = (code: string) => edit({ keepOriginal: draft.keepOriginal.includes(code) ? draft.keepOriginal.filter((c) => c !== code) : [...draft.keepOriginal, code] });
+
+  const save = () => {
+    const body: Record<string, unknown> = {
+      kodi: { host: draft.host, port: draft.port, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
+      titles: { keepOriginal: draft.keepOriginal },
+      ...(draft.token ? { tmdb: { token: draft.token } } : {}),
+    };
+    api.saveSettings(body)
+      .then((s) => { setSaved(s); setDraft(toDraft(s)); setDirty(false); refresh(); })
+      .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+  };
+
+  const test = () => {
+    setTesting(true);
+    setKodi(null);
+    const go = dirty ? api.saveSettings({ kodi: { host: draft.host, port: draft.port, user: draft.user, ...(draft.password ? { password: draft.password } : {}) } }) : Promise.resolve(saved);
+    go.then(() => api.testKodi()).then(setKodi).catch((e: Error) => setKodi({ connected: false, problem: e.message })).finally(() => setTesting(false));
+  };
+
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <p className="eyebrow">Settings</p>
+          <h1>How muthur works</h1>
+        </div>
+        <div className="actions">
+          {dirty && <span className="status small muted"><Dot kind="dot-warning" />Unsaved changes</span>}
+          <button className="btn btn-primary" type="button" onClick={save} disabled={!dirty}>Save</button>
+        </div>
+      </header>
+      {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
+
+      <section className="panel form" aria-labelledby="tmdb-h">
+        <h2 id="tmdb-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>TMDB</h2>
+        <p className="hint">muthur looks titles up on TMDB. A personal token is free: on themoviedb.org go to Settings, then API, and copy the “API Read Access Token”.</p>
+        <span className="status small">{saved.tmdb.tokenSet ? <><Dot kind="dot-success" />A token is saved</> : <><Dot kind="dot-danger" />No token yet</>}</span>
+        <label className="field-label">{saved.tmdb.tokenSet ? 'Replace the token' : 'Token'}
+          <input className="field" type="password" autoComplete="off" value={draft.token} onChange={(e) => edit({ token: e.target.value })} />
+        </label>
+      </section>
+
+      <section className="panel form" aria-labelledby="kodi-h">
+        <h2 id="kodi-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Kodi on the Shield</h2>
+        <p className="hint">In Kodi: Settings, Services, Control, then turn on “Allow remote control via HTTP” and set a username and password.</p>
+        <label className="field-label">The Shield’s address
+          <input className="field" type="text" placeholder="for example 192.168.1.20" value={draft.host} onChange={(e) => edit({ host: e.target.value })} />
+        </label>
+        <div className="pair">
+          <label className="field-label">Port<input className="field" type="text" inputMode="numeric" value={draft.port} onChange={(e) => edit({ port: e.target.value })} /></label>
+          <label className="field-label">Username<input className="field" type="text" autoComplete="off" value={draft.user} onChange={(e) => edit({ user: e.target.value })} /></label>
+        </div>
+        <label className="field-label">{saved.kodi.passwordSet ? 'Password (saved; type to replace it)' : 'Password'}
+          <input className="field" type="password" autoComplete="off" value={draft.password} onChange={(e) => edit({ password: e.target.value })} />
+        </label>
+        <div className="actions">
+          <button className="btn btn-secondary btn-sm" type="button" onClick={test} disabled={testing || !draft.host}>{testing ? 'Testing…' : 'Test the connection'}</button>
+          {kodi && (kodi.connected
+            ? <span className="status small"><Dot kind="dot-success" />Connected · Kodi {kodi.version}</span>
+            : <span className="status small"><Dot kind="dot-danger" />{kodi.problem}</span>)}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="titles-h">
+        <h2 id="titles-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Which films keep their original title?</h2>
+        <p className="hint">Plots and genres are always in English. A language that’s on keeps the original title (Aguirre, der Zorn Gottes); one that’s off gets the English title (Spirited Away).</p>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {ALL_LANGUAGES.map((code) => (
+            <button key={code} type="button" className="chip" aria-pressed={draft.keepOriginal.includes(code)} onClick={() => toggle(code)}>
+              {language(code)}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="dirs-h">
+        <h2 id="dirs-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Folders</h2>
+        <p className="hint">Set when muthur was installed on the NAS.</p>
+        <ul className="rows">
+          <li><span>Finished downloads</span><span className="mono small">{saved.paths.downloads}</span></li>
+          <li><span>TV</span><span className="mono small">{saved.paths.tv}</span></li>
+          <li><span>Film</span><span className="mono small">{saved.paths.film}</span></li>
+        </ul>
+      </section>
+      <Footer />
+    </div>
+  );
+}

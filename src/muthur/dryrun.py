@@ -10,8 +10,6 @@ import csv
 import hashlib
 import json
 import os
-import shutil
-import subprocess
 import time
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
@@ -19,6 +17,7 @@ from dataclasses import asdict, dataclass, field
 
 from . import library
 from .identify import Match, identify_movie, identify_show
+from .media import probe_duration
 from .nfo import read_nfo
 from .parse import parse_episode, parse_movie, parse_show_folder
 
@@ -34,6 +33,8 @@ class Row:
     status: str  # auto | review | none | skipped
     verdict: str  # see verdict()
     best: str = ""
+    best_title: str = ""
+    best_year: int | None = None
     best_ids: dict = field(default_factory=dict)
     truth_ids: dict = field(default_factory=dict)
     truth_title: str | None = None
@@ -88,9 +89,10 @@ def _cached_scan(kind: str, root: str, cache_dir: str, rescan: bool):
     return data
 
 
-def run_show(tmdb, show: library.ShowDir) -> tuple[Row, list]:
+def run_show(tmdb, show: library.ShowDir, parse=None) -> tuple[Row, list]:
+    """parse: optional cached parser (Store.parsed); defaults to parsing directly."""
     folder = parse_show_folder(show.name)
-    eps = [parse_episode(v.parts) for v in show.videos]
+    eps = [parse("episode", v.parts) if parse else parse_episode(v.parts) for v in show.videos]
     usable = [e for e in eps if not e.blocked and not e.sample and not e.extra]
     sample = {(e.season, n) for e in usable if e.season for n in e.episodes}
     absolute = max((e.absolute for e in usable if e.absolute), default=None)
@@ -106,18 +108,6 @@ def run_show(tmdb, show: library.ShowDir) -> tuple[Row, list]:
     m = identify_show(tmdb, folder.title or show.name, folder.year, folder.country, sample, absolute)
     _fill(row, m)
     return row, eps
-
-
-def probe_duration(path: str | None) -> int | None:
-    """Duration in seconds from the file header via ffprobe (reads only the start of the file)."""
-    if not path or not shutil.which("ffprobe"):
-        return None
-    try:
-        out = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
-                             capture_output=True, text=True, timeout=60).stdout.strip()
-        return int(float(out)) if out else None
-    except (subprocess.SubprocessError, ValueError):
-        return None
 
 
 def run_movie(tmdb, unit: library.MovieUnit, film_root: str | None = None) -> Row:
@@ -144,6 +134,7 @@ def _fill(row: Row, m: Match) -> None:
     row.verdict = verdict(row.truth_ids, m)
     if m.best:
         row.best = f"{m.best.title} ({m.best.year})"
+        row.best_title, row.best_year = m.best.title, m.best.year
         row.best_ids = _ids(m.best)
     row.candidates = [f"{c.title} ({c.year}) {c.score:.2f} " + " ".join(f"{k}={v:.2f}" for k, v in c.signals.items() if v is not None)
                       for c in m.candidates[:4]]

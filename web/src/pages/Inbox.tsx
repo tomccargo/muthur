@@ -1,0 +1,133 @@
+import { useEffect, useMemo, useState } from 'react';
+import { api, type Inbox, type Item, type ItemStatus } from '../api';
+import type { StatusHook } from '../App';
+import { Dot, Footer, JobProgress } from '../components';
+import { SIGNALS, STATUS, middle, size, splitId, when } from '../labels';
+import { navigate, useLocation } from '../nav';
+
+const FILTERS: [ItemStatus | 'all', string][] = [['all', 'All'], ['ready', 'Ready'], ['review', 'Needs you'], ['suspicious', 'Suspicious'], ['packed', 'Packed'], ['waiting', 'Still downloading'], ['ignored', 'Ignored']];
+
+function Detail({ item }: { item: Item }) {
+  const s = STATUS[item.status] ?? { label: item.status, dot: '' };
+  const placed = item.files.filter((f) => f.target);
+  return (
+    <aside className="panel narrow" aria-label="What would happen" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <div>
+        <p className="eyebrow">{s.label}</p>
+        <h2 style={{ margin: '2px 0 0', fontSize: '1.3rem', fontWeight: 650, overflowWrap: 'anywhere' }}>{item.title ? `${item.title}${item.year ? ` (${item.year})` : ''}` : splitId(item.id).name}</h2>
+        <p className="hint" style={{ marginTop: 4 }}>{item.reason}</p>
+      </div>
+      {placed.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {placed.map((f) => (
+            <div key={f.source} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="mono small muted" style={{ wordBreak: 'break-all' }}>{f.source}</span>
+              <span className="mono small" style={{ wordBreak: 'break-all', color: 'var(--accent-text)' }}>→ {f.library}/{f.target}</span>
+              {f.writes.length > 0 && <span className="small muted">Written next to it: {f.writes.join(', ')}</span>}
+            </div>
+          ))}
+        </div>
+      )}
+      {item.notes.map((n) => <p key={n} className="hint">{n}</p>)}
+      {item.status === 'review' && item.candidates.length > 0 && (
+        <div>
+          <h3 style={{ margin: '0 0 6px', fontSize: '1rem', fontWeight: 650 }}>What it could be</h3>
+          <ul className="rows">
+            {item.candidates.map((c) => (
+              <li key={c.tmdbId} style={{ flexDirection: 'column', alignItems: 'flex-start' }}>
+                <span><strong>{c.title}</strong>{c.year ? ` (${c.year})` : ''}{c.originalTitle && c.originalTitle !== c.title ? <span className="muted"> · {c.originalTitle}</span> : null}</span>
+                <span className="small muted">
+                  {Object.entries(c.signals).filter(([k]) => k !== 'popularity').map(([k, v]) => `${SIGNALS[k] ?? k} ${Math.round(v * 100)}%`).join(' · ')}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="hint" style={{ marginTop: 8 }}>Choosing the right one comes with the Review page, in the next version.</p>
+        </div>
+      )}
+      <span className="small muted">{size(item.size)}</span>
+    </aside>
+  );
+}
+
+export function InboxPage({ status, refresh }: StatusHook) {
+  const { search } = useLocation();
+  const filter = (new URLSearchParams(search).get('show') ?? 'all') as ItemStatus | 'all';
+  const [data, setData] = useState<Inbox | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+  const running = Boolean(status?.job?.running);
+
+  useEffect(() => {
+    api.inbox().then(setData).catch((e: Error) => setMessage(e.message));
+  }, [status?.inbox.scannedAt, running]);
+
+  const items = useMemo(() => (data?.items ?? []).filter((i) => filter === 'all' || i.status === filter), [data, filter]);
+  const current = items.find((i) => i.id === selected) ?? items[0] ?? null;
+  const count = (k: ItemStatus | 'all') => (k === 'all' ? data?.items.length : data?.items.filter((i) => i.status === k).length) ?? 0;
+
+  const scan = () => {
+    setMessage(null);
+    api.scan().then(refresh).catch((e: Error) => setMessage(e.message));
+  };
+
+  return (
+    <div className="page">
+      <header className="page-head">
+        <div>
+          <p className="eyebrow">Finished downloads</p>
+          <h1>Inbox</h1>
+          <p className="lede">
+            {status && <><span className="mono small">{status.paths.downloads.path}</span> · </>}checked {when(data?.scannedAt ?? null)}
+          </p>
+        </div>
+        <div className="actions">
+          <button className="btn btn-primary" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check downloads</button>
+        </div>
+      </header>
+
+      {message && <div className="banner banner-error" role="alert">{message}</div>}
+      <JobProgress job={status?.job} />
+
+      <div className="seg filters" role="group" aria-label="Show">
+        {FILTERS.map(([k, label]) => (
+          <button key={k} type="button" aria-pressed={filter === k} onClick={() => navigate(k === 'all' ? '/inbox' : `/inbox?show=${k}`)}>
+            {label} <span className="num muted">{count(k)}</span>
+          </button>
+        ))}
+      </div>
+
+      {data && data.items.length === 0 && !running ? (
+        <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
+          <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>{data.scannedAt ? 'Nothing waiting' : 'Not checked yet'}</h2>
+          <p className="hint">{data.scannedAt ? 'The downloads folder has nothing finished in it.' : 'Check the downloads to see what is there and where it would go.'}</p>
+        </section>
+      ) : (
+        <div className="split">
+          <section className="panel wide" aria-label="Downloads" style={{ padding: '10px 14px' }}>
+            <div className="list-head"><span>Download</span><span>Would become</span><span>Status</span></div>
+            {items.map((i) => {
+              const s = STATUS[i.status] ?? { label: i.status, dot: '' };
+              return (
+                <button key={i.id} type="button" className="list-row" aria-pressed={current?.id === i.id} onClick={() => setSelected(i.id)}>
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }} title={i.id}>
+                    <span className="mono small">{middle(splitId(i.id).name, 46)}</span>
+                    {splitId(i.id).folder && <span className="small muted">in {splitId(i.id).folder}</span>}
+                  </span>
+                  <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                    {i.title && <span className="ellipsis" style={{ fontWeight: 600 }}>{i.title}{i.year ? ` (${i.year})` : ''}</span>}
+                    <span className={i.title ? 'small muted ellipsis' : 'small ellipsis'}>{i.reason}</span>
+                  </span>
+                  <span className="status small"><Dot kind={s.dot} />{s.label}</span>
+                </button>
+              );
+            })}
+            {items.length === 0 && <p className="hint" style={{ padding: 12 }}>Nothing in this group.</p>}
+          </section>
+          {current && <Detail item={current} />}
+        </div>
+      )}
+      <Footer />
+    </div>
+  );
+}

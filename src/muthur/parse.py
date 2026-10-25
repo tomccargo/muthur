@@ -13,6 +13,9 @@ from datetime import date
 
 from guessit import guessit
 
+# Bump when parsing rules change: cached results from an older version are parsed again.
+PARSER_VERSION = 5
+
 VIDEO_EXTS = {".mkv", ".mp4", ".avi", ".m4v", ".ts", ".m2ts", ".wmv", ".mov", ".mpg", ".mpeg", ".webm", ".iso", ".divx", ".ogm"}
 
 SITE_PREFIX = re.compile(r"(?i)^\s*(?:www\.)?[\w-]+\.(?:org|com|net|to|re|io|tv|me|cc|ws|xyz|se|li|ch)\s+-\s+")
@@ -81,6 +84,19 @@ def _quality(g: dict) -> dict:
     return q
 
 
+def _text(v) -> str | None:
+    """guessit returns a list when it finds more than one candidate; the first is its best guess."""
+    if isinstance(v, list):
+        v = v[0] if v else None
+    return str(v) if v is not None else None
+
+
+def _int(v) -> int | None:
+    if isinstance(v, list):
+        v = v[0] if v else None
+    return v if isinstance(v, int) else None
+
+
 def _country(g: dict) -> str | None:
     c = g.get("country")
     return getattr(c, "alpha2", None) if c is not None else None
@@ -125,10 +141,13 @@ def parse_episode(parts: list[str]) -> Parsed:
             folder_season = 0
 
     g = guessit("/".join([*dirs, fname]), {"type": "episode"})
-    p.title = g.get("title")
-    p.year = g.get("year")
+    p.title = _text(g.get("title"))
+    p.year = _int(g.get("year"))
     p.country = _country(g)
     p.quality = _quality(g)
+    if p.title and (m := COUNTRY_SUFFIX.search(p.title)):  # 'Ghosts US' is Ghosts, from the US
+        code = m.group(1) or m.group(2)
+        p.title, p.country = p.title[: m.start()].strip(), p.country or COUNTRY_CODES.get(code, code)
 
     if BROKEN_EPISODE.search(fname):
         p.flags.append("broken-episode-number")
@@ -212,8 +231,8 @@ def parse_movie(parts: list[str]) -> Parsed:
     g = gd if gd.get("year") and not gf.get("year") else gf
     if dirs and gd.get("year") and gf.get("year") and gd.get("year") != gf.get("year"):
         p.flags.append("year-conflict")
-    p.title = g.get("title") or gd.get("title")
-    p.year = g.get("year") or gd.get("year")
+    p.title = _text(g.get("title")) or _text(gd.get("title"))
+    p.year = _int(g.get("year")) or _int(gd.get("year"))
     # Curated "Title (Year)" names are exact; guessit trims words such as "Part II" or "Limited".
     stem = fname.rsplit(".", 1)[0]
     exact = (_curated(dirs[0]) if dirs else None) or _curated(stem)

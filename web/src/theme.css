@@ -1,0 +1,113 @@
+/* Design tokens (DESIGN.md §2). The token blocks below are the only place a colour literal may appear.
+   Dark is the default; light applies when the system asks for it, or when the viewer pins it (§5). */
+
+:root {
+  color-scheme: dark;
+  --bg: #0e1210;
+  --surface: #161b18;
+  --surface-muted: #1f2622;
+  --surface-raised: #1b211e;
+  --border: #2b342f;
+  --border-strong: #3b463f;
+  --text: #ecf1ed;
+  --muted: #a1ada5;
+  --faint: #6f7b74;
+  --accent: #f0a95b;
+  --accent-hover: #f6bd7e;
+  --accent-ink: #2a1606;
+  --accent-text: #f4b872;
+  --accent-soft: #2c2318;
+  --accent-strong: #f8cd98;
+  --focus: #8ab4ff;
+  --good: #5fd38d;
+  --warn-bg: #33290f;
+  --warn-text: #f5d58e;
+  --danger-bg: #3b1c18;
+  --danger-text: #ffb3a7;
+  --mark: #f0a95b;
+  --track: #262e2a;
+  --poster-bg: #0a0c0b;
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.28);
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --rail-w: 236px;
+  --font-body: 'Figtree Variable', ui-sans-serif, system-ui, 'Segoe UI', sans-serif;
+  --font-display: 'Bricolage Grotesque Variable', 'Figtree Variable', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']) {
+    color-scheme: light;
+    --bg: #dde2df;
+    --surface: #ffffff;
+    --surface-muted: #e2e7e4;
+    --surface-raised: #ffffff;
+    --border: #b4beb8;
+    --border-strong: #84908a;
+    --text: #131a16;
+    --muted: #535f58;
+    --faint: #8f9a94;
+    --accent: #eb9a3f;
+    --accent-hover: #e08a2a;
+    --accent-text: #94490a;
+    --accent-soft: #fbe1c2;
+    --accent-strong: #6b3404;
+    --focus: #1a5fd0;
+    --good: #1a7f45;
+    --warn-bg: #fff3d4;
+    --warn-text: #5c4400;
+    --danger-bg: #fdecec;
+    --danger-text: #8a1c1c;
+    --mark: #b85f0b;
+    --track: #c9d1cc;
+    --poster-bg: #1a1f1c;
+    --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
+  }
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #dde2df;
+  --surface: #ffffff;
+  --surface-muted: #e2e7e4;
+  --surface-raised: #ffffff;
+  --border: #b4beb8;
+  --border-strong: #84908a;
+  --text: #131a16;
+  --muted: #535f58;
+  --faint: #8f9a94;
+  --accent: #eb9a3f;
+  --accent-hover: #e08a2a;
+  --accent-text: #94490a;
+  --accent-soft: #fbe1c2;
+  --accent-strong: #6b3404;
+  --focus: #1a5fd0;
+  --good: #1a7f45;
+  --warn-bg: #fff3d4;
+  --warn-text: #5c4400;
+  --danger-bg: #fdecec;
+  --danger-text: #8a1c1c;
+  --mark: #b85f0b;
+  --track: #c9d1cc;
+  --poster-bg: #1a1f1c;
+  --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
+}
+
+/* ---- Base ---------------------------------------------------------------- */
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-body); font-size: 15px; line-height: 1.5; background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { font-family: var(--font-display); letter-spacing: -0.01em; text-wrap: balance; }
+a { color: var(--accent-text); }
+:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; border-radius: 4px; }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+.small { font-size: 13px; }
+.num { font-variant-numeric: tabular-nums; }
+.visually-hidden { position: absolute !important; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+
+/* Motion (DESIGN.md §6): hover feedback and bars only; nothing when the system asks for reduced motion. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; scroll-behavior: auto !important; }
+}

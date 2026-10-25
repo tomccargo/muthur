@@ -2,7 +2,7 @@
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: 2026-10-24. Milestone 1 (read-only dry run) is done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
+Status: 2026-10-25. Milestone 1 (read-only dry run) and milestone 2 (container, web UI, read-only inbox) are done. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
@@ -53,6 +53,17 @@ One container, one process, one SQLite file.
 ```
 
 **Why this stack:** Python has the best filename parser ([guessit](https://pypi.org/project/guessit/), actively maintained, 4.4.0 released July 2026) and simple TMDB/XML handling. React gives the rich UI you asked for (drag and drop, inline editing, keyboard review). SQLite needs no extra database container. A multi-stage Dockerfile builds the frontend and ships one image.
+
+### Resource guardrails (DS918+: Celeron J3455, 4 GB)
+
+Measured on 2026-10-25: the whole backend (Python, FastAPI, uvicorn, guessit, muthur) uses **about 72 MB** after parsing 4,919 episode names. guessit takes ~15 ms per name on a Ryzen 7 3700X (PassMark single-thread 2,655), so about **50 ms on the J3455** (812, about 3.3× slower). That is ~1 s for a day's downloads and ~4 min for a full library check.
+
+- **Memory cap:** the container runs with `mem_limit: 256m`, so it can never squeeze DSM, Download Station or SMB.
+- **CPU:** `cpu_shares` lower than the default, and long jobs (library check, ID-memory import, score refresh) run in a thread at nice 10. Interactive requests stay at normal priority.
+- **Parse once:** every parsed name is cached in SQLite, keyed by the name and the parser version. A full library check is slow only the first time and after a parser update.
+- **One process, one worker.** No worker pool, no in-memory copy of the library; lists are paged from SQLite.
+
+Rewriting the backend in Go would use less memory but would lose guessit, the most accurate parser available. That isn't worth it at these numbers.
 
 ### Volumes — one mount, on purpose
 ```yaml
@@ -308,7 +319,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 ## 15. Milestones
 
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
-2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only).
+2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Review + Apply + journal/undo + NFO/artwork writer**, then phase 1 on the leftover downloads.
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).**
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.

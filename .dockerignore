@@ -1,0 +1,11 @@
+.git
+.venv
+.env
+.cache
+local
+reports
+web/node_modules
+web/dist
+**/__pycache__
+*.egg-info
+.pytest_cache

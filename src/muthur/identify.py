@@ -33,6 +33,7 @@ class Candidate:
     score: float = 0.0
     imdb_id: str | None = None
     tvdb_id: str | None = None
+    language: str | None = None  # original language (ISO 639-1)
     titles: list[str] = field(default_factory=list)
 
 
@@ -152,6 +153,7 @@ def identify_show(source, title: str, year: int | None = None, country: str | No
                       _year(d.get("first_air_date") or r.get("first_air_date")))
         ext = d.get("external_ids") or {}
         c.imdb_id, c.tvdb_id = ext.get("imdb_id"), (str(ext["tvdb_id"]) if ext.get("tvdb_id") else None)
+        c.language = d.get("original_language") or r.get("original_language")
         alternative = _alt_titles(d, "results")
         c.titles = [c.title, c.original_title, *alternative]
         c.signals["title"] = _title_signal(title, [c.title, c.original_title], alternative)
@@ -185,6 +187,7 @@ def identify_movie(source, title: str | list[str], year: int | None = None, dura
     cands, popularity = [], {}
     for i, r in enumerate(results[:MAX_CANDIDATES * len(queries)]):
         c = Candidate(r["id"], r.get("title", ""), r.get("original_title", ""), _year(r.get("release_date")))
+        c.language = r.get("original_language")
         main = [c.title, c.original_title]
         alternative, runtime = [], None
         if i < 3 or max(best_similarity(q, main) for q in queries) >= 0.9:

@@ -1,0 +1,27 @@
+# muthur on a Synology NAS (Container Manager → Project, or `docker compose up -d` over SSH).
+# Copy .env.example next to this file as .env and fill it in; see docs/DEPLOY.md.
+
+services:
+  muthur:
+    build: .
+    image: muthur:local
+    container_name: muthur
+    restart: unless-stopped
+    # The DSM user muthur acts as: owns /config, may read (later: write) the media share.
+    user: "${PUID:-1026}:${PGID:-100}"
+    ports:
+      - "${MUTHUR_PORT:-8580}:8580"
+    environment:
+      TZ: ${TZ:-Europe/Brussels}
+      MUTHUR_DOWNLOADS: /data/torrent-output/complete
+      MUTHUR_TV: /data/TV
+      MUTHUR_FILM: /data/Film
+      TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
+    volumes:
+      # One mount for downloads, TV and Film, so later moves are instant renames (ARCHITECTURE.md §3).
+      # Read-only while muthur only plans (milestone 2): it cannot change the library even by mistake.
+      - ${MEDIA_SHARE:-/volume1/Iedereen}:/data:ro
+      - ${CONFIG_DIR:-/volume1/docker/muthur/config}:/config
+    # Guardrails for a 4 GB DS918+ (ARCHITECTURE.md §3).
+    mem_limit: 256m
+    cpu_shares: 512

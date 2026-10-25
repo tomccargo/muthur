@@ -4,7 +4,7 @@ Sorts finished downloads into a Kodi library and writes Kodi-native `.nfo` files
 
 It's built for a Synology NAS running Container Manager, with Kodi reading the library over SMB, but nothing in it is Synology-specific apart from the Download Station integration.
 
-**Status:** early. Milestone 1 is a **read-only** command-line dry run. It parses and identifies an existing library and reports how its matches compare with the IDs already in the library's NFO files. It never writes to the library.
+**Status:** version 0.2, which **only plans**. It runs as a container with a web UI: it checks the downloads folder and shows what each download is and where it would go, flags programs disguised as episodes, and learns the shows already in the library. It never moves or writes a media file yet; the media share is mounted read-only. There is also a command-line dry run that compares muthur's matches with the IDs in an existing library's NFO files.
 
 ## What it will do
 - Identify movies and episodes from file and folder names (via [guessit](https://github.com/guessit-io/guessit) plus its own rules), using TMDB.
@@ -15,7 +15,18 @@ It's built for a Synology NAS running Container Manager, with Kodi reading the l
 
 The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the look and UI rules in [DESIGN.md](DESIGN.md).
 
-## Milestone 1: dry run
+## Running it
+
+On a Synology NAS: see [docs/DEPLOY.md](docs/DEPLOY.md). Locally, for development:
+
+```bash
+python -m venv .venv
+.venv/Scripts/pip install -e ".[dev]"           # Windows; use .venv/bin/pip elsewhere
+cd web && npm ci && npm run build && cd ..
+.venv/Scripts/python scripts/dev.py              # http://127.0.0.1:8580, settings from .env
+```
+
+## Command-line dry run
 
 ```bash
 python -m venv .venv

@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="dark light">
+    <title>muthur</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <script>
+      // Apply a pinned theme before the stylesheet paints, so there is no flash (DESIGN.md §5).
+      try {
+        var t = localStorage.getItem('muthur.theme');
+        if (t === 'dark' || t === 'light') document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
