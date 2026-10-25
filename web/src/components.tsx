@@ -1,4 +1,5 @@
 // Small pieces shared by the pages.
+import type { ReactNode } from 'react';
 import type { Job } from './api';
 import { JOBS } from './labels';
 
@@ -17,7 +18,9 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
           <span>{label}…</span>
           <span className="muted num">{job.total ? `${job.done} of ${job.total}` : 'starting'}</span>
         </div>
-        <div className="track" aria-hidden="true"><span className="fill" style={{ width: `${pct}%` }} /></div>
+        <div className="bulb-strip" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} aria-label={label}>
+          {Array.from({ length: 24 }, (_, i) => <i key={i} className={i < Math.round((pct / 100) * 24) ? 'on' : ''} />)}
+        </div>
       </div>
     );
   }
@@ -25,6 +28,22 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
     return <div className="banner banner-error" role="alert">{label} stopped with a problem: {job.error}</div>;
   }
   return null;
+}
+
+// Mother's room (DESIGN.md §11): where muthur speaks. One light per item (lit = present), working only while a job runs.
+export function MotherConsole({ lights, lit, busy = false, label = 'muthur', children }: {
+  lights: number; lit: number; busy?: boolean; label?: string; children: ReactNode;
+}) {
+  return (
+    <section className="mother" aria-label={label}>
+      {[0, 1].map((side) => (
+        <div key={side} className={`mother-lights${busy ? ' busy' : ''}${side ? ' right' : ''}`} aria-hidden="true">
+          {Array.from({ length: lights / 2 }, (_, i) => <i key={i} className={side * (lights / 2) + i < lit ? 'on' : ''} />)}
+        </div>
+      ))}
+      <div className="crt">{children}</div>
+    </section>
+  );
 }
 
 export function Footer() {

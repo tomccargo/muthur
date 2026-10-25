@@ -95,6 +95,7 @@ export function App() {
           <span className="brand-mark" aria-hidden="true" />
           <span><span className="brand-name">MU/TH/UR</span><br /><span className="brand-sub">muthur · nostromo</span></span>
         </Link>
+        <div className="grille" aria-hidden="true" />
         <div className="rail-nav">
           {SECTIONS.map((s) => (
             <Link key={s.to} to={s.to} className="rail-link" aria-current={current.to === s.to ? 'page' : undefined}>

@@ -160,3 +160,76 @@ a.tile:hover { background: var(--surface-muted); }
 /* ---- Progress ------------------------------------------------------------------ */
 .track { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .fill { display: block; height: 100%; border-radius: 3px; background: var(--mark); transition: width 0.3s ease; }
+
+/* ---- The Nostromo's materials (DESIGN.md §11) --------------------------------------------
+   Same layout, same words; only the material changes: padded corridor panels, keys you press,
+   bulbs that light, the lit grille and Mother's red lamp, and Mother's own room where she speaks. */
+.panel, .tile { box-shadow: var(--pad-shadow); }
+.eyebrow, .plate { font-family: var(--font-plate); font-weight: 600; letter-spacing: 0.16em; }
+.plate { font-size: 12px; text-transform: uppercase; color: var(--muted); }
+
+/* Keys: red for the one thing the view is for, grey for the rest (the keyboards' function and letter keys). */
+.btn-primary, .btn-secondary, .btn-danger {
+  border: 0; border-radius: 8px; font-family: var(--font-plate); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase;
+  font-size: 15px; transition: background 0.15s, transform 0.08s, box-shadow 0.08s;
+}
+.btn-sm.btn-primary, .btn-sm.btn-secondary, .btn-sm.btn-danger { font-size: 13.5px; }
+.btn-primary { background: var(--key-red); color: var(--key-red-ink); box-shadow: inset 0 2px 0 var(--key-hi), inset 0 -3px 0 var(--key-lo), 0 3px 0 var(--key-red-edge); }
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) { background: var(--key-red-hover); }
+.btn-secondary { background: var(--key-grey); color: var(--key-grey-ink); box-shadow: inset 0 2px 0 var(--key-hi), inset 0 -3px 0 var(--key-lo), 0 3px 0 var(--key-grey-edge); }
+.btn-secondary:hover:not(:disabled) { background: var(--key-grey-hover); }
+.btn-danger { background: var(--danger-red); color: var(--key-red-ink); box-shadow: inset 0 2px 0 var(--key-hi), inset 0 -3px 0 var(--key-lo), 0 3px 0 var(--key-red-edge); }
+.btn-primary:active:not(:disabled), .btn-secondary:active:not(:disabled), .btn-danger:active:not(:disabled) {
+  transform: translateY(2px); box-shadow: inset 0 2px 0 var(--key-hi), inset 0 -2px 0 var(--key-lo), 0 1px 0 var(--key-grey-edge);
+}
+.btn-danger-outline { border-radius: 8px; font-family: var(--font-plate); font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--danger-red); border-color: var(--danger-red); }
+
+/* Bulbs instead of flat dots: lit glass with a highlight, unlit glass when neutral. */
+.dot { width: 10px; height: 10px; background: radial-gradient(circle at 35% 30%, var(--faint), var(--bulb-off) 60%); box-shadow: inset 0 -1px 2px var(--bulb-lo); }
+.dot-success { background: radial-gradient(circle at 35% 30%, var(--bulb-green-hi), var(--bulb-green) 55%, var(--bulb-lo)); box-shadow: 0 0 7px var(--bulb-green); }
+.dot-warning { background: radial-gradient(circle at 35% 30%, var(--bulb-amber-hi), var(--bulb-amber) 55%, var(--bulb-lo)); box-shadow: 0 0 7px var(--bulb-amber); }
+.dot-danger { background: radial-gradient(circle at 35% 30%, var(--bulb-red-hi), var(--bulb-red) 55%, var(--bulb-lo)); box-shadow: 0 0 7px var(--bulb-red); }
+
+/* The rail: the lit grille under the name, Mother's red lamp in the octagonal mark. */
+.brand-mark { border-radius: 0; background: var(--surface-muted); clip-path: polygon(30% 0, 70% 0, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0 70%, 0 30%); }
+.brand-mark::after { width: 9px; height: 9px; border-radius: 50%; background: var(--lamp-red); box-shadow: 0 0 9px 3px var(--lamp-red); }
+.grille { height: 22px; margin: -6px 8px 0; border-radius: 6px; background-color: var(--grille-bg);
+  background-image: repeating-linear-gradient(90deg, var(--grille-light) 0 2px, transparent 2px 7px); box-shadow: inset 0 0 0 2px var(--border); opacity: 0.8; }
+.rail-link[aria-current='page'] { background: var(--surface-muted); color: var(--text); box-shadow: inset 3px 0 0 var(--key-red); }
+.counter { background: var(--key-red); color: var(--key-red-ink); }
+
+/* Mother's room: where muthur speaks. Cream padding with its grid of lights, and the phosphor screen. */
+.mother { background: var(--mother-room); color: var(--mother-ink); border-radius: var(--radius); padding: 12px;
+  box-shadow: inset 0 2px 0 var(--mother-light), inset 0 -3px 0 var(--mother-shade), 0 0 0 1px var(--border);
+  display: grid; grid-template-columns: minmax(84px, 150px) minmax(0, 1fr) minmax(84px, 150px); gap: 12px; align-items: stretch; }
+.mother .crt { grid-column: 2; grid-row: 1; align-self: center; }
+.mother-lights { grid-row: 1; display: grid; grid-template-columns: repeat(6, 1fr); align-content: center; gap: 9px 6px; padding: 10px;
+  border-radius: 10px; background: var(--mother-room); box-shadow: inset 0 2px 4px var(--mother-shade), inset 0 -1px 0 var(--mother-light); }
+.mother-lights.right { grid-column: 3; }
+.mother-lights i { width: 6px; height: 6px; border-radius: 50%; background: var(--mother-off); justify-self: center; }
+.mother-lights i.on { background: var(--mother-light); box-shadow: 0 0 5px 1px var(--mother-glow); }
+.mother-lights.busy i.on:nth-child(3n) { animation: mother-work 1.4s ease-in-out infinite; }
+@keyframes mother-work { 50% { opacity: 0.2; } }
+.crt { position: relative; overflow: hidden; margin: 0; padding: 12px 14px; border-radius: 8px; background: var(--crt-bg); color: var(--crt-text);
+  font-family: var(--font-crt); font-size: 21px; line-height: 1.15; letter-spacing: 0.12em; text-transform: uppercase;
+  text-shadow: 0 0 6px var(--crt-glow); box-shadow: inset 0 0 26px var(--bulb-lo), inset 0 0 0 2px var(--crt-edge); }
+.crt::after { content: ''; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(0deg, var(--bulb-lo) 0 1px, transparent 1px 3px); opacity: 0.45; }
+.crt h2, .crt p { margin: 0; font: inherit; letter-spacing: inherit; }
+@media (max-width: 640px) {
+  .mother { grid-template-columns: minmax(0, 1fr); }
+  .mother .crt { grid-column: 1; grid-row: 2; }
+  .mother-lights { grid-template-columns: repeat(12, 1fr); }
+  .mother-lights.right { display: none; }
+}
+
+/* Job progress as the corridor's bulb strip. */
+.bulb-strip { display: grid; grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 5px; padding: 8px 10px; border-radius: 8px; background: var(--surface-muted); box-shadow: inset 0 1px 3px var(--bulb-lo); }
+.bulb-strip i { aspect-ratio: 1; max-width: 12px; width: 100%; justify-self: center; border-radius: 50%; background: var(--bulb-off); box-shadow: inset 0 -1px 2px var(--bulb-lo); }
+.bulb-strip i.on { background: radial-gradient(circle at 35% 30%, var(--bulb-blue-hi), var(--bulb-blue) 55%, var(--bulb-lo)); box-shadow: 0 0 7px var(--bulb-blue); }
+
+/* Confirmations that take things out of the library: the emergency panel. */
+.banner[role='group'] { background: var(--danger-plate); color: var(--text); border: 2px solid var(--danger-red); border-top-width: 10px;
+  border-image: repeating-linear-gradient(-45deg, var(--caution) 0 10px, var(--danger-plate) 10px 20px) 10; }
+.banner[role='group'] strong { font-family: var(--font-plate); font-weight: 600; font-size: 18px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--danger-red); }
+/* Phone tab labels are name plates too: the condensed face fits all eight words at 375px. */
+.tab { font-family: var(--font-plate); font-size: 13px; font-weight: 600; letter-spacing: 0.02em; }
