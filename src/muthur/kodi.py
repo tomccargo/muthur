@@ -64,6 +64,9 @@ class Kodi:
                 if shows is None and path.endswith("tvshow.nfo"):
                     shows = self.call("VideoLibrary.GetTVShows", {"properties": ["file"]}).get("tvshows", [])
                 done += self._refresh_one(path, roots, shows or [])
+            except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+                # Kodi went away (the box slept): the rest can't be told either, and they aren't 'not in Kodi'.
+                return {"refreshed": done, "notInKodi": missing, "kodiAway": len(paths) - n + 1}
             except LookupError:
                 missing += 1
             except (requests.exceptions.RequestException, RuntimeError):

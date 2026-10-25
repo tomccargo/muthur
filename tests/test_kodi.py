@@ -42,3 +42,15 @@ def test_a_big_batch_reads_the_show_list_once_and_reports_progress(tmp_path):
     k.refresh_files(paths, {"TV": tv, "Film": film}, lambda done, total: seen.append((done, total)))
     assert k.calls.count("VideoLibrary.GetTVShows") == 1
     assert seen == [(1, 3), (2, 3), (3, 3)]
+
+
+def test_kodi_going_away_is_not_reported_as_missing_items(tmp_path):
+    import requests
+
+    class Away(FakeKodi):
+        def call(self, method, params=None):
+            raise requests.exceptions.ConnectionError("refused")
+
+    tv = str(tmp_path / "Series")
+    paths = [os.path.join(tv, "Ghosts (2021)", "Season 01", f"Ghosts (2021) - S01E0{n}.nfo") for n in (1, 2, 3)]
+    assert Away().refresh_files(paths, {"TV": tv, "Film": str(tmp_path / "Movies")}) == {"refreshed": 0, "notInKodi": 0, "kodiAway": 3}
