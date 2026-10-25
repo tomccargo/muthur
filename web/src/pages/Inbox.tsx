@@ -107,7 +107,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
       </header>
 
       {asking && (
-        <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--accent)' }}>
+        <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--mark)' }}>
           <h2 id="ask-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>
             Move {ready.length} {ready.length === 1 ? 'download' : 'downloads'} into your library?
           </h2>

@@ -92,7 +92,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
       </header>
 
       {asking && (
-        <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--accent)' }}>
+        <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--mark)' }}>
           <h2 id="ask-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Apply {total.toLocaleString('en-GB')} fixes to the library?</h2>
           <ul className="rows">{[...chosen].map((k) => <li key={k}><span>{FIX[k].title}</span><span className="num">{data?.fixes[k]?.count.toLocaleString('en-GB')}</span></li>)}</ul>
           <p className="hint">Nothing is overwritten or deleted: new files only where none exist, NFO changes with a copy of the old file, removals into quarantine. The whole run can be put back from History.</p>
@@ -122,7 +122,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
       {available.map((k) => {
         const f = data!.fixes[k]!;
         return (
-          <section key={k} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8, borderColor: chosen.has(k) ? 'var(--accent)' : undefined }}>
+          <section key={k} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8, borderColor: chosen.has(k) ? 'var(--mark)' : undefined }}>
             <div className="panel-head" style={{ marginBottom: 0 }}>
               <label className="choice" style={{ alignItems: 'center' }}>
                 <input type="checkbox" checked={chosen.has(k)} onChange={(e) => toggle(k, e.target.checked)} />

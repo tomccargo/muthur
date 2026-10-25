@@ -92,15 +92,15 @@ Declared once, in `web/src/theme.css`, under `:root` (dark) and again for light 
 
 | Token | Dark (default) | Light | Use |
 | :--- | :--- | :--- | :--- |
-| `--bg` | `#0e1210` | `#dde2df` | Page background |
+| `--bg` | `#0e1210` | `#d4dad6` | Page background |
 | `--surface` | `#161b18` | `#ffffff` | Panels, rail, tiles |
 | `--surface-muted` | `#1f2622` | `#e2e7e4` | Tonal step inside a panel, hover, segmented control |
 | `--surface-raised` | `#1b211e` | `#ffffff` | Menus, dialogs |
-| `--border` | `#2b342f` | `#b4beb8` | Panel edge, dividers |
-| `--border-strong` | `#3b463f` | `#84908a` | Inputs, secondary buttons |
+| `--border` | `#2b342f` | `#9ba6a0` | Panel edge, dividers (2.5:1 on a panel) |
+| `--border-strong` | `#3b463f` | `#6f7b74` | Inputs, secondary buttons (at least 3:1 on what is behind them, WCAG 1.4.11) |
 | `--text` | `#ecf1ed` | `#131a16` | Body text |
 | `--muted` | `#a1ada5` | `#535f58` | Secondary text (4.5:1 or better on `--surface`) |
-| `--faint` | `#6f7b74` | `#8f9a94` | Decoration only, never text a reader needs |
+| `--faint` | `#6f7b74` | `#66726b` | Decoration only, never text a reader needs |
 
 The light ramp is inverted against dark (grey page, white panels), so a panel reads as raised in both themes.
 
@@ -126,7 +126,7 @@ Amber is muthur's only accent, which also nods to the amber terminal of the Nost
 | `--warn-bg` / `--warn-text` | `#33290f` / `#f5d58e` | `#fff3d4` / `#5c4400` | Warning banners, `.dot-warning` (`--warn-text`), rail counters |
 | `--danger-bg` / `--danger-text` | `#3b1c18` / `#ffb3a7` | `#fdecec` / `#8a1c1c` | Error banners, `.dot-danger` (`--danger-text`) |
 | `--mark` | `#f0a95b` | `#b85f0b` | Bars, meters, score bars (3:1 or better on `--surface`) |
-| `--track` | `#262e2a` | `#c9d1cc` | Empty part of a bar |
+| `--track` | `#262e2a` | `#b4beb8` | Empty part of a bar |
 | `--poster-bg` | `#0a0c0b` | `#1a1f1c` | Behind posters and stills |
 
 No hand-rolled `rgba()` status colours.

@@ -19,7 +19,7 @@ function Group({ g, keep, plan, selected, onKeep, onSelect }: {
   const renamed = plan.ops.filter((o) => o.op === 'move');
   const watched = g.copies.some((c) => c.watched);
   return (
-    <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: selected ? 'var(--accent)' : undefined }}>
+    <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, borderColor: selected ? 'var(--mark)' : undefined }}>
       <div className="panel-head" style={{ marginBottom: 0 }}>
         <label className="choice" style={{ alignItems: 'center', minWidth: 0 }}>
           <input type="checkbox" checked={selected} onChange={(e) => onSelect(e.target.checked)} />
