@@ -20,6 +20,8 @@ export const JOBS: Record<string, string> = {
   library: 'Indexing the library',
   duplicates: 'Looking for duplicates',
   'duplicates-apply': 'Resolving duplicates',
+  health: 'Checking the library',
+  'fixes-apply': 'Fixing the library',
 };
 
 // Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.

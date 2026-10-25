@@ -17,6 +17,7 @@ from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
 from .duplicates import Duplicates, apply_groups
+from .health import FIXES, Health
 from .inbox import Inbox
 from .index import Index
 from .jobs import Jobs
@@ -169,6 +170,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "scores": scores_state(),
             "watched": watched.state(),
             "duplicates": len(((store.snapshot("duplicates")[0]) or {}).get("groups", [])),
+            "fixes": sum(len(v) for v in (((store.snapshot("health")[0]) or {}).get("fixes") or {}).values()),
             "job": jobs.current.as_dict() if jobs.current else None,
         }
 
@@ -480,6 +482,55 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.get("/api/duplicates/last")
     def duplicates_last():
         data, _ = store.snapshot("last-duplicates")
+        return data or {}
+
+    # -- health: problems in the library and safe fixes --------------------------
+    def health_tool(client) -> Health:
+        return Health(store, journal, imdb, client, index, cfg.tv, cfg.film, cfg.quarantine, os.path.join(cfg.config_dir, "backups"))
+
+    def check_health(client, job):
+        lib = index.build(watched.latest(), job)
+        store.save_snapshot("library", lib)
+        store.save_snapshot("health", health_tool(client).check(lib, job))
+
+    @app.post("/api/fixes/check", status_code=202)
+    def fixes_check():
+        client = need_tmdb()
+        job = jobs.start("health", lambda j: check_health(client, j))
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/fixes")
+    def fixes():
+        plan, _ = store.snapshot("health")
+        if not plan:
+            return {"at": None, "fixes": {}, "manual": {}}
+        return {"at": plan["at"],
+                "fixes": {k: {"count": len(v), "sample": v[:12]} for k, v in plan["fixes"].items()},
+                "manual": {k: {"count": len(v), "items": v[:200]} for k, v in plan["manual"].items()}}
+
+    @app.post("/api/fixes/apply", status_code=202)
+    def fixes_apply(body: dict):
+        client = need_tmdb()
+        kinds = [k for k in body.get("kinds") or [] if k in FIXES]
+        plan, _ = store.snapshot("health")
+        if not plan or not kinds:
+            raise HTTPException(422, "Choose at least one kind of fix.")
+
+        def work(job):
+            result = health_tool(client).apply(plan, kinds, kodi(timeout=30), job)
+            store.save_snapshot("last-fixes", result)
+            check_health(client, None)
+
+        job = jobs.start("fixes-apply", work)
+        if job is None:
+            raise HTTPException(409, "Another job is running. Try again when it's done.")
+        return job.as_dict()
+
+    @app.get("/api/fixes/last")
+    def fixes_last():
+        data, _ = store.snapshot("last-fixes")
         return data or {}
 
     @app.get("/api/jobs/current")

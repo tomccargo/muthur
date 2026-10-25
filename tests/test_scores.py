@@ -130,3 +130,32 @@ def test_refresh_updates_muthur_nfos_and_can_be_put_back(imdb, tmp_path):
     assert [o["op"] for o in journal.ops(scores_run["id"])] == ["update"]
     journal.undo(scores_run["id"])
     assert ours.read_text(encoding="utf-8") == before
+
+
+SONARR = """<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<episodedetails>
+  <title>Pilot</title>
+  <season>1</season>
+  <episode>1</episode>
+  <ratings>
+    <rating name="tvdb" max="10" default="true">
+      <value>7.5</value>
+      <votes>12</votes>
+    </rating>
+  </ratings>
+  <uniqueid type="tvdb" default="true">361116</uniqueid>
+</episodedetails>
+"""
+
+
+def test_other_ratings_stay_when_imdb_is_added():
+    new = with_imdb(SONARR, (8.1, 3000))
+    ratings = ET.fromstring(new.split("?>", 1)[1]).find("ratings")
+    assert [(r.get("name"), r.get("default"), r.findtext("value")) for r in ratings] == [("imdb", "true", "8.1"), ("tvdb", "false", "7.5")]
+    gone = with_imdb(new, None)  # the score left the datasets: TVDB's is the default again
+    assert [(r.get("name"), r.get("default")) for r in ET.fromstring(gone.split("?>", 1)[1]).find("ratings")] == [("tvdb", "true")]
+
+
+def test_imdb_goes_into_an_nfo_without_ratings_or_ids():
+    new = with_imdb("<movie>\n  <title>Solaris</title>\n</movie>\n", (8.0, 100000))
+    assert ET.fromstring(new).findtext("ratings/rating/value") == "8.0"

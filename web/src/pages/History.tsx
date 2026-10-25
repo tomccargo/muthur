@@ -67,6 +67,8 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
           <span>
             {run.kind === 'scores'
               ? `The ${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} get their earlier scores back. A file changed since then is left alone and listed.`
+              : run.kind === 'health'
+              ? `The ${run.counts.quarantine} quarantined file${run.counts.quarantine === 1 ? '' : 's'} come back, the ${run.counts.write} file${run.counts.write === 1 ? '' : 's'} muthur wrote are removed and ${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} get their old content. A file changed since then is left alone and listed.`
               : run.kind === 'duplicates'
               ? `The ${run.counts.quarantine} quarantined file${run.counts.quarantine === 1 ? '' : 's'} come back and the ${run.counts.move} renamed one${run.counts.move === 1 ? '' : 's'} get their old names. Kodi sees it after its next scan. A file changed since then is left alone and listed.`
               : `The ${run.counts.move} moved file${run.counts.move === 1 ? '' : 's'} go back to the downloads folder, the ${run.counts.write} file${run.counts.write === 1 ? '' : 's'} muthur wrote are removed, and quarantined leftovers return. A file changed since then is left alone and listed.`}

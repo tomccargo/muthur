@@ -17,6 +17,7 @@ export type Status = {
     paused: { at: number; why: string; unwatched: number; items: number } | null;
   };
   duplicates: number;
+  fixes: number;
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -97,6 +98,16 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
+export type FixKind = 'leftovers' | 'empty-films' | 'episode-nfos' | 'show-nfos' | 'imdb-scores';
+export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
+export type Question = { path: string; why: string; season?: number };
+export type Fixes = {
+  at: number | null;
+  fixes: Partial<Record<FixKind, { count: number; sample: FixItem[] }>>;
+  manual: Partial<Record<'shows' | 'seasons' | 'numbers' | 'films', { count: number; items: Question[] }>>;
+};
+export type FixResult = { done: Partial<Record<FixKind, number>>; failed: { path: string; why: string }[] };
+
 export class ApiError extends Error {}
 
 async function call<T>(path: string, init?: RequestInit): Promise<T> {
@@ -148,6 +159,10 @@ export const api = {
   applyDuplicates: (choices: { id: string; keep: string }[]) =>
     call<Job>('/api/duplicates/apply', { method: 'POST', body: JSON.stringify({ choices }) }),
   duplicatesLast: () => call<DupResult | Record<string, never>>('/api/duplicates/last'),
+  fixes: () => call<Fixes>('/api/fixes'),
+  checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
+  applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
+  fixesLast: () => call<FixResult | Record<string, never>>('/api/fixes/last'),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };

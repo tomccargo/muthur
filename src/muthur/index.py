@@ -143,6 +143,7 @@ class Index:
                 "imdb": list(info.ratings["imdb"]) if info and "imdb" in info.ratings else None,
                 "poster": unit.folder and os.path.isfile(os.path.join(folder, "poster.jpg")),
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),
+                "nfoFile": os.path.relpath(unit.nfo, self.film_root).replace(os.sep, "/") if unit.nfo else None,
             })
         return out
 

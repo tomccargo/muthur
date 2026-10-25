@@ -321,6 +321,15 @@ This needs Kodi's web server enabled (Settings → Services → Control) and the
 
 Target before phase 3: ≥ 98 % agreement on the phase 0 sample, zero wrong *auto-accepts*. Anything uncertain may go to Review; nothing may be confidently wrong.
 
+**Phase 3 as built (0.9, 2026-10-25): the Health page.** A check reads the library index and sorts every problem into a fix muthur can make without a guess, or a question for the reader. Fixes are chosen per kind and applied as one journalled run that History can put back:
+- *Add IMDb scores to NFOs* that have none (also NFOs from other tools): only the IMDb entry is added and made the default; other ratings stay; a copy of each old NFO is kept; Kodi re-reads each item.
+- *Write NFOs for episodes that have none*, and *tvshow.nfo* for show folders muthur can place on TMDB (through the NFO, its show memory, or the TVDB ID).
+- *Move leftover files* (tracker notes, `Thumbs.db`, NFOs and thumbnails of videos that are gone) and *film folders without a video* to quarantine.
+
+Episodes are only written or scored when TMDB numbers their season the way the library does (no number beyond TMDB's count), they are single episodes, and the title in the file name doesn't belong to another TMDB episode. Everything else is listed under *Needs you*: shows muthur can't place, seasons numbered differently, damaged numbers, films without an NFO.
+
+On the real library (2026-10-25): 4,462 IMDb scores, 82 episode NFOs, 158 leftovers and 11 empty film folders can be fixed; 30 seasons, 134 episode numbers, 137 films and 19 shows need the reader. The weekly score refresh still only touches NFOs muthur wrote itself, so scores added to other tools' NFOs are not refreshed yet.
+
 ## 13. UI
 
 A clickable mockup of all screens exists (private, because it shows real library data).
@@ -349,7 +358,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
 4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup with restore: done (0.6).
-5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation. Library: done (0.7). Duplicates: done (0.8). An index of every show, episode and film (NFO facts, the score Kodi shows, watched status from the backup, problems) is built daily and on demand; NFOs are cached by modification time, so a re-index of the real library takes about 30 s. Library images are served only from the TV and Film folders, and only as images.
+5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation. Library: done (0.7). Duplicates: done (0.8). Health: done (0.9), described in §12 below. An index of every show, episode and film (NFO facts, the score Kodi shows, watched status from the backup, problems) is built daily and on demand; NFOs are cached by modification time, so a re-index of the real library takes about 30 s. Library images are served only from the TV and Film folders, and only as images.
 
 ## 16. Decisions on the former open questions (2026-10-24)
 

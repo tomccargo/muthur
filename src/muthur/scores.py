@@ -53,12 +53,32 @@ def with_imdb(text: str, imdb: tuple[float, int] | None) -> str | None:
     """The NFO text with a new IMDb score, or None when the change isn't worth a rewrite."""
     if not changed(_rating(text, "imdb"), imdb):
         return None
-    block = ratings_xml(imdb, _rating(text, "themoviedb"))
     if m := RATINGS.search(text):
-        return text[:m.start()] + _indent(block, m.group(1)) + text[m.end():]
-    if m := FIRST_ID.search(text):
-        return text[:m.start()] + _indent(block, m.group(1)) + text[m.start():]
+        # Only the IMDb entry changes; other ratings (TMDB, TVDB from Sonarr) stay, no longer the default.
+        indent = m.group(1)
+        block = re.sub(r'[ \t]*<rating name="imdb"[^>]*>.*?</rating>\n?', "", m.group(0), flags=re.S)
+        if imdb:
+            block = block.replace('default="true"', 'default="false"')
+            block = re.sub(r"<ratings>\n", lambda _: "<ratings>\n" + _imdb_lines(imdb, indent + "  "), block, count=1)
+        elif "<rating " not in block:
+            block = ""
+        elif 'default="true"' not in block:
+            block = block.replace('default="false"', 'default="true"', 1)
+        return text[:m.start()] + block + text[m.end():]
+    if not imdb:
+        return None
+    if m := FIRST_ID.search(text) or CLOSE.search(text):
+        indent = m.group(1) if m.re is FIRST_ID else "  "
+        return text[:m.start()] + _indent(ratings_xml(imdb, None), indent) + text[m.start():]
     return None
+
+
+CLOSE = re.compile(r"</(?:episodedetails|tvshow|movie)>\s*$")
+
+
+def _imdb_lines(imdb: tuple[float, int], indent: str) -> str:
+    return (f'{indent}<rating name="imdb" max="10" default="true">\n{indent}  <value>{round(imdb[0], 1)}</value>\n'
+            f"{indent}  <votes>{int(imdb[1])}</votes>\n{indent}</rating>\n")
 
 
 def _indent(block: str, indent: str) -> str:
