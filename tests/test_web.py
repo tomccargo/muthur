@@ -83,6 +83,7 @@ def client(tmp_path):
     os.environ["MUTHUR_DOWNLOADS"] = str(dl)
     os.environ["MUTHUR_TV"] = str(tmp_path / "TV")
     os.environ["MUTHUR_FILM"] = str(tmp_path / "Film")
+    os.environ["MUTHUR_QUARANTINE"] = str(tmp_path / "_muthur-quarantine")  # never the default /data/... outside the test
     os.environ["MUTHUR_WEB"] = str(tmp_path / "no-web")
     os.environ.pop("TMDB_READ_TOKEN", None)
     app = create_app(Config(dotenv=False), tmdb_factory=FakeTmdb)
