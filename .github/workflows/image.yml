@@ -20,8 +20,6 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
-      - run: pip install -e ".[dev]"
-      - run: pytest -q
       - uses: actions/setup-node@v7
         with:
           node-version: "26"
@@ -29,6 +27,10 @@ jobs:
           cache-dependency-path: web/package-lock.json
       - run: npm ci && npm run build
         working-directory: web
+      - run: pip install -e ".[dev]"
+      # The UI checks of DESIGN.md §10 open every page in Chromium.
+      - run: python -m playwright install --with-deps chromium
+      - run: pytest -q
 
   image:
     needs: test

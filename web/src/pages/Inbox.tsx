@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
-import { SIGNALS, STATUS, middle, size, splitId, when } from '../labels';
+import { SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
 const FILTERS: [ItemStatus | 'all', string][] = [['all', 'All'], ['ready', 'Ready'], ['review', 'Needs you'], ['suspicious', 'Suspicious'], ['packed', 'Packed'], ['waiting', 'Still downloading'], ['ignored', 'Ignored']];
@@ -89,7 +89,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
           <p className="eyebrow">Finished downloads</p>
           <h1>Inbox</h1>
           <p className="lede">
-            {status && <><span className="mono small">{status.paths.downloads.path}</span> · </>}checked {when(data?.scannedAt ?? null)}
+            {status && <><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(status.paths.downloads.path)}</span> · </>}checked {when(data?.scannedAt ?? null)}
           </p>
         </div>
         <div className="actions">

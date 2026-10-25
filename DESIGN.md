@@ -276,4 +276,4 @@ Planned with the web UI (architecture, milestone 2 onwards), modelled on the Clo
 - a missing TMDB attribution in the footer
 - any animation running with `prefers-reduced-motion: reduce`
 
-Until that test exists, this section is a plan, not a guarantee (§1.5).
+Built (2026-10-25): `tests/test_ui.py` runs these checks with Playwright on every push, against sample data that includes a long path without hyphens and long release names. It is skipped locally when Playwright or the built UI is missing. Its first run caught the Inbox and Settings showing container paths that didn't wrap on a phone.

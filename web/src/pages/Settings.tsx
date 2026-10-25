@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type KodiState, type Settings } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer } from '../components';
-import { ALL_LANGUAGES, language } from '../labels';
+import { ALL_LANGUAGES, language, libraryPath } from '../labels';
 
 type Draft = {
   host: string; port: string; user: string; password: string; token: string; keepOriginal: string[];
@@ -149,9 +149,9 @@ export function SettingsPage({ refresh }: StatusHook) {
         <h2 id="dirs-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Folders</h2>
         <p className="hint">Set when muthur was installed on the NAS.</p>
         <ul className="rows">
-          <li><span>Finished downloads</span><span className="mono small">{saved.paths.downloads}</span></li>
-          <li><span>TV</span><span className="mono small">{saved.paths.tv}</span></li>
-          <li><span>Film</span><span className="mono small">{saved.paths.film}</span></li>
+          <li><span>Finished downloads</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.downloads)}</span></li>
+          <li><span>TV</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.tv)}</span></li>
+          <li><span>Film</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.film)}</span></li>
         </ul>
       </section>
       <Footer />
