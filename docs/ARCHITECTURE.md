@@ -2,7 +2,7 @@
 
 **muthur** (MU/TH/UR, "Mother", the Nostromo's computer) is the project name. The Python package and CLI are called `muthur`.
 
-Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork, Review) are done. Milestone 4 has IMDb scores (§8); the watched-status backup (§11) is next. Kodi on the Shield is set up as in §10. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
+Status: 2026-10-25. Milestones 1 (dry run), 2 (container, web UI, inbox) and 3 (Apply with journal and undo, Kodi NFOs and artwork, Review) are done. Milestone 4 (IMDb scores §8, watched-status backup §11) is done. Kodi on the Shield is set up as in §10. The look and the UI rules are in [`../DESIGN.md`](../DESIGN.md).
 
 ## 1. Goal
 
@@ -296,6 +296,14 @@ Kodi stores play count, last played and resume point in its own database on the 
 - **Restore is never silent.** It shows a diff (n movies, m episodes, resume points) and needs a click. It only raises play counts and fills in missing resume points, unless you choose an exact restore.
 - **Renames:** before a batch, muthur takes a fresh snapshot and refuses to start if Kodi can't be reached. After the batch, Kodi scans the changed folders and cleans the old paths. muthur then writes the status to the new paths, matched first by old → new path from its journal, then by ID. The batch is checked: every item that was watched before must be watched after.
 
+**As built (0.6, 2026-10-25):**
+- Polled every hour (and with *Back up now*) through JSON-RPC: `GetTVShows` for the show IDs, `GetEpisodes` and `GetMovies` for play count, last played and resume point. On the real library that's 5,338 items in about 4.5 s. The WebSocket notifications are not used yet; the hourly poll is the whole mechanism.
+- Key: `ep:<id type>:<show id>:<season>:<episode>` or `movie:<id type>:<id>`, with TMDB, then IMDb, then TVDB as the ID used, and every ID Kodi knew stored next to it. A restore also matches on any shared ID, so a show Kodi later knows only by its TVDB ID still finds its history.
+- Two files of the same episode or film are one item: the most-watched copy counts. Without this the copies flipped the stored state back and forth on every poll.
+- Mass-change guard as designed: more than 25 items turning unwatched in one poll, or Kodi's library below 80 % of the last poll, pauses the backup with the reason on the Dashboard until the reader accepts Kodi's state.
+- Restore is previewed (counts and titles), planned again when confirmed and refused if Kodi changed in between. It writes with `SetEpisodeDetails`/`SetMovieDetails` and only raises play counts or fills in missing resume points.
+- Carrying status across muthur's own renames isn't needed yet: muthur only moves new downloads into the library. It comes with the library cleanup (phase 3), which renames existing files.
+
 This needs Kodi's web server enabled (Settings → Services → Control) and the Shield on the network. Third-party services such as Trakt aren't needed for this. Trakt's free tier has been restricted since 2025 ([AlternativeTo](https://alternativeto.net/news/2025/2/trakt-tv-has-set-stricter-limits-for-free-users-and-raised-vip-subscription-prices-by-100-/)).
 
 ## 12. Existing library: dry run first
@@ -338,7 +346,7 @@ A clickable mockup of all screens exists (private, because it shows real library
 1. **Parser + identifier CLI** run read-only against the library over SMB from the PC. Produces the phase 0 report. No container yet.
 2. **Container skeleton** on Nostromo: FastAPI, SQLite, settings, Inbox (read-only), ID memory learned from the library, suspicious-file detection. Deploy steps in [DEPLOY.md](DEPLOY.md).
 3. **Apply + journal/undo + NFO/artwork writer + Review** (done), then phase 1 on the leftover downloads (done: 23 items).
-4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup: next.
+4. **IMDb scores + weekly refresh + Kodi JSON-RPC, including the watched-status backup (§11).** IMDb scores and the refresh: done (0.5). Watched-status backup with restore: done (0.6).
 5. **Library, Duplicates, Health screens** and phase 3 cleanup with watched-status preservation.
 
 ## 16. Decisions on the former open questions (2026-10-24)

@@ -71,14 +71,14 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
           </span>
           <div className="actions" style={{ justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary btn-sm" type="button" autoFocus onClick={() => setAsking(false)}>Cancel</button>
-            <button className="btn btn-sm" type="button" style={{ background: 'var(--danger-text)', color: 'var(--bg)' }} onClick={() => { setAsking(false); onUndo(); }}>Put it back</button>
+            <button className="btn btn-danger btn-sm" type="button" onClick={() => { setAsking(false); onUndo(); }}>Put it back</button>
           </div>
         </div>
       )}
       <div className="actions">
         <button className="btn btn-secondary btn-sm" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide the changes' : 'Show the changes'}</button>
         {!run.undone && !asking && (
-          <button className="btn btn-sm" type="button" disabled={busy} style={{ background: 'transparent', color: 'var(--danger-text)', borderColor: 'var(--danger-text)' }} onClick={() => setAsking(true)}>
+          <button className="btn btn-danger-outline btn-sm" type="button" disabled={busy} onClick={() => setAsking(true)}>
             Put this run back…
           </button>
         )}

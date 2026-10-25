@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Status } from './api';
 import { Icon } from './icons';
+import { when } from './labels';
 import { Link, useLocation } from './nav';
 import { useTheme, type ThemeChoice } from './theme';
 import { Dashboard } from './pages/Dashboard';
@@ -61,6 +62,8 @@ function RailFoot({ status }: { status: Status | null }) {
         <span className="status"><span className="dot dot-danger" />Kodi unreachable</span>
       )}
       {status && !status.applying && <span className="status"><span className="dot dot-warning" />Plans only, moves nothing</span>}
+      {status?.watched.paused ? <span className="status"><span className="dot dot-danger" />Watched backup paused</span>
+        : status?.watched.last ? <span className="status"><span className="dot dot-success" />Backed up {when(status.watched.last.at)}</span> : null}
       <ThemeSwitch />
     </div>
   );

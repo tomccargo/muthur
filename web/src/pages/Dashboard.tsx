@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { WatchedPanel } from './Watched';
 import { api, type PathState } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
@@ -117,6 +118,8 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
             Learn shows from the library
           </button>
         </section>
+
+        <WatchedPanel status={status} refresh={refresh} />
 
         <section className="panel" aria-labelledby="scores-h">
           <div className="panel-head"><h2 id="scores-h">IMDb scores</h2></div>

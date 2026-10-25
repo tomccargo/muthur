@@ -25,6 +25,7 @@ from .naming import LATIN_SCRIPT
 from .scores import ScoreRefresh
 from .store import Store
 from .tmdb import Tmdb
+from .watched import Watched
 
 
 class Config:
@@ -90,6 +91,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     store = Store(os.path.join(cfg.config_dir, "muthur.db"))
     journal = Journal(store)
     imdb = Imdb(store)
+    watched = Watched(store)
     jobs = Jobs()
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
@@ -102,9 +104,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             tmdb_cache.update(token=token, client=tmdb_factory(token, os.path.join(cfg.config_dir, "tmdb-cache.sqlite")))
         return tmdb_cache["client"]
 
-    def kodi() -> Kodi | None:
+    def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
-        return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password")) if k.get("host") else None
+        return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout) if k.get("host") else None
 
     # -- status ---------------------------------------------------------------
     @app.get("/api/health", include_in_schema=False)
@@ -127,6 +129,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
             "scores": scores_state(),
+            "watched": watched.state(),
             "job": jobs.current.as_dict() if jobs.current else None,
         }
 
@@ -260,10 +263,56 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
+    # -- watched status (Kodi is the master; muthur keeps the history) -----------
+    def kodi_items():
+        k = kodi(timeout=90)  # the whole library in one answer: give Kodi time
+        if not k:
+            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        try:
+            return k, Watched.read_kodi(k)
+        except Exception:
+            state = k.check()
+            raise HTTPException(409, state.get("problem") or "Kodi didn't answer in time. Try again in a minute.")
+
+    @app.post("/api/watched/backup")
+    def watched_backup():
+        _, items = kodi_items()
+        return watched.follow(items)
+
+    @app.post("/api/watched/accept")
+    def watched_accept():
+        """The reader looked at a paused backup and says Kodi's current state is right."""
+        _, items = kodi_items()
+        return watched.follow(items, accept=True)
+
+    @app.post("/api/watched/restore/preview")
+    def restore_preview():
+        _, items = kodi_items()
+        plan = watched.plan_restore(items)
+        return {"count": len(plan), "watched": sum(c["what"] == "watched" for c in plan),
+                "resume": sum(c["what"] == "resume" for c in plan), "sample": [c["label"] for c in plan[:40]]}
+
+    @app.post("/api/watched/restore")
+    def restore(body: dict):
+        """Writes to Kodi. Planned again right now; refused if it no longer matches what the reader saw."""
+        k, items = kodi_items()
+        plan = watched.plan_restore(items)
+        if len(plan) != body.get("expect"):
+            raise HTTPException(409, "Kodi changed since the preview. Look at the preview again before restoring.")
+        result = Watched.restore(k, plan)
+        store.save_snapshot("last-restore", {**result, "at": time.time()})
+        return result
+
     def scheduler():
-        """Once a week, refresh the IMDb scores. Checked hourly; waits while another job runs."""
+        """Every hour: follow Kodi's watched status; once a week, refresh the IMDb scores."""
         time.sleep(300)  # let a fresh start settle first
         while True:
+            try:
+                k = kodi(timeout=90)
+                if k and k.check().get("connected"):
+                    watched.follow(Watched.read_kodi(k))
+            except Exception:  # Kodi off or busy: the Dashboard shows when the last backup was
+                pass
             try:
                 if imdb.due():
                     start_scores()

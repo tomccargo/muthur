@@ -88,6 +88,9 @@ a.tile:hover { background: var(--surface-muted); }
 .btn-secondary:hover:not(:disabled) { background: var(--surface-muted); }
 .btn-ghost { background: transparent; color: var(--text); }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-muted); }
+.btn-danger-outline { background: transparent; color: var(--danger-text); border-color: var(--danger-text); }
+.btn-danger-outline:hover:not(:disabled) { background: var(--danger-bg); }
+.btn-danger { background: var(--danger-text); color: var(--bg); }
 .btn-link { background: none; border: 0; padding: 0; min-height: 0; color: var(--accent-text); font: inherit; font-weight: 650; cursor: pointer; }
 .btn:disabled, .btn[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
 .seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 2px; }

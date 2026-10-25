@@ -12,6 +12,10 @@ export type Status = {
   paths: { downloads: PathState; tv: PathState; film: PathState };
   inbox: { counts: Partial<Record<ItemStatus, number>>; scannedAt: number | null };
   memory: { shows: number };
+  watched: {
+    last: { at: number; items: number; watched: number; changes: number } | null;
+    paused: { at: number; why: string; unwatched: number; items: number } | null;
+  };
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -98,6 +102,10 @@ export const api = {
   preview: (id: string, choice: Choice) => call<Item>('/api/review/preview', { method: 'POST', body: JSON.stringify({ id, choice }) }),
   choose: (id: string, choice: Choice, remember: boolean) =>
     call<Item>('/api/review/choose', { method: 'POST', body: JSON.stringify({ id, choice, remember }) }),
+  backupWatched: () => call<unknown>('/api/watched/backup', { method: 'POST' }),
+  acceptWatched: () => call<unknown>('/api/watched/accept', { method: 'POST' }),
+  restorePreview: () => call<{ count: number; watched: number; resume: number; sample: string[] }>('/api/watched/restore/preview', { method: 'POST' }),
+  restore: (expect: number) => call<{ done: number; failed: number }>('/api/watched/restore', { method: 'POST', body: JSON.stringify({ expect }) }),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
 };
