@@ -170,8 +170,8 @@ export const api = {
     call<Item>('/api/review/choose', { method: 'POST', body: JSON.stringify({ id, choice, remember }) }),
   backupWatched: () => call<unknown>('/api/watched/backup', { method: 'POST' }),
   acceptWatched: () => call<unknown>('/api/watched/accept', { method: 'POST' }),
-  restorePreview: () => call<{ count: number; watched: number; resume: number; sample: string[] }>('/api/watched/restore/preview', { method: 'POST' }),
-  restore: (expect: number) => call<{ done: number; failed: number }>('/api/watched/restore', { method: 'POST', body: JSON.stringify({ expect }) }),
+  restorePreview: () => call<{ count: number; check: string; watched: number; resume: number; sample: string[] }>('/api/watched/restore/preview', { method: 'POST' }),
+  restore: (check: string) => call<{ done: number; failed: number }>('/api/watched/restore', { method: 'POST', body: JSON.stringify({ check }) }),
   library: () => call<Library>('/api/library'),
   libraryShow: (folder: string) => call<ShowDetail>(`/api/library/show?${new URLSearchParams({ folder })}`),
   libraryMatch: (kind: Kind, path: string, tmdbId: number) =>

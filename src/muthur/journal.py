@@ -110,6 +110,68 @@ class Journal:
                 (f"%.{ext.lower()}",)).fetchall()
         return [r[0] for r in rows if os.path.isfile(r[0])]
 
+    # -- changes, each one journalled before it happens -------------------------------------
+    # An op is recorded as 'failed' first and marked 'done' once the disk agrees, so a crash in
+    # between leaves a visible record instead of an unknown file.
+    def _done(self, op_id: int, digest: str | None) -> None:
+        self._exec("UPDATE ops SET status = 'done', digest = ? WHERE id = ?", (digest, op_id))
+
+    def mkdirs(self, run_id: int, item: str, path: str) -> None:
+        """Create a folder and any missing parents, each one journalled (undo removes them while empty)."""
+        missing, p = [], path
+        while not os.path.isdir(p):
+            missing.append(p)
+            p = os.path.dirname(p)
+        for d in reversed(missing):
+            op_id = self.record(run_id, item, "mkdir", None, d, status="failed")
+            os.mkdir(d)
+            self._done(op_id, None)
+
+    def move(self, run_id: int, item: str, src: str, dst: str, op: str = "move") -> None:
+        """A rename on the same disk (never a copy), into a folder created if needed; never over something."""
+        if os.path.lexists(dst):
+            raise FileExistsError(f"{dst} already exists")
+        self.mkdirs(run_id, item, os.path.dirname(dst))
+        size = os.path.getsize(src) if os.path.isfile(src) else None
+        op_id = self.record(run_id, item, op, src, dst, size, status="failed")
+        os.rename(src, dst)  # same disk: instant; a cross-disk rename fails instead of copying
+        self._done(op_id, fingerprint(dst) if size is not None else None)
+
+    def create(self, run_id: int, item: str, path: str, data: bytes | None) -> bool:
+        """A new file; an existing one is left exactly as it is. False when nothing was written."""
+        if not data or os.path.lexists(path):
+            return False
+        op_id = self.record(run_id, item, "write", None, path, len(data), status="failed")
+        with open(path, "xb") as f:  # 'x': fails rather than overwrite
+            f.write(data)
+        self._done(op_id, fingerprint(path))
+        return True
+
+    def replace(self, run_id: int, item: str, path: str, data: bytes, backups: str) -> None:
+        """Rewrite an existing file in one step; a copy of the old one is kept, so undo can put it back."""
+        folder = os.path.join(backups, str(run_id))
+        os.makedirs(folder, exist_ok=True)
+        backup = os.path.join(folder, f"{len(os.listdir(folder)):05d}{os.path.splitext(path)[1]}")
+        shutil.copyfile(path, backup)
+        op_id = self.record(run_id, item, "update", backup, path, len(data), status="failed")
+        tmp = path + ".muthur-tmp"
+        with open(tmp, "wb") as f:
+            f.write(data)
+        os.replace(tmp, path)
+        self._done(op_id, fingerprint(path))
+
+    def counts(self, run_ids: list[int]) -> dict[int, dict[str, int]]:
+        """Done changes per run and kind, in one query (History lists 50 runs)."""
+        out: dict[int, dict[str, int]] = {r: {} for r in run_ids}
+        if run_ids:
+            with self.store.lock:
+                rows = self.store.db.execute(
+                    f"SELECT run_id, op, COUNT(*) FROM ops WHERE status = 'done' AND run_id IN ({','.join('?' * len(run_ids))}) "
+                    "GROUP BY run_id, op", run_ids).fetchall()
+            for run_id, op, n in rows:
+                out[run_id][op] = n
+        return out
+
     def mark_run_undone(self, run_id: int) -> None:
         self._exec("UPDATE runs SET undone = ? WHERE id = ?", (time.time(), run_id))
 

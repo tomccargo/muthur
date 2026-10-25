@@ -98,11 +98,12 @@ class Watched:
         last = self.store.get("watched.last") or {}
         merged = _merged(items)
         unwatched = [k for k, i in merged.items() if i["playcount"] == 0 and known.get(k, {}).get("playcount", 0) > 0]
-        shrunk = bool(last.get("items")) and len(items) < last["items"] * GUARD_SHRINK
+        # Counted as the reader counts them (two copies of one episode are one item), like watched.last.
+        shrunk = bool(last.get("items")) and len(merged) < last["items"] * GUARD_SHRINK
         if not accept and (len(unwatched) > GUARD_UNWATCHED or shrunk):
-            why = (f"Kodi's library has {len(items)} items, down from {last['items']}." if shrunk
+            why = (f"Kodi's library has {len(merged)} items, down from {last['items']}." if shrunk
                    else f"{len(unwatched)} items would turn unwatched at once.")
-            paused = {"at": time.time(), "why": why, "unwatched": len(unwatched), "items": len(items)}
+            paused = {"at": time.time(), "why": why, "unwatched": len(unwatched), "items": len(merged)}
             self.store.put("watched.paused", paused)
             return {"paused": paused}
         now, rows = time.time(), []
@@ -252,6 +253,9 @@ class Listener:
                 try:
                     msg, end = decoder.raw_decode(buffer)
                 except ValueError:
+                    if not buffer.startswith("{") or len(buffer) > 1 << 20:
+                        buffer = buffer[buffer.find("{", 1):] if "{" in buffer[1:] else ""  # not JSON: skip to the next message
+                        continue
                     break  # an incomplete message: wait for the rest
                 buffer = buffer[end:]
                 if isinstance(msg, dict) and msg.get("method") in self.TRIGGERS:

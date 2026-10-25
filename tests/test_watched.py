@@ -148,3 +148,28 @@ def test_listener_runs_waiting_work_when_kodi_is_back():
             break
         t.sleep(0.1)
     assert back == [1] and listener.last_event  # the waiting scan ran, and a backup follows
+
+
+def test_the_shrink_guard_counts_copies_as_one_item(env):
+    w, kodi = env
+    w.follow(Watched.read_kodi(kodi))  # 5 items
+    # A second copy of every episode: Kodi lists 9 files, still 5 items for the reader.
+    kodi.episodes += [{**e, "episodeid": e["episodeid"] + 100} for e in kodi.episodes]
+    assert "paused" not in w.follow(Watched.read_kodi(kodi))
+    kodi.episodes = kodi.episodes[:2] + kodi.episodes[4:6]  # 4 files, but only 2 episodes plus the film: 3 of 5
+    paused = w.follow(Watched.read_kodi(kodi))["paused"]
+    assert "has 3 items, down from 5" in paused["why"]
+
+
+def test_the_listener_skips_what_isnt_json():
+    from muthur.watched import Listener
+
+    class Conn:
+        chunks = [b"garbage, not json ", b'{"jsonrpc":"2.0","method":"Player.OnStop","params":{}}', b""]
+
+        def recv(self, n):
+            return self.chunks.pop(0)
+
+    listener = Listener(lambda: None, lambda: None)
+    listener._read(Conn())
+    assert listener.last_event  # the notification after the garbage still counted

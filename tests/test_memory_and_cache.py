@@ -135,3 +135,12 @@ def test_confirmed_choice_is_not_downgraded_by_learning(tmp_path):
     store.remember("tv", "Some Show", 11, 2019, "Some Show", "Some Show (2019)", "library")
     [row] = store.lookup("tv", "Some Show")
     assert row["source"] == "confirmed" and row["folder"] == "Some Show (2019)"
+
+
+def test_snapshot_lists_are_counted_without_loading_them(tmp_path):
+    store = Store(str(tmp_path / "m.db"))
+    assert store.snapshot_count("duplicates", "$.groups") == 0
+    store.save_snapshot("duplicates", {"at": 1, "groups": [{}, {}, {}]})
+    store.save_snapshot("health", {"fixes": {"leftovers": [1, 2], "imdb-scores": [3], "show-nfos": []}})
+    assert store.snapshot_count("duplicates", "$.groups") == 3
+    assert store.snapshot_count("health", "$.fixes", each=True) == 3

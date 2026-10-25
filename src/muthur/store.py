@@ -158,6 +158,15 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO snapshots VALUES (?, ?, ?)", (name, json.dumps(body), time.time()))
             self.db.commit()
 
+    def snapshot_count(self, name: str, path: str, each: bool = False) -> int:
+        """The length of a list inside a snapshot, counted by SQLite without loading the snapshot into Python.
+        each: `path` holds an object of lists, and their lengths are added up."""
+        q = ("SELECT COALESCE(SUM(json_array_length(j.value)), 0) FROM snapshots, json_each(snapshots.body, ?) j WHERE name = ?"
+             if each else "SELECT COALESCE(json_array_length(body, ?), 0) FROM snapshots WHERE name = ?")
+        with self.lock:
+            row = self.db.execute(q, (path, name)).fetchone()
+        return int(row[0]) if row and row[0] is not None else 0
+
     def snapshot(self, name: str):
         with self.lock:
             row = self.db.execute("SELECT body, saved FROM snapshots WHERE name = ?", (name,)).fetchone()

@@ -137,3 +137,43 @@ def test_quarantine_says_what_and_why(env):
     day = next((tmp / "_muthur-quarantine").iterdir()).name
     [n] = notes(str(tmp / "_muthur-quarantine"), day)
     assert n["to"] == "Some.Show.S01E02.1080p.WEB" and "after its video moved" in n["why"]
+
+
+def test_a_subtitle_only_follows_its_own_video(env):
+    tmp, applier, journal, show, film = env
+    dl = tmp / "complete"
+    (dl / "Some.Film.1999.en.srt").write_text("mine")
+    (dl / "Some.Film.1999.forced.English.srt").write_text("mine too")
+    (dl / "Some.Film.1999.Part.Two.2024.en.srt").write_text("the sequel's")
+    (dl / "Some.Film.19990.en.srt").write_text("another film's")
+    applier.apply([film])
+    folder = tmp / "Film" / "Een Film (1999)"
+    assert (folder / "Een Film (1999).en.srt").read_text() == "mine"
+    assert (folder / "Een Film (1999).forced.English.srt").read_text() == "mine too"
+    assert (dl / "Some.Film.1999.Part.Two.2024.en.srt").exists()  # same start, but a title and a year: another video's
+    assert (dl / "Some.Film.19990.en.srt").exists()  # 'Some.Film.1999' + '0...' is another name
+
+
+def test_subtitles_in_a_subs_folder_follow_the_film(env):
+    tmp, applier, journal, show, film = env
+    rel = tmp / "complete" / "Some.Film.1999.1080p"
+    (rel / "Subs").mkdir(parents=True)
+    (rel / "Some.Film.1999.1080p.mkv").write_bytes(b"film" * 1000)
+    (rel / "Subs" / "2_English.srt").write_text("en")
+    (rel / "Subs" / "3_Dutch.srt").write_text("nl")
+    item = {**film, "id": "Some.Film.1999.1080p",
+            "files": [{"source": "Some.Film.1999.1080p/Some.Film.1999.1080p.mkv", "library": "Film", "target": "Een Film (1999)/Een Film (1999).mkv"}]}
+    assert applier.apply([item])["applied"] == 1
+    folder = tmp / "Film" / "Een Film (1999)"
+    assert (folder / "Een Film (1999).English.srt").read_text() == "en"
+    assert (folder / "Een Film (1999).Dutch.srt").read_text() == "nl"
+    assert not (tmp / "complete" / "Some.Film.1999.1080p").exists()  # nothing playable or readable left behind
+
+
+def test_every_change_is_journalled_as_done_with_its_fingerprint(env):
+    tmp, applier, journal, show, film = env
+    run = applier.apply([film])["run"]
+    ops = journal.ops(run)
+    assert ops and all(o["status"] == "done" for o in ops)
+    assert all(o["digest"] for o in ops if o["op"] in ("move", "write"))
+    assert journal.counts([run])[run]["write"] == sum(o["op"] == "write" for o in ops)

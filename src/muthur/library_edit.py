@@ -8,10 +8,8 @@ from __future__ import annotations
 import html
 import os
 import re
-import shutil
 
 from . import nfo_write
-from .journal import fingerprint
 from .naming import LATIN_SCRIPT, display_title
 
 
@@ -32,20 +30,10 @@ class LibraryEdit:
             return 0
         full = self.full(path)
         if os.path.isfile(full):
-            folder = os.path.join(self.backups, str(run))
-            os.makedirs(folder, exist_ok=True)
-            backup = os.path.join(folder, f"{len(os.listdir(folder)):05d}{os.path.splitext(full)[1]}")
-            shutil.copyfile(full, backup)
-            tmp = full + ".muthur-tmp"
-            with open(tmp, "wb") as f:
-                f.write(data)
-            os.replace(tmp, full)
-            self.journal.record(run, path, "update", backup, full, len(data), fingerprint(full))
+            self.journal.replace(run, path, full, data, self.backups)
         else:
-            os.makedirs(os.path.dirname(full), exist_ok=True)
-            with open(full, "xb") as f:
-                f.write(data)
-            self.journal.record(run, path, "write", None, full, len(data), fingerprint(full))
+            self.journal.mkdirs(run, path, os.path.dirname(full))
+            self.journal.create(run, path, full, data)
         return 1
 
     def _title(self, d: dict, kind: str) -> str:

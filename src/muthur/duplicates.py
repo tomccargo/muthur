@@ -371,8 +371,6 @@ def _full(dups: Duplicates, path: str) -> str:
 def _apply_one(dups: Duplicates, journal, run: int, g: dict, quarantine: str) -> None:
     import time
 
-    from .journal import fingerprint
-
     # 1. Checks before anything changes: every copy is still what muthur measured.
     for c in g["copies"]:
         full = _full(dups, c["path"])
@@ -388,26 +386,11 @@ def _apply_one(dups: Duplicates, journal, run: int, g: dict, quarantine: str) ->
     # 2. The changes, each journalled before it happens.
     day = time.strftime("%Y-%m-%d")
 
-    def mkdirs(path: str) -> None:
-        missing, p = [], path
-        while not os.path.isdir(p):
-            missing.append(p)
-            p = os.path.dirname(p)
-        for d in reversed(missing):
-            os.mkdir(d)
-            journal.record(run, g["id"], "mkdir", None, d)
-
     def move(src: str, dst: str, op: str) -> None:
-        if os.path.lexists(dst):
+        try:
+            journal.move(run, g["id"], src, dst, op)
+        except FileExistsError:
             raise Stop(f"{dst} already exists; muthur never overwrites.")
-        mkdirs(os.path.dirname(dst))
-        size = os.path.getsize(src) if os.path.isfile(src) else None
-        op_id = journal.record(run, g["id"], op, src, dst, size, status="failed")
-        os.rename(src, dst)
-        digest = fingerprint(dst) if size is not None else None
-        with journal.store.lock:
-            journal.store.db.execute("UPDATE ops SET status = 'done', digest = ? WHERE id = ?", (digest, op_id))
-            journal.store.db.commit()
 
     for o in g["plan"]["ops"]:
         src = _full(dups, o["src"])

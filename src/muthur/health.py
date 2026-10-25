@@ -17,13 +17,12 @@ import time
 from . import nfo_write, quarantine
 from .identify import identify_movie, identify_show
 from .index import JUNK
-from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare
-from .journal import fingerprint
+from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
 from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title
-from .parse import parse_show_folder
+from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
-from .text import normalize, similarity
+from .text import similarity
 
 FIXES = ("leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
 
@@ -107,7 +106,7 @@ class Health:
             if e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1):
                 continue
             named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
-            if s in differs and not (named and season(s).get(n) and _same_title(named, season(s)[n])):
+            if s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n])):
                 manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
                                           "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
                                                  f"TMDB's S{s:02d}E{n:02d} “{season(s).get(n) or 'nothing'}”."})
@@ -182,33 +181,18 @@ class Health:
         dst = os.path.join(self.quarantine, time.strftime("%Y-%m-%d"), *path.split("/"))
         if os.path.lexists(dst):
             dst += f" ({int(time.time())})"
-        os.makedirs(os.path.dirname(dst), exist_ok=True)
-        size = os.path.getsize(src) if os.path.isfile(src) else None
-        op = self.journal.record(run, path, "quarantine", src, dst, size, status="failed")
-        os.rename(src, dst)
-        self.journal.mark(op, "done")
+        self.journal.move(run, path, src, dst, "quarantine")
         quarantine.note(self.quarantine, dst, path, run, why)
-        if size is not None:
-            with self.store.lock:
-                self.store.db.execute("UPDATE ops SET digest = ? WHERE id = ?", (fingerprint(dst), op))
-                self.store.db.commit()
 
     def _write(self, run: int, path: str, data: bytes | None) -> bool:
-        full = self._full(path)
-        if not data or os.path.lexists(full):
-            return False
-        with open(full, "xb") as fh:  # never over an existing file
-            fh.write(data)
-        self.journal.record(run, path, "write", None, full, len(data), fingerprint(full))
-        return True
+        return self.journal.create(run, path, self._full(path), data)  # never over an existing file
 
     def _leftovers(self, run, x, nfos):
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
                          else "A leftover in the library: it belonged to a video that is gone.")
 
     def _empty_films(self, run, x, nfos):
-        if any(os.path.isfile(os.path.join(d, n)) and n.lower().endswith((".mkv", ".mp4", ".avi", ".m4v"))
-               for d, _, names in os.walk(self._full(x["path"])) for n in names):
+        if any(is_video(n) and os.path.isfile(os.path.join(d, n)) for d, _, names in os.walk(self._full(x["path"])) for n in names):
             raise ValueError("a video appeared in it since the check")
         self._quarantine(run, x["path"], "A film folder without a video in it.")
 
@@ -266,9 +250,3 @@ class Health:
             self.scores._rewrite(run, full, text, new)
             nfos.append(x["path"])
 
-
-def _same_title(named: str, tmdb_title: str) -> bool:
-    """The title in a file name is TMDB's: nearly the same, or one contains the other ('The Gamble' in
-    'American Enthusiast: The Gamble')."""
-    a, b = normalize(_bare(named)), normalize(_bare(tmdb_title))
-    return similarity(a, b) >= SAME_EPISODE or (min(len(a), len(b)) >= 4 and (a in b or b in a))

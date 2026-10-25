@@ -3,7 +3,7 @@ import { api, type Status } from '../api';
 import { Dot } from '../components';
 import { when } from '../labels';
 
-type Preview = { count: number; watched: number; resume: number; sample: string[] };
+type Preview = { count: number; check: string; watched: number; resume: number; sample: string[] };
 
 // The watched-status backup on the Dashboard: Kodi is the master, muthur keeps the history (§11).
 export function WatchedPanel({ status, refresh }: { status: Status | null; refresh: () => void }) {
@@ -80,9 +80,9 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
               <div className="actions" style={{ justifyContent: 'flex-end' }}>
                 <button className="btn btn-secondary btn-sm" type="button" autoFocus onClick={() => setPreview(null)}>Cancel</button>
                 <button className="btn btn-danger btn-sm" type="button" disabled={working} onClick={() => {
-                  const n = preview.count;
+                  const check = preview.check;
                   setPreview(null);
-                  run(() => api.restore(n), (r: { done: number; failed: number }) => `Restored ${r.done} in Kodi${r.failed ? `; ${r.failed} didn’t take, try again` : ''}.`);
+                  run(() => api.restore(check), (r: { done: number; failed: number }) => `Restored ${r.done} in Kodi${r.failed ? `; ${r.failed} didn’t take, try again` : ''}.`);
                 }}>Restore {preview.count}</button>
               </div>
             </>

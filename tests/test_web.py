@@ -207,3 +207,11 @@ def test_dry_run_plans_but_changes_nothing(tmp_path, monkeypatch):
                        ("/api/quarantine/empty", {"days": ["2026-10-25"], "confirm": "delete"}), ("/api/scores/refresh", None)):
         r = client.post(path, json=body) if body is not None else client.post(path)
         assert r.status_code == 409 and "Dry run is on" in r.json()["detail"], path
+
+
+def test_a_restore_plan_is_the_same_plan_in_any_order():
+    from muthur.web import _plan_check
+
+    a = [{"kind": "episode", "kodiid": 1, "what": "watched", "playcount": 1}, {"kind": "movie", "kodiid": 7, "what": "resume", "resume": 60.0}]
+    assert _plan_check(a) == _plan_check(list(reversed(a)))
+    assert _plan_check(a) != _plan_check([a[0], {**a[1], "kodiid": 8}])  # as many changes, but another item

@@ -9,9 +9,7 @@ from __future__ import annotations
 
 import os
 import re
-import shutil
 
-from .journal import fingerprint
 from .library import scan_film
 from .nfo import read_nfo
 
@@ -175,11 +173,4 @@ class ScoreRefresh:
 
     def _rewrite(self, run: int, path: str, old: str, new: str) -> None:
         """Keep a copy of the old NFO, replace it in one step, and journal both."""
-        os.makedirs(os.path.join(self.backups, str(run)), exist_ok=True)
-        backup = os.path.join(self.backups, str(run), f"{len(os.listdir(os.path.join(self.backups, str(run)))):05d}.nfo")
-        shutil.copyfile(path, backup)
-        tmp = path + ".muthur-tmp"
-        with open(tmp, "w", encoding="utf-8", newline="") as f:
-            f.write(new)
-        os.replace(tmp, path)
-        self.journal.record(run, os.path.basename(path), "update", backup, path, len(new.encode()), fingerprint(path))
+        self.journal.replace(run, os.path.basename(path), path, new.encode("utf-8"), self.backups)

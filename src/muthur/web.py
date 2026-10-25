@@ -1,6 +1,8 @@
 """The FastAPI app: a small JSON API plus the built React UI. One process, one worker."""
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -118,9 +120,24 @@ def _show_summary(sh: dict) -> dict:
     }
 
 
-def _film_summary(f: dict, films: list[dict]) -> dict:
-    ids = {(k, v) for k, v in f["ids"].items() if k in ("tmdb", "imdb")}
-    twins = sum(1 for g in films if g is not f and ids & {(k, v) for k, v in g["ids"].items() if k in ("tmdb", "imdb")})
+def _twins(films: list[dict]) -> list[int]:
+    """For each film, how many other films share its TMDB or IMDb ID (one pass, not every pair)."""
+    by_id: dict[tuple, set[int]] = {}
+    for i, f in enumerate(films):
+        for k, v in f["ids"].items():
+            if k in ("tmdb", "imdb"):
+                by_id.setdefault((k, v), set()).add(i)
+    return [len(set().union(*(by_id[(k, v)] for k, v in f["ids"].items() if k in ("tmdb", "imdb"))) - {i})
+            for i, f in enumerate(films)]
+
+
+def _plan_check(plan: list[dict]) -> str:
+    """A short fingerprint of a restore plan: the preview and the restore must be the same plan."""
+    rows = sorted(json.dumps([c["kind"], c["kodiid"], c["what"], c.get("playcount"), c.get("resume")]) for c in plan)
+    return hashlib.sha256("\n".join(rows).encode()).hexdigest()[:16]
+
+
+def _film_summary(f: dict, twins: int) -> dict:
     return {**f, "problems": {"noNfo": int(not f["nfo"]), "noScore": int(not f["imdb"]), "duplicates": twins,
                               "damaged": len([x for x in f["flags"] if x != "multiple-main-videos"]), "loose": 0}}
 
@@ -286,6 +303,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         return signed_in(request, response)
 
     # -- status ---------------------------------------------------------------
+    kodi_seen: dict = {}
+
+    def kodi_state(k: Kodi) -> dict:
+        """Kodi's answer for the status poll, reused for 20 s: a Shield that is off shouldn't slow every page."""
+        if kodi_seen.get("url") != k.url or time.time() - kodi_seen.get("at", 0) > 20:
+            kodi_seen.update(url=k.url, at=time.time(), state=k.check())
+        return kodi_seen["state"]
+
     @app.get("/api/health", include_in_schema=False)
     def health():
         return {"ok": True}
@@ -301,14 +326,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "version": __version__,
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
-            "kodi": {**k.check(), "pendingScan": store.get("kodi.pendingScan"), "canWake": shield() is not None} if k else None,
+            "kodi": {**kodi_state(k), "pendingScan": store.get("kodi.pendingScan"), "canWake": shield() is not None} if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
             "scores": scores_state(),
             "watched": {**watched.state(), "live": listener.connected},
-            "duplicates": len(((store.snapshot("duplicates")[0]) or {}).get("groups", [])),
-            "fixes": sum(len(v) for v in (((store.snapshot("health")[0]) or {}).get("fixes") or {}).values()),
+            "duplicates": store.snapshot_count("duplicates", "$.groups"),
+            "fixes": store.snapshot_count("health", "$.fixes", each=True),
             "job": jobs.current.as_dict() if jobs.current else None,
         }
 
@@ -405,9 +430,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.get("/api/history")
     def history():
         runs = journal.runs()
+        counts = journal.counts([r["id"] for r in runs])
         for r in runs:
-            ops = journal.ops(r["id"])
-            r["counts"] = {k: sum(1 for o in ops if o["op"] == k and o["status"] == "done") for k in ("move", "write", "quarantine", "mkdir", "update")}
+            r["counts"] = {k: counts[r["id"]].get(k, 0) for k in ("move", "write", "quarantine", "mkdir", "update")}
         return {"runs": runs}
 
     @app.get("/api/history/{run_id}")
@@ -492,7 +517,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def restore_preview():
         _, items = kodi_items()
         plan = watched.plan_restore(items)
-        return {"count": len(plan), "watched": sum(c["what"] == "watched" for c in plan),
+        return {"count": len(plan), "check": _plan_check(plan), "watched": sum(c["what"] == "watched" for c in plan),
                 "resume": sum(c["what"] == "resume" for c in plan), "sample": [c["label"] for c in plan[:40]]}
 
     @app.post("/api/watched/restore")
@@ -500,7 +525,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """Writes to Kodi. Planned again right now; refused if it no longer matches what the reader saw."""
         k, items = kodi_items()
         plan = watched.plan_restore(items)
-        if len(plan) != body.get("expect"):
+        if _plan_check(plan) != body.get("check"):  # the same changes the reader saw, not only as many
             raise HTTPException(409, "Kodi changed since the preview. Look at the preview again before restoring.")
         result = Watched.restore(k, plan)
         store.save_snapshot("last-restore", {**result, "at": time.time()})
@@ -563,7 +588,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         lib, _ = store.snapshot("library")
         if not lib:
             return {"at": None, "shows": [], "films": []}
-        return {"at": lib["at"], "shows": [_show_summary(sh) for sh in lib["shows"]], "films": [_film_summary(f, lib["films"]) for f in lib["films"]]}
+        return {"at": lib["at"], "shows": [_show_summary(sh) for sh in lib["shows"]],
+                "films": [_film_summary(f, n) for f, n in zip(lib["films"], _twins(lib["films"]))]}
 
     @app.get("/api/library/show")
     def library_show(folder: str):
@@ -1066,11 +1092,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         except ShieldError as e:
             raise HTTPException(409, str(e))
         kodi_back()  # a scan that waited for Kodi runs now
+        kodi_seen.clear()
         return {"ok": True, "woke": True}
 
     @app.post("/api/kodi/test")
     def kodi_test():
         k = kodi()
+        kodi_seen.clear()
         return k.check() if k else {"connected": False, "problem": "Enter the Shield's address first."}
 
     @app.post("/api/kodi/scan")

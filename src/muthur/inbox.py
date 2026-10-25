@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 
 from guessit import guessit
 
-from .apply import SUBTITLE_EXTS
+from .apply import SUBTITLE_EXTS, belongs_to
 from .identify import identify_movie, identify_show
 from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title, episode_path, movie_path
@@ -180,7 +180,7 @@ class Inbox:
                 stems = [os.path.splitext(c)[0] for c in children if is_video(c)]
                 # A loose subtitle belongs to the video it is named after; it moves with that video.
                 out += [f"{e}/{c}" for c in children
-                        if not (c.lower().endswith(SUBTITLE_EXTS) and any(c.startswith(st) for st in stems))]
+                        if not (c.lower().endswith(SUBTITLE_EXTS) and any(belongs_to(c, st) for st in stems))]
             else:
                 out.append(e)
         return out

@@ -10,12 +10,27 @@ Safety rules (ARCHITECTURE.md §5.5):
 from __future__ import annotations
 
 import os
+import re
 import time
 
 from . import nfo_write, quarantine
-from .journal import Journal, fingerprint
+from .journal import Journal
 
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
+SUBS_DIR = re.compile(r"(?i)^(subs?|subtitles)$")
+SUB_TAG = re.compile(r"[a-z]{2,3}(-[a-z]{2,4})?|\d{1,2}")  # en, eng, pt-br, 2
+SUB_WORDS = {"forced", "sdh", "cc", "hi", "default", "full", "foreign", "english", "dutch", "nederlands", "flemish", "french",
+             "german", "spanish", "italian", "portuguese", "swedish", "danish", "norwegian", "finnish", "polish", "czech",
+             "hungarian", "romanian", "turkish", "greek", "russian", "japanese", "korean", "chinese", "arabic", "hebrew"}
+
+
+def belongs_to(name: str, stem: str) -> bool:
+    """A subtitle named after the video plus only language or subtitle tags: 'x.en.srt' and 'x.forced.English.srt'
+    belong to 'x.mkv'; 'x.Part.Two.2024.en.srt' (another video's) and 'xy.srt' don't."""
+    if not (name.startswith(stem) and name[len(stem):len(stem) + 1] == "."):
+        return False
+    tags = os.path.splitext(name)[0][len(stem) + 1:].lower()
+    return all(SUB_TAG.fullmatch(t) or t in SUB_WORDS for t in tags.split(".") if t)
 
 
 def _tmdb_numbers(f: dict) -> tuple[int, int]:
@@ -101,10 +116,9 @@ class Applier:
         # 2. Changes, each one journalled.
         count = 0
         for f, src, dst in moves:
-            self._mkdirs(run, item["id"], os.path.dirname(dst))
             self._move(run, item["id"], src, dst, "move")
             count += 1
-            count += self._subtitles(run, item["id"], src, dst)
+            count += self._subtitles(run, item["id"], src, dst, single=len(moves) == 1)
             stem = os.path.splitext(dst)[0]
             if item["kind"] == "tv":
                 ts, te = _tmdb_numbers(f)
@@ -137,35 +151,14 @@ class Applier:
         return count
 
     # -- building blocks ---------------------------------------------------------------
-    def _mkdirs(self, run: int, item: str, path: str) -> None:
-        missing = []
-        p = path
-        while not os.path.isdir(p):
-            missing.append(p)
-            p = os.path.dirname(p)
-        for d in reversed(missing):
-            os.mkdir(d)
-            self.journal.record(run, item, "mkdir", None, d)
-
     def _move(self, run: int, item: str, src: str, dst: str, op: str) -> None:
         if os.path.lexists(dst):
             raise Stop(f"{dst} already exists.")
-        size = os.path.getsize(src) if os.path.isfile(src) else None
-        op_id = self.journal.record(run, item, op, src, dst, size, status="failed")  # journalled before it happens
-        os.rename(src, dst)  # same disk: instant, and never a copy (a cross-disk rename fails instead)
-        digest = fingerprint(dst) if size is not None else None
-        with self.journal.store.lock:
-            self.journal.store.db.execute("UPDATE ops SET status = 'done', digest = ? WHERE id = ?", (digest, op_id))
-            self.journal.store.db.commit()
+        self.journal.move(run, item, src, dst, op)
 
     def _write(self, run: int, item: str, path: str, data: bytes | None) -> int:
         """Create a new file; an existing one is left exactly as it is."""
-        if not data or os.path.lexists(path):
-            return 0
-        with open(path, "xb") as fh:  # 'x': fails rather than overwrite
-            fh.write(data)
-        self.journal.record(run, item, "write", None, path, len(data), fingerprint(path))
-        return 1
+        return int(self.journal.create(run, item, path, data))
 
     def _image(self, run: int, item: str, path: str, tmdb_path: str | None, size: str) -> int:
         if not tmdb_path or os.path.lexists(path):
@@ -178,17 +171,36 @@ class Applier:
         n += self._image(run, item, os.path.join(folder, "clearlogo.png"), nfo_write.best_logo(details), "w500")
         return n
 
-    def _subtitles(self, run: int, item: str, src: str, dst: str) -> int:
-        """Subtitles next to the video with the same name ('x.mkv' + 'x.en.srt') follow it."""
+    def _subtitles(self, run: int, item: str, src: str, dst: str, single: bool = True) -> int:
+        """Subtitles follow their video: next to it with the same name ('x.mkv' + 'x.en.srt'), or in a
+        'Subs' folder of the download, as 'Subs/x/2_English.srt' or, when the download holds one video,
+        'Subs/English.srt'. They get the video's new name plus their language ('… (1999).English.srt')."""
         folder, stem = os.path.dirname(src), os.path.splitext(os.path.basename(src))[0]
         new_stem = os.path.splitext(dst)[0]
         n = 0
         for name in sorted(os.listdir(folder)):
-            if name.startswith(stem) and name.lower().endswith(SUBTITLE_EXTS):
+            if belongs_to(name, stem) and name.lower().endswith(SUBTITLE_EXTS):
                 target = new_stem + name[len(stem):]
                 if not os.path.lexists(target):
                     self._move(run, item, os.path.join(folder, name), target, "move")
                     n += 1
+        if os.path.normpath(folder) == os.path.normpath(self.downloads):
+            return n  # a loose file in the downloads folder: its 'Subs' would belong to nobody in particular
+        for d in sorted(os.listdir(folder)):
+            base = os.path.join(folder, d)
+            if not (SUBS_DIR.match(d) and os.path.isdir(base)):
+                continue
+            own = os.path.join(base, stem)
+            source = own if os.path.isdir(own) else base if single else None
+            for name in sorted(os.listdir(source)) if source else []:
+                if not name.lower().endswith(SUBTITLE_EXTS) or not os.path.isfile(os.path.join(source, name)):
+                    continue
+                label = re.sub(r"^\d+[_ .-]*", "", os.path.splitext(name)[0]) or "sub"
+                target, k = f"{new_stem}.{label}{os.path.splitext(name)[1].lower()}", 2
+                while os.path.lexists(target):
+                    target, k = f"{new_stem}.{label}.{k}{os.path.splitext(name)[1].lower()}", k + 1
+                self._move(run, item, os.path.join(source, name), target, "move")
+                n += 1
         return n
 
     def _leftovers(self, run: int, item: dict) -> int:
@@ -204,7 +216,6 @@ class Applier:
         target = os.path.join(self.quarantine, day, *item["id"].split("/"))
         if os.path.lexists(target):
             target += f" ({int(time.time())})"
-        self._mkdirs(run, item["id"], os.path.dirname(target))
         self._move(run, item["id"], path, target, "quarantine")
         quarantine.note(self.quarantine, target, path, run, "What was left of the download after its video moved into the library.")
         return 1
