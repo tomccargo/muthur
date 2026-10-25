@@ -121,6 +121,20 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
 
         <WatchedPanel status={status} refresh={refresh} />
 
+        <section className="panel" aria-labelledby="lib-h">
+          <div className="panel-head"><h2 id="lib-h">Library</h2><Link to="/library" className="small">Open</Link></div>
+          <ul className="rows">
+            <li>
+              <span>Duplicates</span>
+              <Link to="/duplicates" className="status">{(status?.duplicates ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.duplicates} with more than one copy</> : <><Dot kind="dot-success" />None found</>}</Link>
+            </li>
+            <li>
+              <span>Health</span>
+              <Link to="/health" className="status">{(status?.fixes ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.fixes.toLocaleString('en-GB')} fixes muthur can make</> : <><Dot kind="dot-success" />Nothing to fix</>}</Link>
+            </li>
+          </ul>
+        </section>
+
         <section className="panel" aria-labelledby="scores-h">
           <div className="panel-head"><h2 id="scores-h">IMDb scores</h2></div>
           {sc?.refreshed ? (
