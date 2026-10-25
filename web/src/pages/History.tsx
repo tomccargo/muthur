@@ -43,11 +43,14 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
         <span className="status small">
           {run.undone ? <><Dot />Put back {when(run.undone)}</>
             : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
+              : run.kind === 'library' ? <><Dot kind="dot-success" />Library edit</>
               : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
         </span>
       </div>
       <p className="hint" style={{ margin: 0 }}>
-        {run.kind === 'scores'
+        {run.kind === 'library'
+          ? `${(run.summary as unknown as { label?: string } | null)?.label ?? 'A library edit'} · ${run.counts.update + run.counts.write} file${run.counts.update + run.counts.write === 1 ? '' : 's'} written; the old ones are kept for putting back`
+          : run.kind === 'scores'
           ? `${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} got new IMDb scores; the old files are kept for putting back`
           : `${run.counts.move} file${run.counts.move === 1 ? '' : 's'} moved · ${run.counts.write} written · ${run.counts.quarantine} to quarantine`}
       </p>

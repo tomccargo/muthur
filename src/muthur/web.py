@@ -21,6 +21,7 @@ from .downloadstation import DownloadStation, DownloadStationError
 from .duplicates import Duplicates, apply_groups
 from .health import FIXES, Health
 from .inbox import Inbox
+from .library_edit import LibraryEdit
 from .index import Index
 from .jobs import Jobs
 from .journal import Journal
@@ -204,7 +205,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "version": __version__,
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
-            "kodi": {**k.check(), "pendingScan": store.get("kodi.pendingScan")} if k else None,
+            "kodi": {**k.check(), "pendingScan": store.get("kodi.pendingScan"), "canWake": shield() is not None} if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
@@ -473,6 +474,64 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         dup = _duplicates(show["episodes"])
         return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup} for e in show["episodes"]], "loose": show["loose"]}
 
+    # -- library edits: match, title, poster (each one journalled run) -------------
+    def editor() -> LibraryEdit:
+        return LibraryEdit(store, journal, need_tmdb(), imdb, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"))
+
+    def edited(result: dict) -> dict:
+        """After an edit: Kodi re-reads the item if it answers, and the index is built again."""
+        k = kodi()
+        if k and result.get("nfo") and k.check().get("connected"):
+            result["kodi"] = k.refresh_files([editor().full(result["nfo"])], {cfg.tv: "TV", cfg.film: "Film"})
+        start_library()
+        return result
+
+    def film_at(path: str) -> dict:
+        lib, _ = store.snapshot("library")
+        film = next((f for f in (lib or {}).get("films", []) if f.get("file") and f"Film/{f['file']}" == path), None)
+        if not film:
+            raise HTTPException(404, "That film isn't in the index. Index the library again.")
+        return film
+
+    def edit(fn):
+        not_dry()
+        not_busy()
+        try:
+            return edited(fn())
+        except (ValueError, OSError) as e:
+            raise HTTPException(409, getattr(e, "strerror", None) or str(e))
+
+    @app.post("/api/library/match")
+    def library_match(body: dict):
+        kind, path, tmdb_id = body.get("kind"), str(body.get("path") or ""), str(body.get("tmdbId") or "")
+        if kind not in ("tv", "movie") or not tmdb_id.isdigit():
+            raise HTTPException(422, "Choose a show or a film first.")
+        if kind == "tv":
+            folder = path.partition("/")[2]
+            if not path.startswith("TV/") or "/" in folder:
+                raise HTTPException(422, "Not a show folder.")
+            return edit(lambda: editor().match_show(folder, int(tmdb_id)))
+        f = film_at(path)
+        prefix = f"Film/{f['key']}/" if f["folder"] else path.rsplit(".", 1)[0] + "-"
+        return edit(lambda: editor().match_film(path, f"Film/{f['nfoFile']}" if f.get("nfoFile") else None, prefix, int(tmdb_id)))
+
+    @app.post("/api/library/title")
+    def library_title(body: dict):
+        return edit(lambda: editor().retitle(str(body.get("nfo") or ""), str(body.get("title") or "")))
+
+    @app.get("/api/library/posters")
+    def library_posters(kind: str, tmdbId: int):  # noqa: N803 (the query parameter's name)
+        if kind not in ("tv", "movie"):
+            raise HTTPException(422, "A show or a film.")
+        return {"posters": editor().posters(kind, tmdbId)}
+
+    @app.post("/api/library/poster")
+    def library_poster(body: dict):
+        target = str(body.get("target") or "")
+        if not target.endswith(("poster.jpg", "-poster.jpg")):
+            raise HTTPException(422, "Not a poster in the library.")
+        return edit(lambda: editor().set_poster(target, str(body.get("image") or "")))
+
     ART_TYPES = {".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png", ".tbn": "image/jpeg"}
 
     @app.get("/api/library/art")
@@ -594,7 +653,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(422, "Choose at least one kind of fix.")
 
         def work(job):
-            result = health_tool(client).apply(plan, kinds, kodi(timeout=30), job)
+            k = kodi(timeout=30)
+            if k and shield() and not k.check().get("connected"):
+                try:
+                    wake_kodi()  # the reader started this: Kodi should re-read what changed
+                except ShieldError:
+                    pass  # the fixes still happen; Kodi re-reads the items later
+            result = health_tool(client).apply(plan, kinds, k, job)
             store.save_snapshot("last-fixes", result)
             check_health(client, None)
 
@@ -893,6 +958,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             wake_kodi()
         except ShieldError as e:
             raise HTTPException(409, str(e))
+        kodi_back()  # a scan that waited for Kodi runs now
         return {"ok": True, "woke": True}
 
     @app.post("/api/kodi/test")

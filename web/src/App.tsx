@@ -56,7 +56,7 @@ function ThemeSwitch() {
   );
 }
 
-function RailFoot({ status }: { status: Status | null }) {
+function RailFoot({ status, onChange }: { status: Status | null; onChange: () => void }) {
   const k = status?.kodi;
   return (
     <div className="rail-foot">
@@ -65,7 +65,9 @@ function RailFoot({ status }: { status: Status | null }) {
       ) : k.connected ? (
         <span className="status"><span className="dot dot-success" />Shield · Kodi {k.version}</span>
       ) : (
-        <span className="status"><span className="dot dot-danger" />Kodi unreachable</span>
+        <span className="status"><span className="dot dot-danger" />Kodi unreachable
+          {k.canWake && <button type="button" className="btn-link small" onClick={() => { api.wakeShield().catch(() => undefined).finally(onChange); }}>Wake</button>}
+        </span>
       )}
       {status && !status.applying && <span className="status"><span className="dot dot-warning" />Dry run on</span>}
       {status?.watched.paused ? <span className="status"><span className="dot dot-danger" />Watched backup paused</span>
@@ -101,7 +103,7 @@ export function App() {
             </Link>
           ))}
         </div>
-        <RailFoot status={hook.status} />
+        <RailFoot status={hook.status} onChange={hook.refresh} />
       </nav>
 
       <header className="topbar">

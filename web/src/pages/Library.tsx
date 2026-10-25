@@ -4,6 +4,7 @@ import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
 import { middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
+import { LibraryEditor } from './LibraryEdit';
 
 type Filter = 'all' | keyof LibProblems;
 const FILTERS: [Filter, string][] = [['all', 'All'], ['noNfo', 'Missing NFO'], ['noScore', 'No IMDb score'], ['duplicates', 'Duplicates'], ['damaged', 'Damaged names']];
@@ -62,6 +63,7 @@ function EpisodeRow({ e }: { e: LibEpisode }) {
 function ShowPage({ folder }: { folder: string }) {
   const [show, setShow] = useState<ShowDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   useEffect(() => { api.libraryShow(folder).then(setShow).catch((e: Error) => setError(e.message)); }, [folder]);
   const seasons = useMemo(() => {
     const m = new Map<number | null, LibEpisode[]>();
@@ -86,6 +88,10 @@ function ShowPage({ folder }: { folder: string }) {
               {!show.nfo && <span className="small" style={{ color: 'var(--warn-text)' }}>The show folder has no tvshow.nfo.</span>}
             </div>
           </header>
+          {note && <div className="banner banner-note" role="status">{note}</div>}
+          <LibraryEditor kind="tv" path={`TV/${show.folder}`} nfo={show.nfo ? `TV/${show.folder}/tvshow.nfo` : null}
+            posterTarget={`TV/${show.folder}/poster.jpg`} tmdbId={show.ids.tmdb ? Number(show.ids.tmdb) : null} title={show.title}
+            onDone={(text) => { setNote(text); api.libraryShow(folder).then(setShow).catch(() => undefined); }} />
           {seasons.map(([s, eps]) => (
             <section key={String(s)} className="panel" aria-label={s == null ? 'Without a number' : `Season ${s}`}>
               <div className="panel-head">
@@ -110,6 +116,8 @@ function ShowPage({ folder }: { folder: string }) {
 
 // ---- a film -------------------------------------------------------------------------------
 function FilmPage({ film }: { film: Film }) {
+  const [note, setNote] = useState<string | null>(null);
+  const stem = film.file ? `Film/${film.file.replace(/\.[^.]+$/, '')}` : '';
   return (
     <div className="page">
       <Link to="/library?kind=film" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}>← Library</Link>
@@ -123,6 +131,12 @@ function FilmPage({ film }: { film: Film }) {
           {problemsText(film.problems, true).length > 0 && <span className="small" style={{ color: 'var(--warn-text)' }}>{problemsText(film.problems, true).join(' · ')}</span>}
         </div>
       </header>
+      {note && <div className="banner banner-note" role="status">{note}</div>}
+      {film.file && (
+        <LibraryEditor kind="movie" path={`Film/${film.file}`} nfo={film.nfoFile ? `Film/${film.nfoFile}` : null}
+          posterTarget={film.folder ? `Film/${film.key}/poster.jpg` : `${stem}-poster.jpg`} tmdbId={film.ids.tmdb ? Number(film.ids.tmdb) : null}
+          title={film.title} onDone={setNote} />
+      )}
       <section className="panel" aria-labelledby="files-h">
         <div className="panel-head"><h2 id="files-h">Files</h2></div>
         <ul className="rows">

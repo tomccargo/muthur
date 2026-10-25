@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "muthur"
-version = "0.17.0"
+version = "0.18.0"
 description = "Sorts finished downloads into a Kodi library and writes Kodi NFOs, so Kodi never has to scrape."
 readme = "README.md"
 license = "MIT"

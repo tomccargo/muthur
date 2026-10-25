@@ -2,7 +2,7 @@
 
 export type PathState = { path: string; exists: boolean; readable: boolean; writable: boolean };
 export type Job = { name: string; started: number; finished: number | null; done: number; total: number; error: string | null; running: boolean };
-export type KodiState = ({ connected: true; version: string } | { connected: false; problem: string }) & { pendingScan?: number | null };
+export type KodiState = ({ connected: true; version: string } | { connected: false; problem: string }) & { pendingScan?: number | null; canWake?: boolean };
 
 export type Status = {
   version: string;
@@ -87,7 +87,7 @@ export type ShowDetail = Omit<ShowSummary, never> & { episodes: LibEpisode[]; lo
 export type Film = {
   key: string; folder: boolean; file: string | null; size: number; others: string[]; title: string; year: number | null;
   ids: Record<string, string>; nfo: boolean; muthur: boolean; rating: Score; imdb: [number, number] | null; poster: boolean;
-  flags: string[]; watched: number | null; problems: LibProblems;
+  flags: string[]; watched: number | null; problems: LibProblems; nfoFile?: string | null;
 };
 export type Library = { at: number | null; shows: ShowSummary[]; films: Film[] };
 
@@ -160,6 +160,12 @@ export const api = {
   restore: (expect: number) => call<{ done: number; failed: number }>('/api/watched/restore', { method: 'POST', body: JSON.stringify({ expect }) }),
   library: () => call<Library>('/api/library'),
   libraryShow: (folder: string) => call<ShowDetail>(`/api/library/show?${new URLSearchParams({ folder })}`),
+  libraryMatch: (kind: Kind, path: string, tmdbId: number) =>
+    call<{ label: string }>('/api/library/match', { method: 'POST', body: JSON.stringify({ kind, path, tmdbId }) }),
+  libraryTitle: (nfo: string, title: string) => call<{ label: string }>('/api/library/title', { method: 'POST', body: JSON.stringify({ nfo, title }) }),
+  libraryPosters: (kind: Kind, tmdbId: number) =>
+    call<{ posters: { path: string; language: string | null; votes: number }[] }>(`/api/library/posters?${new URLSearchParams({ kind, tmdbId: String(tmdbId) })}`),
+  libraryPoster: (target: string, image: string) => call<{ label: string }>('/api/library/poster', { method: 'POST', body: JSON.stringify({ target, image }) }),
   indexLibrary: () => call<Job>('/api/library/scan', { method: 'POST' }),
   duplicates: () => call<{ at: number | null; groups: DupGroup[] }>('/api/duplicates'),
   scanDuplicates: () => call<Job>('/api/duplicates/scan', { method: 'POST' }),

@@ -20,6 +20,7 @@ function pathLine(label: string, p: PathState | undefined, needWrite: boolean) {
 
 export function Dashboard({ status, error, refresh }: StatusHook) {
   const [message, setMessage] = useState<{ kind: 'error' | 'note'; text: string } | null>(null);
+  const [waking, setWaking] = useState(false);
   const counts = status?.inbox.counts ?? {};
   const job = status?.job;
   const busy = Boolean(job?.running);
@@ -96,6 +97,16 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           </ul>
           {k?.pendingScan && (
             <p className="hint" style={{ marginBottom: 12 }}>Kodi was asleep after the last Apply ({when(k.pendingScan)}); it looks for the new files as soon as it answers again.</p>
+          )}
+          {k && !k.connected && k.canWake && (
+            <button className="btn btn-secondary btn-sm" type="button" disabled={waking} style={{ marginBottom: 12 }} onClick={() => {
+              setMessage(null);
+              setWaking(true);
+              api.wakeShield()
+                .then(() => { setMessage({ kind: 'note', text: 'The Shield is awake and Kodi answers.' }); refresh(); })
+                .catch((e: Error) => setMessage({ kind: 'error', text: e.message }))
+                .finally(() => setWaking(false));
+            }}>{waking ? 'Waking the Shield…' : 'Wake the Shield'}</button>
           )}
           {k?.connected ? (
             <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
