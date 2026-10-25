@@ -10,8 +10,9 @@ RUN npm run build
 
 # ---- The app -------------------------------------------------------------------
 FROM python:3.12-alpine
-# ffprobe (from ffmpeg) reads durations; tini forwards signals; tzdata for local times.
-RUN apk add --no-cache ffmpeg tini tzdata
+# ffprobe (from ffmpeg) reads durations; tini forwards signals; tzdata for local times;
+# adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it.
+RUN apk add --no-cache ffmpeg tini tzdata android-tools
 WORKDIR /app
 COPY pyproject.toml README.md LICENSE ./
 COPY src ./src

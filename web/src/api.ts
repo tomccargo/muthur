@@ -58,6 +58,7 @@ export type Settings = {
   titles: { keepOriginal: string[] };
   downloadStation: { url: string; user: string; passwordSet: boolean };
   dryRun: boolean;
+  shield: { enabled: boolean; port: number; app: string };
   quality: { preferHdr: boolean };
   paths: { downloads: string; tv: string; film: string };
 };
@@ -138,6 +139,8 @@ export const api = {
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
   testDownloadStation: () => call<{ connected: true; tasks: number } | { connected: false; problem: string }>('/api/downloadstation/test', { method: 'POST' }),
+  shieldApps: () => call<{ apps: string[]; current: string | null }>('/api/shield/apps'),
+  wakeShield: () => call<{ ok: boolean; woke: boolean; note?: string }>('/api/shield/wake', { method: 'POST' }),
   testKodi: () => call<KodiState>('/api/kodi/test', { method: 'POST' }),
   scanKodi: () => call<{ started: boolean }>('/api/kodi/scan', { method: 'POST' }),
   apply: (ids?: string[]) => call<Job>('/api/apply', { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) }),

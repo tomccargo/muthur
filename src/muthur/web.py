@@ -30,6 +30,7 @@ from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
 from . import quarantine as quarantine_notes
 from .scores import ScoreRefresh
+from .shield import Shield, ShieldError
 from .store import Store
 from .tmdb import Tmdb
 from .watched import Listener, Watched
@@ -151,6 +152,34 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         d = store.get("downloadstation", {})
         return DownloadStation(d["url"], d.get("user", ""), d.get("password", "")) if d.get("url") and d.get("user") else None
 
+    def shield() -> Shield | None:
+        """The box Kodi runs on, when waking it is set up in Settings."""
+        sh, host = store.get("shield") or {}, (store.get("kodi") or {}).get("host")
+        return Shield(host, int(sh.get("port") or 5555), cfg.config_dir) if host and sh.get("enabled") and sh.get("app") else None
+
+    def wake_kodi() -> None:
+        """Wake the box and start the chosen app until Kodi answers. Only for things the reader started."""
+        sh = shield()
+        if not sh:
+            raise ShieldError("Waking the Shield isn't set up in Settings.")
+        sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool(kodi().check().get("connected")))
+
+    def kodi_ready(timeout: float = 90) -> Kodi:
+        """Kodi, answering: woken first when it sleeps and waking is set up. Otherwise a 409 that says why."""
+        k = kodi(timeout)
+        if not k:
+            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        state = k.check()
+        if state.get("connected"):
+            return k
+        if shield():
+            try:
+                wake_kodi()
+                return k
+            except ShieldError as e:
+                raise HTTPException(409, f"Kodi doesn't answer, and waking the Shield didn't work: {e}")
+        raise HTTPException(409, state.get("problem") or "Kodi doesn't answer.")
+
     def not_dry():
         if store.get("dryRun", False):
             raise HTTPException(409, "Dry run is on: muthur only plans and changes nothing. Turn it off in Settings to make changes.")
@@ -219,9 +248,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def _rescan(client):
         store.save_snapshot("inbox", [asdict(i) for i in Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan()])
 
-    def _tell_kodi():
-        """Ask Kodi to look for new files. When Kodi is asleep, the scan waits until it answers again."""
+    def _tell_kodi(wake: bool = False):
+        """Ask Kodi to look for new files. wake: the reader started this, so a sleeping Shield may be woken.
+        When Kodi stays asleep, the scan waits until it answers again."""
         k = kodi()
+        if k and wake and shield() and not k.check().get("connected"):
+            try:
+                wake_kodi()
+            except ShieldError:
+                pass  # the scan waits instead
         if k:
             try:
                 k.call("VideoLibrary.Scan")
@@ -260,7 +295,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("last-apply", result)
             _rescan(client)
             if result["applied"]:
-                _tell_kodi()
+                _tell_kodi(wake=True)
 
         job = jobs.start("apply", work)
         if job is None:
@@ -288,7 +323,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("last-undo", journal.undo(run_id, item))
             if client:
                 _rescan(client)
-            _tell_kodi()
+            _tell_kodi(wake=True)
 
         job = jobs.start("undo", work)
         if job is None:
@@ -334,9 +369,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     # -- watched status (Kodi is the master; muthur keeps the history) -----------
     def kodi_items():
-        k = kodi(timeout=90)  # the whole library in one answer: give Kodi time
-        if not k:
-            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        k = kodi_ready()  # the whole library in one answer: give Kodi time
         try:
             return k, Watched.read_kodi(k)
         except Exception:
@@ -497,12 +530,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         groups = chosen_groups(body.get("choices") or [])
         if not groups:
             raise HTTPException(422, "Choose at least one group.")
-        k = kodi(timeout=90)
-        if not k:
+        if not kodi():
             raise HTTPException(409, "Set up the Kodi connection first: muthur carries the watched status of every copy to the one it keeps.")
-        state = k.check()
-        if not state.get("connected"):
-            raise HTTPException(409, f"{state.get('problem')} muthur only resolves duplicates while Kodi answers, so watched status isn't lost.")
+        try:
+            k = kodi_ready()
+        except HTTPException as e:
+            raise HTTPException(409, f"{e.detail} muthur only resolves duplicates while Kodi answers, so watched status isn't lost.")
 
         def work(job):
             watched.follow(Watched.read_kodi(k))  # a fresh backup right before anything moves (§11)
@@ -780,6 +813,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
             "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
             "dryRun": bool(store.get("dryRun", False)),
+            "shield": {"enabled": bool((store.get("shield") or {}).get("enabled")), "port": int((store.get("shield") or {}).get("port") or 5555),
+                       "app": (store.get("shield") or {}).get("app") or ""},
             "quality": {"preferHdr": bool(store.get("quality.preferHdr", False))},
             "paths": {"downloads": cfg.downloads, "tv": cfg.tv, "film": cfg.film},
         }
@@ -800,6 +835,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if new.get("password"):
                 k["password"] = new["password"]
             store.put("kodi", k)
+        if isinstance(body.get("shield"), dict):
+            sh, new = dict(store.get("shield") or {}), body["shield"]
+            if isinstance(new.get("enabled"), bool):
+                sh["enabled"] = new["enabled"]
+            if "port" in new:
+                try:
+                    sh["port"] = int(new["port"])
+                except (TypeError, ValueError):
+                    raise HTTPException(422, "The ADB port must be a number; network debugging uses 5555 unless you changed it.")
+            if "app" in new:
+                sh["app"] = str(new["app"]).strip()
+            store.put("shield", sh)
         if isinstance(body.get("dryRun"), bool):
             store.put("dryRun", body["dryRun"])
         if isinstance((body.get("quality") or {}).get("preferHdr"), bool):
@@ -823,6 +870,30 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def downloadstation_test():
         ds = download_station()
         return ds.check() if ds else {"connected": False, "problem": "Enter the NAS address and the account first."}
+
+    @app.get("/api/shield/apps")
+    def shield_apps():
+        """The apps the Shield can start, and the one on screen now (connecting asks the TV once to allow muthur)."""
+        host = (store.get("kodi") or {}).get("host")
+        if not host:
+            raise HTTPException(409, "Enter the Shield's address under Kodi first.")
+        sh = Shield(host, int((store.get("shield") or {}).get("port") or 5555), cfg.config_dir)
+        try:
+            sh.connect()
+            return {"apps": sh.apps(), "current": sh.current_app()}
+        except ShieldError as e:
+            raise HTTPException(409, str(e))
+
+    @app.post("/api/shield/wake")
+    def shield_wake():
+        k = kodi()
+        if k and k.check().get("connected"):
+            return {"ok": True, "woke": False, "note": "Kodi already answers."}
+        try:
+            wake_kodi()
+        except ShieldError as e:
+            raise HTTPException(409, str(e))
+        return {"ok": True, "woke": True}
 
     @app.post("/api/kodi/test")
     def kodi_test():

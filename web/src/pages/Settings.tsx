@@ -2,18 +2,20 @@ import { useEffect, useState } from 'react';
 import { api, type KodiState, type Settings } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer } from '../components';
+import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
 import { ALL_LANGUAGES, language, libraryPath } from '../labels';
 
 type Draft = {
   host: string; port: string; user: string; password: string; token: string; keepOriginal: string[];
   dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean;
-};
+} & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 
 function toDraft(s: Settings): Draft {
   return {
     host: s.kodi.host, port: String(s.kodi.port), user: s.kodi.user, password: '', token: '', keepOriginal: s.titles.keepOriginal,
     dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
+    shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app,
   };
 }
 
@@ -43,6 +45,7 @@ export function SettingsPage({ refresh }: StatusHook) {
       titles: { keepOriginal: draft.keepOriginal },
       downloadStation: dsBody(),
       dryRun: draft.dryRun,
+      shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
       ...(draft.token ? { tmdb: { token: draft.token } } : {}),
     };
@@ -121,6 +124,7 @@ export function SettingsPage({ refresh }: StatusHook) {
             ? <span className="status small"><Dot kind="dot-success" />Connected · Kodi {kodi.version}</span>
             : <span className="status small"><Dot kind="dot-danger" />{kodi.problem}</span>)}
         </div>
+        <ShieldSettings draft={draft} edit={edit} />
       </section>
 
       <section className="panel form" aria-labelledby="ds-h">
