@@ -134,13 +134,17 @@ class Health:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
             return
         if not f["nfo"]:
+            stem = f"Film/{f['file'].rsplit('.', 1)[0]}"
+            fix = {"path": stem + ".nfo", "video": f"Film/{f['file']}", "art": f"Film/{f['key']}/" if f["folder"] else stem + "-"}
+            chosen = (self.store.get("library.films") or {}).get(f"Film/{f['file']}")
+            if chosen:  # the reader said which film it is
+                fixes["film-nfos"].append({**fix, "tmdb": chosen["tmdbId"], "label": chosen["label"]})
+                return
             # Look it up on TMDB by its name and length, as for a download; only a certain match counts.
             p = self.store.parsed("movie", f["file"].split("/"))
             m = identify_movie(self.tmdb, [p.title or f["key"], *p.alt_titles], p.year, probe_duration(self._full(f"Film/{f['file']}")))
             if m.status == "auto":
-                stem = f"Film/{f['file'].rsplit('.', 1)[0]}"
-                fixes["film-nfos"].append({"path": stem + ".nfo", "video": f"Film/{f['file']}", "tmdb": m.best.tmdb_id,
-                                           "art": f"Film/{f['key']}/" if f["folder"] else stem + "-",
+                fixes["film-nfos"].append({**fix, "tmdb": m.best.tmdb_id,
                                            "label": f"{m.best.title} ({m.best.year})" if m.best.year else m.best.title})
             else:
                 guess = f" Its best guess, {m.best.title} ({m.best.year}), isn't certain." if m.best else ""

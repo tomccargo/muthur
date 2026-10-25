@@ -10,7 +10,7 @@ const code = (s: number, e: number[] | number) => `S${String(s).padStart(2, '0')
 const aired = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
 // A missing poster gets the title's initials on the poster background (DESIGN.md §8), never a broken image.
-function Poster({ path, title }: { path: string | null | undefined; title: string }) {
+export function Poster({ path, title }: { path: string | null | undefined; title: string }) {
   const [failed, setFailed] = useState(false);
   if (!path || failed) {
     const initials = title.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
@@ -19,7 +19,7 @@ function Poster({ path, title }: { path: string | null | undefined; title: strin
   return <img className="poster" src={IMAGES + path} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }
 
-function TitleCard({ card, pressed, onPick }: { card: Card; pressed: boolean; onPick: () => void }) {
+export function TitleCard({ card, pressed, onPick }: { card: Card; pressed: boolean; onPick: () => void }) {
   const why = Object.entries(card.signals ?? {}).filter(([k]) => k !== 'popularity').map(([k, v]) => `${SIGNALS[k] ?? k} ${Math.round(v * 100)}%`);
   return (
     <button type="button" className="card" aria-pressed={pressed} onClick={onPick}>

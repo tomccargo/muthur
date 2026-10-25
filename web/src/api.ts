@@ -164,6 +164,8 @@ export const api = {
   fixes: () => call<Fixes>('/api/fixes'),
   checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
+  chooseForLibrary: (kind: Kind, path: string, tmdbId: number) =>
+    call<{ fixes: Partial<Record<FixKind, number>>; questions: number }>('/api/fixes/choose', { method: 'POST', body: JSON.stringify({ kind, path, tmdbId }) }),
   fixesLast: () => call<FixResult | Record<string, never>>('/api/fixes/last'),
   quarantine: () => call<{ days: { day: string; files: number; size: number }[] }>('/api/quarantine'),
   emptyQuarantine: (days: string[]) =>

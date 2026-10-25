@@ -135,3 +135,28 @@ def test_weekly_refresh_keeps_scores_health_added(env):
     refresh = health.scores
     summary = refresh.run()  # the same datasets: nothing changes, and the added score stays
     assert summary["updated"] == 0 and "7.2" in nfo.read_text(encoding="utf-8")
+
+
+def test_choosing_a_film_turns_the_question_into_a_fix(env, monkeypatch):
+    import time
+
+    from fastapi.testclient import TestClient
+
+    from muthur.web import Config, create_app
+
+    tmp, _, _ = env
+    for k, v in {"MUTHUR_CONFIG": tmp / "config", "MUTHUR_DOWNLOADS": tmp / "dl", "MUTHUR_TV": tmp / "TV", "MUTHUR_FILM": tmp / "Film",
+                 "MUTHUR_QUARANTINE": tmp / "_q", "TMDB_READ_TOKEN": "x"}.items():
+        monkeypatch.setenv(k, str(v))
+    client = TestClient(create_app(Config(dotenv=False), tmdb_factory=lambda token, path: FakeTmdb()))
+    client.post("/api/fixes/check")
+    for _ in range(200):
+        if not client.get("/api/jobs/current").json()["running"]:
+            break
+        time.sleep(0.05)
+    assert client.get("/api/fixes").json()["manual"]["films"]["count"] == 1
+    r = client.post("/api/fixes/choose", json={"kind": "movie", "path": "Film/Mystery/Mystery.mkv", "tmdbId": 61})
+    assert r.status_code == 200, r.text
+    assert r.json()["fixes"] == {"film-nfos": 1}
+    after = client.get("/api/fixes").json()
+    assert after["manual"]["films"]["count"] == 0 and after["fixes"]["film-nfos"]["count"] == 2

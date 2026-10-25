@@ -27,6 +27,7 @@ from .journal import Journal
 from .kodi import Kodi
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
+from .parse import parse_show_folder
 from .scores import ScoreRefresh
 from .store import Store
 from .tmdb import Tmdb
@@ -541,6 +542,52 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if job is None:
             raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
+
+    @app.post("/api/fixes/choose")
+    def fixes_choose(body: dict):
+        """The reader says which show or film a library folder is. A show is remembered for its folder; a
+        film's choice is kept for its file. That one item is checked again right away."""
+        client = need_tmdb()
+        not_busy()
+        kind, path, tmdb_id = body.get("kind"), str(body.get("path") or ""), str(body.get("tmdbId") or "")
+        if kind not in ("tv", "movie") or not tmdb_id.isdigit():
+            raise HTTPException(422, "Choose a show or a film first.")
+        plan, _ = store.snapshot("health")
+        lib, _ = store.snapshot("library")
+        if not plan or not lib:
+            raise HTTPException(409, "Check the library first.")
+        tool = health_tool(client)
+        fixes_new: dict = {k: [] for k in FIXES}
+        manual_new: dict = {k: [] for k in plan["manual"]}
+        if kind == "tv":
+            folder = path.partition("/")[2]
+            show = next((s for s in lib["shows"] if s["folder"] == folder), None)
+            d = client.tv(int(tmdb_id)) or {}
+            if not show or not d.get("id"):
+                raise HTTPException(404, "That show isn't in the index, or not on TMDB.")
+            year = _year(d.get("first_air_date"))
+            for name in {parse_show_folder(folder).title, d.get("name")}:
+                if name:
+                    store.remember("tv", name, int(tmdb_id), year, d.get("name") or name, folder, "confirmed")
+            tool._show(show, fixes_new, manual_new)
+            mine = lambda x: x["path"] == f"TV/{folder}" or x["path"].startswith(f"TV/{folder}/")  # noqa: E731
+        else:
+            film = next((f for f in lib["films"] if f.get("file") and f"Film/{f['file']}" == path), None)
+            d = client.movie(int(tmdb_id)) or {}
+            if not film or not d.get("id"):
+                raise HTTPException(404, "That film isn't in the index, or not on TMDB.")
+            year = _year(d.get("release_date"))
+            choices = store.get("library.films") or {}
+            choices[path] = {"tmdbId": int(tmdb_id), "label": f"{d.get('title')} ({year})" if year else d.get("title")}
+            store.put("library.films", choices)
+            tool._film(film, fixes_new, manual_new)
+            mine = lambda x: x["path"] == path or x.get("video") == path  # noqa: E731
+        for k in plan["fixes"]:
+            plan["fixes"][k] = [x for x in plan["fixes"][k] if not mine(x)] + fixes_new.get(k, [])
+        for k in plan["manual"]:
+            plan["manual"][k] = [x for x in plan["manual"][k] if not mine(x)] + manual_new.get(k, [])
+        store.save_snapshot("health", plan)
+        return {"fixes": {k: len(v) for k, v in fixes_new.items() if v}, "questions": sum(len(v) for v in manual_new.values())}
 
     @app.get("/api/fixes/last")
     def fixes_last():

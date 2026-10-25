@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
 import { QuarantinePanel } from './Quarantine';
+import { TitleCard } from './Review';
+import type { Card, Kind } from '../api';
 import { api, type FixKind, type FixResult, type Fixes } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
@@ -22,12 +24,44 @@ const QUESTIONS: Record<string, string> = {
   films: 'Films without an NFO',
 };
 
+// "Which is it?" for a show or film muthur can't place: a TMDB search right in the list.
+function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy: boolean; onDone: (text: string) => void }) {
+  const name = path.split('/').filter(Boolean)[kind === 'tv' ? 1 : path.split('/').length - 1] ?? path;
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(name.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[._]+/g, ' '));
+  const [cards, setCards] = useState<Card[] | null>(null);
+  const [picked, setPicked] = useState<Card | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  if (!open) return <button className="btn-link small" type="button" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>Which is it?</button>;
+  const search = () => { setError(null); api.search(kind, query).then((r) => { setCards(r.results); setPicked(null); }).catch((e: Error) => setError(e.message)); };
+  const choose = () => {
+    if (!picked) return;
+    api.chooseForLibrary(kind, path, picked.tmdbId)
+      .then((r) => onDone(`${picked.title}${picked.year ? ` (${picked.year})` : ''}: ${Object.values(r.fixes).reduce((a, b) => a + (b ?? 0), 0)} fixes added${r.questions ? `, ${r.questions} questions left` : ''}.`))
+      .catch((e: Error) => setError(e.message));
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 6 }}>
+      <form className="inline" onSubmit={(e) => { e.preventDefault(); search(); }}>
+        <input className="field" aria-label="Title" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <button className="btn btn-secondary btn-sm" type="submit" disabled={!query.trim()}>Search TMDB</button>
+      </form>
+      {cards && (cards.length ? (
+        <div className="cards">{cards.slice(0, 6).map((c) => <TitleCard key={c.tmdbId} card={c} pressed={picked?.tmdbId === c.tmdbId} onPick={() => setPicked(c)} />)}</div>
+      ) : <p className="hint">Nothing found; try another spelling.</p>)}
+      {error && <div className="banner banner-error" role="alert">{error}</div>}
+      {picked && <button className="btn btn-secondary btn-sm" type="button" disabled={busy} style={{ alignSelf: 'flex-start' }} onClick={choose}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>}
+    </div>
+  );
+}
+
 export function HealthPage({ status, refresh }: StatusHook) {
   const [data, setData] = useState<Fixes | null>(null);
   const [chosen, setChosen] = useState<Set<FixKind>>(new Set());
   const [asking, setAsking] = useState(false);
   const [last, setLast] = useState<FixResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const running = Boolean(status?.job?.running);
 
   useEffect(() => {
@@ -70,6 +104,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
       )}
       <JobProgress job={status?.job} />
       {error && <div className="banner banner-error" role="alert">{error}</div>}
+      {note && <div className="banner banner-note" role="status">{note}</div>}
       {last && !running && status?.job?.name === 'fixes-apply' && (
         <div className={`banner ${last.failed.length ? 'banner-warn' : 'banner-note'}`} role="status" style={{ flexDirection: 'column', alignItems: 'stretch' }}>
           <span className="status"><Dot kind={last.failed.length ? 'dot-warning' : 'dot-success'} />
@@ -120,6 +155,10 @@ export function HealthPage({ status, refresh }: StatusHook) {
                   <li key={q.path + (q.season ?? '')} style={{ flexDirection: 'column', gap: 2 }}>
                     <span className="mono small" style={{ wordBreak: 'break-all' }}>{libraryPath(q.path)}{q.season != null ? ` · season ${q.season}` : ''}</span>
                     <span className="small muted">{q.why}</span>
+                    {(k === 'shows' || k === 'films') && (
+                      <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running}
+                        onDone={(text) => { setNote(text); api.fixes().then(setData).catch(() => undefined); refresh(); }} />
+                    )}
                   </li>
                 ))}
                 {v!.count > v!.items.length && <li><span className="small muted">and {v!.count - v!.items.length} more</span></li>}
