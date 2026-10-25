@@ -23,7 +23,7 @@ export type Status = {
 };
 
 export type ItemStatus = 'ready' | 'review' | 'ignored' | 'waiting' | 'suspicious' | 'packed' | 'error';
-export type Problem = 'missing' | 'unnumbered' | 'other-episode' | 'exists';
+export type Problem = 'missing' | 'unnumbered' | 'other-episode' | 'exists' | 'absolute';
 export type Suggestion = { season: number; episode: number; title: string; part: number | null };
 export type Planned = {
   source: string; size: number; target: string | null; library: 'TV' | 'Film' | null; writes: string[];

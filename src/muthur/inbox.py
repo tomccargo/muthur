@@ -116,6 +116,28 @@ def _year(date: str | None) -> int | None:
     return int(date[:4]) if date and date[:4].isdigit() else None
 
 
+def _from_absolute(n: int, folder_season: int | None, counts: dict[int, int]) -> tuple[int, int] | None:
+    """Episode n of a show numbered without seasons, as (season, episode) on TMDB. In a season folder the
+    number counts within that season when it fits there; otherwise across the regular seasons in order."""
+    if folder_season and 0 < n <= counts.get(folder_season, 0):
+        return folder_season, n
+    total = 0
+    for s in sorted(x for x in counts if x > 0):
+        if n <= total + counts[s]:
+            hit = (s, n - total)
+            return hit if not folder_season or hit[0] == folder_season else None
+        total += counts[s]
+    return None
+
+
+def same_title(named: str, tmdb_title: str) -> bool:
+    """The title in a file name is TMDB's: nearly the same, or one contains the other."""
+    from .text import normalize
+
+    a, b = normalize(_bare(named)), normalize(_bare(tmdb_title))
+    return similarity(a, b) >= SAME_EPISODE or (min(len(a), len(b)) >= 4 and (a in b or b in a))
+
+
 def _bare(title: str | None) -> str:
     """'Goodbye Toby Part 2' and 'Goodbye Toby (2)' both become 'Goodbye Toby'."""
     return re.sub(r"\s*\(\d\)$", "", PART_NUMBER.sub("", title or "")).strip(" -")
@@ -259,7 +281,8 @@ class Inbox:
                 item.status, item.reason = "ready", "A show already in the library."
                 name, orig, lang, show_year = details.get("name", r["title"]), details.get("original_name"), details.get("original_language"), r["year"]
             else:
-                m = identify_show(self.tmdb, title, year, country, wanted)
+                absolute_max = max((e.absolute for e, _, _ in eps if e.absolute), default=None)
+                m = identify_show(self.tmdb, title, year, country, wanted, absolute_max)
                 item.candidates = _candidates(m)
                 if m.best is None:
                     item.status, item.reason = "review", "No show by that name on TMDB. Search for it by hand."
@@ -275,9 +298,12 @@ class Inbox:
         shown = display_title(name, orig, lang, self.keep_original())
         item.title, item.year = shown, show_year
         counts = {s["season_number"]: s.get("episode_count") or 0 for s in details.get("seasons", [])}
-        titles = self._episode_titles(item.tmdb_id, {s for s, _ in wanted} | {int(m["season"]) for m in mapping.values()})
+        absolute = {"/".join(parts): hit for e, parts, _ in eps
+                    if "absolute-number" in e.flags and e.absolute and not e.blocked and (hit := _from_absolute(e.absolute, e.season, counts))}
+        titles = self._episode_titles(item.tmdb_id, {s for s, _ in wanted} | {int(m["season"]) for m in mapping.values()}
+                                      | {s for s, _ in absolute.values()})
         for e, parts, size in eps:
-            item.files.append(self._episode(folder, shown, show_year, e, parts, size, mapping, counts, titles))
+            item.files.append(self._episode(folder, shown, show_year, e, parts, size, mapping, counts, titles, absolute))
 
         placed = [f for f in item.files if f.target]
         if not folder and placed:
@@ -292,7 +318,7 @@ class Inbox:
                 item.status, item.reason = "review", " ".join(problems)
         return item
 
-    def _episode(self, folder, shown, show_year, e, parts, size, mapping, counts, titles) -> Planned:
+    def _episode(self, folder, shown, show_year, e, parts, size, mapping, counts, titles, absolute=None) -> Planned:
         """Plan one episode file: its new name, the TMDB episode its NFO describes, and any problem."""
         source = "/".join(parts)
         p = Planned(source, size, library="TV", parsed={"season": e.season, "episodes": list(e.episodes),
@@ -305,6 +331,10 @@ class Inbox:
             keep = numbered and chosen.get("number", "file") == "file"
             season, numbers = (e.season, list(e.episodes)) if keep else (ts, [te])
             missing = te > counts.get(ts, 0)
+        elif source in (absolute or {}):
+            # Numbered without a season ('[Group] Show - 27'): read against TMDB's seasons.
+            ts, te = absolute[source]
+            part, season, numbers, missing = None, ts, [te], False
         elif numbered:
             ts, te, part = e.season, e.episodes[0], None
             season, numbers = e.season, list(e.episodes)
@@ -324,6 +354,9 @@ class Inbox:
             other = self._suggest(e, titles, ts)
             if other and other["episode"] != te and similarity(_bare(e.episode_title), _bare(base)) < OTHER_EPISODE:
                 p.problem, p.suggestion = "other-episode", other
+        if not chosen and not p.problem and source in (absolute or {}) and not (e.episode_title and base and same_title(e.episode_title, base)):
+            # Only a title in the name confirms the reading; without one, the reader checks it once in Review.
+            p.problem, p.suggestion = "absolute", {"season": ts, "episode": te, "title": base, "part": None}
 
         ext = os.path.splitext(parts[-1])[1]
         if folder:
@@ -419,6 +452,7 @@ _PROBLEMS = {
     "missing": lambda n: f"{n} episode(s) don't exist on TMDB under these numbers.",
     "other-episode": lambda n: f"{n} file(s) are named after a different episode than their number.",
     "unnumbered": lambda n: f"{n} file(s) have a damaged or missing episode number.",
+    "absolute": lambda n: f"{n} file(s) are numbered without a season; muthur's reading needs your check.",
     "exists": lambda n: f"{n} file(s) have an episode number that is already in the library; muthur never overwrites.",
 }
 

@@ -121,6 +121,7 @@ const PROBLEM: Record<string, (f: Planned) => string> = {
   missing: (f) => `TMDB has no ${code(f.season ?? 0, f.episodes ?? [])} for this show.`,
   'other-episode': (f) => `The name says “${f.parsed?.episodeTitle}”, but TMDB’s ${code(f.season ?? 0, f.episodes ?? [])} is “${f.title}”.`,
   unnumbered: () => 'The episode number in the name is damaged or missing.',
+  absolute: (f) => `Numbered ${f.parsed?.episodes[0] ?? '?'} without a season; muthur reads it as ${code(f.season ?? 0, f.episodes ?? [])}${f.title ? ` “${f.title}”` : ''}. Check it once.`,
   exists: (f) => `Your library already has ${code(f.season ?? 0, f.episodes ?? [])} in this season.`,
 };
 
@@ -131,7 +132,7 @@ function startChoice(f: Planned): EpisodeChoice {
     season: s?.season ?? f.tmdb_season ?? p?.season ?? 1,
     episode: s?.episode ?? f.tmdb_episode ?? p?.episodes[0] ?? 1,
     part: s?.part ?? p?.part ?? null,
-    number: p?.episodes.length && !p.damaged ? 'file' : 'tmdb',
+    number: p?.episodes.length && !p.damaged && f.problem !== 'absolute' ? 'file' : 'tmdb',
   };
 }
 
