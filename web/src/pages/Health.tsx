@@ -81,7 +81,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
         <div>
           <p className="eyebrow">Library health</p>
           <h1>Health</h1>
-          <p className="lede">{data?.at ? `What’s wrong in the library and what muthur can fix safely · checked ${when(data.at)}` : 'Not checked yet.'}</p>
+          <p className="lede">{data?.at ? `What’s wrong in the library and what muthur can fix safely · checked ${when(data.at)}, again every day` : 'Not checked yet.'}</p>
         </div>
         <div className="actions">
           {!asking && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Check the library'}</button>}

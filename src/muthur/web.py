@@ -360,7 +360,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         return result
 
     def scheduler():
-        """Every hour: follow Kodi's watched status; once a week, refresh the IMDb scores."""
+        """Every hour: follow Kodi's watched status. Once a day: the Health check (read-only; it also builds
+        the library index). Once a week: the IMDb scores. Fixes are never applied from here."""
         time.sleep(300)  # let a fresh start settle first
         while True:
             try:
@@ -370,9 +371,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             except Exception:  # Kodi off or busy: the Dashboard shows when the last backup was
                 pass
             try:
-                lib, saved = store.snapshot("library")
-                if not saved or time.time() - saved > 86400:  # the index is a day old: build it again
-                    start_library()
+                client = tmdb()
+                _, checked = store.snapshot("health")
+                _, indexed = store.snapshot("library")
+                if client and (not checked or time.time() - checked > 86400):  # a day old: check again
+                    jobs.start("health", lambda j: check_health(client, j))
+                elif not client and (not indexed or time.time() - indexed > 86400):
+                    start_library()  # without TMDB only the index can be built
             except Exception:
                 pass
             try:
