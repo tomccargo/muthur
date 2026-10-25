@@ -65,6 +65,7 @@ export const api = {
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
   testKodi: () => call<KodiState>('/api/kodi/test', { method: 'POST' }),
+  scanKodi: () => call<{ started: boolean }>('/api/kodi/scan', { method: 'POST' }),
   apply: (ids?: string[]) => call<Job>('/api/apply', { method: 'POST', body: JSON.stringify(ids ? { ids } : {}) }),
   history: () => call<{ runs: Run[] }>('/api/history'),
   run: (id: number) => call<{ ops: Op[] }>(`/api/history/${id}`),

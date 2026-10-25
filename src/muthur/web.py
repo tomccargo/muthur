@@ -235,6 +235,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         k = kodi()
         return k.check() if k else {"connected": False, "problem": "Enter the Shield's address first."}
 
+    @app.post("/api/kodi/scan")
+    def kodi_scan():
+        """Ask Kodi to look for new files in its video sources (it reads the NFOs muthur wrote)."""
+        k = kodi()
+        if not k:
+            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        state = k.check()
+        if not state.get("connected"):
+            raise HTTPException(409, state.get("problem", "Kodi isn't reachable."))
+        k.call("VideoLibrary.Scan")
+        return {"started": True}
+
     # -- the UI -----------------------------------------------------------------
     dist = Path(cfg.web_dist)
     if (dist / "index.html").is_file():

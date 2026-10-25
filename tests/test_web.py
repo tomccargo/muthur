@@ -172,3 +172,8 @@ def test_apply_then_undo_through_the_api(client, tmp_path):
     assert (tmp_path / "complete" / "Some.Film.1999.1080p.BluRay.x264-GRP.mkv").exists()
     assert not (tmp_path / "Film" / "Een Film (1999)").exists()
     assert client.get("/api/history").json()["runs"][0]["undone"] is not None
+
+
+def test_kodi_scan_needs_a_connection(client):
+    r = client.post("/api/kodi/scan")
+    assert r.status_code == 409 and "Settings" in r.json()["detail"]

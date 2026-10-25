@@ -83,7 +83,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
       <div className="grid-2">
         <section className="panel" aria-labelledby="kodi-h">
           <div className="panel-head"><h2 id="kodi-h">Kodi on the Shield</h2><Link to="/settings" className="small">Settings</Link></div>
-          <ul className="rows">
+          <ul className="rows" style={{ marginBottom: 12 }}>
             <li>
               <span>Connection</span>
               {k == null ? <span className="status"><Dot />Not set up yet</span>
@@ -91,6 +91,16 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
                   : <span className="status"><Dot kind="dot-danger" />{k.problem}</span>}
             </li>
           </ul>
+          {k?.connected ? (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
+              setMessage(null);
+              api.scanKodi()
+                .then(() => setMessage({ kind: 'note', text: 'Kodi is looking for new files now. New episodes show up in its library in a minute or two.' }))
+                .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+            }}>Ask Kodi to look for new files</button>
+          ) : (
+            <p className="hint">muthur asks Kodi to look for new files after every Apply, once the connection is set up.</p>
+          )}
         </section>
 
         <section className="panel" aria-labelledby="mem-h">
