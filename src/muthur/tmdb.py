@@ -23,6 +23,8 @@ class Tmdb:
         self.session.headers.update({"Authorization": f"Bearer {token}", "Accept": "application/json"})
         os.makedirs(os.path.dirname(cache_path) or ".", exist_ok=True)
         self.db = sqlite3.connect(cache_path, check_same_thread=False)
+        self.db.execute("PRAGMA journal_mode=WAL")  # see Store: no flush per cached answer
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.db.execute("CREATE TABLE IF NOT EXISTS cache (key TEXT PRIMARY KEY, body TEXT NOT NULL, fetched REAL NOT NULL)")
         self.lock = threading.Lock()
         self.min_gap = 1.0 / max_per_second

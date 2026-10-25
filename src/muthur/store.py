@@ -34,6 +34,10 @@ class Store:
     def __init__(self, path: str):
         self.db = sqlite3.connect(path, check_same_thread=False)
         self.db.row_factory = sqlite3.Row
+        # WAL with normal sync: a commit no longer waits for the disk to flush. On a NAS with
+        # spinning disks a flush per commit made the library import take over an hour.
+        self.db.execute("PRAGMA journal_mode=WAL")
+        self.db.execute("PRAGMA synchronous=NORMAL")
         self.lock = threading.Lock()
         with self.lock:
             self.db.executescript(SCHEMA)

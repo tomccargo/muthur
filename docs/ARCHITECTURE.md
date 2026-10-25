@@ -61,6 +61,7 @@ Measured on 2026-10-25: the whole backend (Python, FastAPI, uvicorn, guessit, mu
 - **Memory cap:** the container runs with `mem_limit: 256m`, so it can never squeeze DSM, Download Station or SMB.
 - **CPU:** `cpu_shares` lower than the default, and long jobs (library check, ID-memory import, score refresh) run in a thread at nice 10. Interactive requests stay at normal priority.
 - **Parse once:** every parsed name is cached in SQLite, keyed by the name and the parser version. A full library check is slow only the first time and after a parser update.
+- **SQLite in WAL mode with `synchronous=NORMAL`.** Measured on the NAS's disks: 813 ms per commit in SQLite's default mode, 0.1 ms in WAL. With a commit per cached name, the default mode made the first library import take over an hour.
 - **One process, one worker.** No worker pool, no in-memory copy of the library; lists are paged from SQLite.
 
 Rewriting the backend in Go would use less memory but would lose guessit, the most accurate parser available. That isn't worth it at these numbers.
