@@ -185,6 +185,12 @@ class Store:
             row = self.db.execute(q, (path, name)).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
 
+    def snapshot_saved(self, name: str) -> float | None:
+        """When a snapshot was last saved, without loading it."""
+        with self.lock:
+            row = self.db.execute("SELECT saved FROM snapshots WHERE name = ?", (name,)).fetchone()
+        return row[0] if row else None
+
     def snapshot(self, name: str):
         with self.lock:
             row = self.db.execute("SELECT body, saved FROM snapshots WHERE name = ?", (name,)).fetchone()

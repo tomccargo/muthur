@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { WatchedPanel } from './Watched';
-import { api, type PathState } from '../api';
+import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
 import { when } from '../labels';
@@ -53,6 +53,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         </div>
       </header>
 
+      {status && <SetupChecklist status={status} />}
       {error && <div className="banner banner-error" role="alert">muthur isn’t answering: {error}</div>}
       {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
       {status && !status.tmdb.configured && (
@@ -73,7 +74,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           <Link to="/settings">Settings</Link>
         </div>
       )}
-      <JobProgress job={job} />
+      <JobProgress job={job} queue={status?.queue} />
 
       <section className="tiles" aria-label="Downloads">
         <Link className="tile" to="/inbox?show=ready"><span className="label">Ready</span><strong>{counts.ready ?? 0}</strong><span className="sub">matched with confidence</span></Link>
@@ -142,7 +143,8 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           <ul className="rows">
             <li>
               <span>Duplicates</span>
-              <Link to="/duplicates" className="status">{(status?.duplicates ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.duplicates} with more than one copy</> : <><Dot kind="dot-success" />None found</>}</Link>
+              <Link to="/duplicates" className="status">{(status?.duplicates ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.duplicates} with more than one copy</>
+                : status?.duplicatesAt ? <><Dot kind="dot-success" />None found</> : <><Dot />Not checked yet</>}</Link>
             </li>
             <li>
               <span>Health</span>
@@ -184,5 +186,36 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
       </div>
       <Footer />
     </div>
+  );
+}
+
+// Until the essentials are set up, the Dashboard says what's left; each step ticks itself and links to
+// where it's done. An install that is set up never sees it.
+function SetupChecklist({ status }: { status: Status }) {
+  const k = status.kodi;
+  const folder = (p: string) => p.replace(/[/\\]+$/, '').split(/[/\\]/).pop() ?? p;
+  const sources = k && k.connected ? k.sources : undefined;
+  const steps: { done: boolean; text: string; to: string; optional?: boolean; pending?: string }[] = [
+    { done: status.tmdb.configured, text: 'Add your TMDB token', to: '/settings' },
+    { done: Boolean(k), text: 'Connect Kodi', to: '/settings' },
+    { done: Boolean(sources?.tv && sources?.film), to: '/settings', pending: sources ? undefined : 'checked when Kodi answers',
+      text: `Kodi has video sources for the ${folder(status.paths.tv.path)} and ${folder(status.paths.film.path)} folders` },
+    { done: Boolean(status.inbox.scannedAt), text: 'Check the downloads for the first time', to: '/inbox' },
+    { done: Boolean(k?.canWake), text: `Optional: let muthur wake the ${status.names.device}`, to: '/settings', optional: true },
+  ];
+  const needed = steps.filter((s) => !s.optional && !(s.pending && !s.done));
+  if (needed.every((s) => s.done) && !(sources && !(sources.tv && sources.film))) return null;
+  return (
+    <section className="panel" aria-labelledby="setup-h">
+      <div className="panel-head"><h2 id="setup-h">Getting started</h2><span className="small muted">{steps.filter((s) => s.done).length} of {steps.length} done</span></div>
+      <ul className="rows">
+        {steps.map((s) => (
+          <li key={s.text}>
+            <span className="status"><Dot kind={s.done ? 'dot-success' : ''} />{s.done ? s.text : <Link to={s.to}>{s.text}</Link>}</span>
+            {!s.done && s.pending && <span className="small muted">{s.pending}</span>}
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }

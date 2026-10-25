@@ -161,12 +161,12 @@ class Journal:
         self._done(op_id, fingerprint(path))
 
     def counts(self, run_ids: list[int]) -> dict[int, dict[str, int]]:
-        """Done changes per run and kind, in one query (History lists 50 runs)."""
+        """Changes per run and kind that happened (also those put back since), in one query (History lists 50 runs)."""
         out: dict[int, dict[str, int]] = {r: {} for r in run_ids}
         if run_ids:
             with self.store.lock:
                 rows = self.store.db.execute(
-                    f"SELECT run_id, op, COUNT(*) FROM ops WHERE status = 'done' AND run_id IN ({','.join('?' * len(run_ids))}) "
+                    f"SELECT run_id, op, COUNT(*) FROM ops WHERE status IN ('done', 'undone') AND run_id IN ({','.join('?' * len(run_ids))}) "
                     "GROUP BY run_id, op", run_ids).fetchall()
             for run_id, op, n in rows:
                 out[run_id][op] = n

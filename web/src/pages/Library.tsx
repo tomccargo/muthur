@@ -68,7 +68,8 @@ function ShowPage({ folder }: { folder: string }) {
   const seasons = useMemo(() => {
     const m = new Map<number | null, LibEpisode[]>();
     for (const e of show?.episodes ?? []) m.set(e.season, [...(m.get(e.season) ?? []), e]);
-    return [...m.entries()].sort((a, b) => (a[0] ?? 999) - (b[0] ?? 999));
+    const byNumber = (a: LibEpisode, b: LibEpisode) => (a.episodes[0] ?? 9999) - (b.episodes[0] ?? 9999) || a.file.localeCompare(b.file);
+    return [...m.entries()].sort((a, b) => (a[0] ?? 999) - (b[0] ?? 999)).map(([s, eps]) => [s, [...eps].sort(byNumber)] as const);
   }, [show]);
   return (
     <div className="page">
@@ -194,7 +195,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           </button>
         </div>
       </header>
-      <JobProgress job={status?.job} />
+      <JobProgress job={status?.job} queue={status?.queue} />
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="inline">
         <div className="seg" role="group" aria-label="Library">

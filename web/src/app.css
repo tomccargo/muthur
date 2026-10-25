@@ -160,3 +160,20 @@ a.tile:hover { background: var(--surface-muted); }
 /* ---- Progress ------------------------------------------------------------------ */
 .track { height: 6px; border-radius: 3px; background: var(--track); overflow: hidden; }
 .fill { display: block; height: 100%; border-radius: 3px; background: var(--mark); transition: width 0.3s ease; }
+
+/* ---- Sections with tabs, skip link, phone status (UX review, 0.24) ---------------------------------- */
+.section-tabs { max-width: 1180px; margin: 0 auto; padding: 20px 32px 0; display: flex; flex-wrap: wrap; gap: 6px; }
+.section-tab { display: inline-flex; align-items: center; gap: 6px; min-height: 36px; padding: 6px 14px; border-radius: 999px;
+  border: 1px solid var(--border-strong); color: var(--text); text-decoration: none; font-size: 14px; font-weight: 600; }
+.section-tab:hover { background: var(--surface-muted); }
+.section-tab[aria-current='page'] { background: var(--accent-soft); border-color: var(--accent-soft); color: var(--accent-strong); }
+.section-tabs + .page { padding-top: 16px; }
+.skip-link { position: absolute; left: -9999px; top: 8px; z-index: 50; padding: 10px 14px; border-radius: var(--radius-sm);
+  background: var(--surface-raised); color: var(--text); box-shadow: var(--shadow); }
+.skip-link:focus { left: 8px; }
+.main:focus { outline: none; }
+.topbar-status { display: inline-flex; align-items: center; justify-content: center; width: 32px; height: 32px; margin-left: auto; margin-right: 4px; }
+.panel-head > a { padding: 4px 0; }
+input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-color: var(--accent); flex: none; }
+.tiles { grid-template-columns: repeat(auto-fill, minmax(min(100%, 140px), 1fr)); }
+@media (max-width: 960px) { .section-tabs { padding: 16px 16px 0; } }

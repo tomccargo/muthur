@@ -215,3 +215,37 @@ def test_a_restore_plan_is_the_same_plan_in_any_order():
     a = [{"kind": "episode", "kodiid": 1, "what": "watched", "playcount": 1}, {"kind": "movie", "kodiid": 7, "what": "resume", "resume": 60.0}]
     assert _plan_check(a) == _plan_check(list(reversed(a)))
     assert _plan_check(a) != _plan_check([a[0], {**a[1], "kodiid": 8}])  # as many changes, but another item
+
+
+def test_a_suspicious_download_goes_to_quarantine_and_can_come_back(client, tmp_path):
+    client.put("/api/settings", json={"tmdb": {"token": "x"}})
+    items = _scan(client)
+    bad = next(i for i, it in items.items() if it["status"] == "suspicious")
+    assert client.post("/api/inbox/quarantine", json={"id": "Some.Show.S01E02.1080p.WEB.h264-GRP"}).status_code == 404  # not suspicious
+    run = client.post("/api/inbox/quarantine", json={"id": bad}).json()["run"]
+    assert not (tmp_path / "complete" / bad).exists()
+    assert bad not in {i["id"] for i in client.get("/api/inbox").json()["items"]}
+    assert client.post(f"/api/history/{run}/undo", json={}).status_code == 202
+    for _ in range(100):
+        if (tmp_path / "complete" / bad).exists():
+            break
+        time.sleep(0.05)
+    assert (tmp_path / "complete" / bad).exists()  # put back from History
+
+
+def test_questions_left_as_is_stay_away_until_they_change(client):
+    plan = {"at": 1, "fixes": {}, "manual": {
+        "numbers": [{"path": "TV/Show A/S01E01.mkv", "why": "damaged"}, {"path": "TV/Show A/S01E02.mkv", "why": "damaged"},
+                    {"path": "TV/Show B/S01E01.mkv", "why": "damaged"}],
+        "films": [{"path": "Film/X.mkv", "why": "unsure"}]}}
+    client.app.state.store.save_snapshot("health", plan)
+    client.post("/api/fixes/leave", json={"items": [{"path": "Film/X.mkv", "why": "unsure"}]})
+    client.post("/api/fixes/leave", json={"under": "TV/Show A"})
+    open_ = client.get("/api/fixes").json()
+    assert open_["manual"]["numbers"]["count"] == 1 and open_["manual"]["films"]["count"] == 0 and open_["left"] == 3
+    assert client.get("/api/fixes?left=true").json()["manual"]["numbers"]["count"] == 2
+    client.post("/api/fixes/leave", json={"under": "TV/Show A", "back": True})
+    assert client.get("/api/fixes").json()["manual"]["numbers"]["count"] == 3
+    plan["manual"]["films"][0]["why"] = "unsure, and now its NFO disagrees"  # the situation changed: asked again
+    client.app.state.store.save_snapshot("health", plan)
+    assert client.get("/api/fixes").json()["manual"]["films"]["count"] == 1

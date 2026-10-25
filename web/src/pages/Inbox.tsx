@@ -7,7 +7,15 @@ import { Link, navigate, useLocation } from '../nav';
 
 const FILTERS: [ItemStatus | 'all', string][] = [['all', 'All'], ['ready', 'Ready'], ['review', 'Needs you'], ['suspicious', 'Suspicious'], ['packed', 'Packed'], ['waiting', 'Still downloading'], ['ignored', 'Ignored']];
 
-function Detail({ item }: { item: Item }) {
+function Detail({ item, onChanged }: { item: Item; onChanged: (note: string | null, error?: string) => void }) {
+  const [busy, setBusy] = useState(false);
+  const toQuarantine = () => {
+    setBusy(true);
+    api.quarantineDownload(item.id)
+      .then(() => onChanged('Moved to quarantine. It can be put back from History, and is deleted for good only when you empty that day.'))
+      .catch((e: Error) => onChanged(null, e.message))
+      .finally(() => setBusy(false));
+  };
   const s = STATUS[item.status] ?? { label: item.status, dot: '' };
   const placed = item.files.filter((f) => f.target);
   return (
@@ -45,6 +53,9 @@ function Detail({ item }: { item: Item }) {
         </div>
       )}
       {item.status === 'review' && <Link to="/review" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>Choose in Review</Link>}
+      {(item.status === 'suspicious' || item.status === 'packed') && (
+        <button className="btn btn-secondary btn-sm" type="button" disabled={busy} style={{ alignSelf: 'flex-start' }} onClick={toQuarantine}>Move to quarantine</button>
+      )}
       <span className="small muted">{size(item.size)}</span>
     </aside>
   );
@@ -56,6 +67,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
   const [data, setData] = useState<Inbox | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
   const running = Boolean(status?.job?.running);
 
   useEffect(() => {
@@ -126,7 +138,8 @@ export function InboxPage({ status, refresh }: StatusHook) {
       )}
 
       {message && <div className="banner banner-error" role="alert">{message}</div>}
-      <JobProgress job={status?.job} />
+      {note && <div className="banner banner-note" role="status">{note}</div>}
+      <JobProgress job={status?.job} queue={status?.queue} />
       {status?.job && !status.job.running && status.job.name === 'apply' && !status.job.error && (
         <div className="banner banner-note" role="status">
           <span className="status"><Dot kind="dot-success" />Done. What moved, and the way to put it back, is in History.</span>
@@ -169,7 +182,11 @@ export function InboxPage({ status, refresh }: StatusHook) {
             })}
             {items.length === 0 && <p className="hint" style={{ padding: 12 }}>Nothing in this group.</p>}
           </section>
-          {current && <Detail item={current} />}
+          {current && <Detail item={current} onChanged={(text, error) => {
+            setNote(text);
+            setMessage(error ?? null);
+            if (text) api.inbox().then(setData).catch(() => undefined);
+          }} />}
         </div>
       )}
       <Footer />

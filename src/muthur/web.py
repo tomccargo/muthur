@@ -30,7 +30,7 @@ from .library_edit import LibraryEdit
 from .index import Index
 from .jobs import Busy, Jobs
 from .journal import Journal
-from .kodi import Kodi
+from .kodi import Kodi, folder_name
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
@@ -155,6 +155,12 @@ def _size(path: str) -> int:
     return total
 
 
+def _question_key(q: dict) -> str:
+    """A Health question as the reader left it: its place and its wording. When the files change, the
+    check words it differently (or finds another place), and it is asked again."""
+    return f"{q['path']}|{q.get('season')}|{q['why']}"
+
+
 def _path_state(path: str) -> dict:
     exists = os.path.isdir(path)
     return {"path": path, "exists": exists, "readable": exists and os.access(path, os.R_OK),
@@ -173,6 +179,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     index = Index(store, cfg.tv, cfg.film)
     dups = Duplicates(store, cfg.tv, cfg.film)
     jobs = Jobs()
+    JOB_NAMES = {"inbox": "Checking the downloads", "apply": "Filing downloads", "undo": "Putting a run back",
+                 "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
+                 "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
+                 "health": "Checking the library", "fixes-apply": "Fixing the library"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -249,6 +259,31 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 raise HTTPException(409, f"Kodi doesn't answer, and waking the {names()['device']} didn't work: {e}")
         raise HTTPException(409, state.get("problem") or "Kodi doesn't answer.")
 
+    def tell(message: str) -> None:
+        """A short message on the TV when Kodi is on. Never wakes the box (ARCHITECTURE.md §11)."""
+        k = kodi()
+        if k:
+            k.notify("muthur", message)
+
+    def job_finished(job) -> None:
+        """Told on the TV: a job the reader started that took more than half a minute (they may have walked
+        away), anything that needs them, and any job that stopped with a problem. Quick ones stay quiet."""
+        name = JOB_NAMES.get(job.name, job.name)
+        if job.error:
+            tell(f"{name} stopped with a problem. Details in muthur.")
+        elif job.result and (job.attention or (job.by_user and (job.finished or 0) - job.started > 30)):
+            tell(job.result)
+
+    jobs.on_finish = job_finished
+
+    def follow_watched(items) -> dict:
+        """One watched-status backup; a backup that pauses (a library that looks wiped) is told once."""
+        before = watched.state().get("paused")
+        result = watched.follow(items)
+        if result.get("paused") and not before:
+            tell(f"Watched backup paused: {result['paused']['why']} Check it in muthur.")
+        return result
+
     def not_dry():
         if store.get("dryRun", False):
             raise HTTPException(409, "Dry run is on: muthur only plans and changes nothing. Turn it off in Settings to make changes.")
@@ -318,7 +353,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def kodi_state(k: Kodi) -> dict:
         """Kodi's answer for the status poll, reused for 20 s: a Shield that is off shouldn't slow every page."""
         if kodi_seen.get("url") != k.url or time.time() - kodi_seen.get("at", 0) > 20:
-            kodi_seen.update(url=k.url, at=time.time(), state=k.check())
+            state = k.check()
+            if state.get("connected"):
+                try:  # a video source in Kodi for each library folder (the setup checklist)
+                    state["sources"] = {lib: bool(k.source_prefix(folder_name(root))) for lib, root in (("tv", cfg.tv), ("film", cfg.film))}
+                except Exception:
+                    pass
+            kodi_seen.update(url=k.url, at=time.time(), state=state)
         return kodi_seen["state"]
 
     @app.get("/api/health", include_in_schema=False)
@@ -344,8 +385,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "scores": scores_state(),
             "watched": {**watched.state(), "live": listener.connected},
             "duplicates": store.snapshot_count("duplicates", "$.groups"),
+            "duplicatesAt": store.snapshot_saved("duplicates"),  # None: never checked, so not 'none found'
             "fixes": store.snapshot_count("health", "$.fixes", each=True),
             "job": jobs.current.as_dict() if jobs.current else None,
+            "queue": [j.as_dict() for j in jobs.waiting()],
         }
 
     def scores_state() -> dict:
@@ -371,10 +414,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         def work(job):
             items = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan(job)
             store.save_snapshot("inbox", [asdict(i) for i in items])
+            ready, review = sum(i.status == "ready" for i in items), sum(i.status == "review" for i in items)
+            job.result = f"Downloads checked: {ready} ready, {review} need you."
 
         job = jobs.start("inbox", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     # -- apply, history, undo --------------------------------------------------------
@@ -429,13 +472,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 except DownloadStationError as e:
                     result["downloadStation"] = {"problem": str(e)}
             store.save_snapshot("last-apply", result)
+            job.result = f"{result['applied']} download(s) filed" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
+            job.attention = bool(result["stopped"])
             _rescan(client)
             if result["applied"]:
                 _tell_kodi(wake=True)
 
         job = jobs.start("apply", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.get("/api/history")
@@ -450,6 +493,35 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def run_detail(run_id: int):
         return {"ops": journal.ops(run_id)}
 
+    @app.post("/api/inbox/quarantine")
+    def inbox_quarantine(body: dict):
+        """A suspicious or packed download goes to quarantine (journalled, put back from History), so the reader
+        doesn't need File Station for it. Emptying that day of the quarantine deletes it for good."""
+        not_dry()
+        item_id = str(body.get("id") or "")
+        items, _ = store.snapshot("inbox")
+        item = next((i for i in items or [] if i["id"] == item_id), None)
+        if not item or item["status"] not in ("suspicious", "packed"):
+            raise HTTPException(404, "Only a suspicious or packed download in the inbox can go to quarantine from here.")
+        src = os.path.join(cfg.downloads, *item_id.split("/"))
+        dst = os.path.join(cfg.quarantine, time.strftime("%Y-%m-%d"), "downloads", *item_id.split("/"))
+        if os.path.lexists(dst):
+            dst += f" ({int(time.time())})"
+        why = ("A program named like an episode or film, taken out of the downloads." if item["status"] == "suspicious"
+               else "A packed download, taken out of the downloads.")
+        with alone("quarantine"):
+            run = journal.start("inbox")
+            try:
+                journal.move(run, item_id, src, dst, "quarantine")
+            except OSError as e:
+                journal.finish(run, {"applied": 0, "stopped": 1, "items": [{"id": item_id, "ok": False, "why": str(e)}]})
+                raise HTTPException(409, f"Couldn't move it: {getattr(e, 'strerror', None) or e}")
+            quarantine_notes.note(cfg.quarantine, dst, item_id, run, why)
+            journal.finish(run, {"applied": 1, "stopped": 0, "items": [{"id": item_id, "ok": True}],
+                                 "label": f"{item_id} moved to quarantine"})
+            store.save_snapshot("inbox", [i for i in items if i["id"] != item_id])
+        return {"run": run}
+
     @app.post("/api/history/{run_id}/undo", status_code=202)
     def undo(run_id: int, body: dict | None = None):
         not_dry()  # putting back moves and deletes files too
@@ -457,14 +529,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         client = tmdb()
 
         def work(job):
-            store.save_snapshot("last-undo", journal.undo(run_id, item))
+            result = journal.undo(run_id, item)
+            store.save_snapshot("last-undo", result)
+            job.result = ("Put back." if not result["skipped"]
+                          else f"Put back, but {len(result['skipped'])} change(s) couldn't be: see History.")
+            job.attention = bool(result["skipped"])
             if client:
                 _rescan(client)
             _tell_kodi(wake=True)
 
         job = jobs.start("undo", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     # -- ID memory --------------------------------------------------------------
@@ -478,21 +552,21 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("memory", import_tv(client, cfg.tv, store, job))
 
         job = jobs.start("memory", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     # -- scores (IMDb) ----------------------------------------------------------
-    def start_scores():
+    def start_scores(by_user: bool = True):
         client = tmdb()
         if client is None:
             return None
 
         def work(job):
             refresh = ScoreRefresh(store, journal, imdb, client, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"), kodi())
-            store.save_snapshot("last-scores", refresh.run(job))
+            summary = refresh.run(job)
+            store.save_snapshot("last-scores", summary)
+            job.result = f"IMDb scores refreshed: {summary['updated']} NFO(s) updated."
 
-        return jobs.start("scores", work)
+        return jobs.start("scores", work, by_user=by_user)
 
     @app.post("/api/scores/refresh", status_code=202)
     def scores_refresh():
@@ -500,8 +574,6 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if tmdb() is None:
             raise HTTPException(409, "Add your TMDB token in Settings first.")
         job = start_scores()
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     # -- watched status (Kodi is the master; muthur keeps the history) -----------
@@ -550,7 +622,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             try:
                 k = kodi(timeout=90)
                 if k and k.check().get("connected"):
-                    watched.follow(Watched.read_kodi(k))
+                    follow_watched(Watched.read_kodi(k))
             except Exception:  # Kodi off or busy: the Dashboard shows when the last backup was
                 pass
             try:
@@ -558,14 +630,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 _, checked = store.snapshot("health")
                 _, indexed = store.snapshot("library")
                 if client and (not checked or time.time() - checked > 86400):  # a day old: check again
-                    jobs.start("health", lambda j, c=client: check_health(c, j))
+                    jobs.start("health", lambda j, c=client: check_health(c, j), by_user=False)
                 elif not client and (not indexed or time.time() - indexed > 86400):
-                    start_library()  # without TMDB only the index can be built
+                    start_library(by_user=False)  # without TMDB only the index can be built
             except Exception:
                 pass
             try:
                 if imdb.due() and not store.get("dryRun", False):  # the refresh rewrites NFOs: not in a dry run
-                    start_scores()
+                    start_scores(by_user=False)
             except Exception:  # never let the schedule die; the Dashboard shows when the last refresh was
                 pass
             time.sleep(3600)
@@ -573,7 +645,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def backup_now():
         k = kodi(timeout=90)
         if k:
-            watched.follow(Watched.read_kodi(k))
+            follow_watched(Watched.read_kodi(k))
 
     listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back,
                         port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090))
@@ -582,17 +654,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
 
     # -- library ------------------------------------------------------------------
-    def start_library():
+    def start_library(by_user: bool = True):
         def work(job):
             store.save_snapshot("library", index.build(watched.latest(), job))
 
-        return jobs.start("library", work)
+        return jobs.start("library", work, by_user=by_user)
 
     @app.post("/api/library/scan", status_code=202)
     def library_scan():
         job = start_library()
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.get("/api/library")
@@ -690,13 +760,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def find_duplicates(job):
         lib = index.build(watched.latest(), job)
         store.save_snapshot("library", lib)
-        store.save_snapshot("duplicates", {"at": time.time(), "groups": dups.find(lib, job)})
+        groups = dups.find(lib, job)
+        store.save_snapshot("duplicates", {"at": time.time(), "groups": groups})
+        job.result = f"Duplicates checked: {len(groups)} with more than one copy."
 
     @app.post("/api/duplicates/scan", status_code=202)
     def duplicates_scan():
         job = jobs.start("duplicates", find_duplicates)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.get("/api/duplicates")
@@ -739,6 +809,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             watched.follow(Watched.read_kodi(k))  # a fresh backup right before anything moves (§11)
             result = apply_groups(dups, groups, journal, cfg.quarantine, k, job)
             store.save_snapshot("last-duplicates", result)
+            job.result = f"{result['applied']} duplicate(s) resolved" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
+            job.attention = bool(result["stopped"])
             done = {r["id"] for r in result["items"] if r["ok"]}
             data, _ = store.snapshot("duplicates")
             if data:
@@ -747,8 +819,6 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("library", index.build(watched.latest()))
 
         job = jobs.start("duplicates-apply", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.get("/api/duplicates/last")
@@ -763,24 +833,53 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def check_health(client, job):
         lib = index.build(watched.latest(), job)
         store.save_snapshot("library", lib)
-        store.save_snapshot("health", health_tool(client).check(lib, job))
+        plan = health_tool(client).check(lib, job)
+        store.save_snapshot("health", plan)
+        if job:
+            job.result = (f"Library checked: {sum(len(v) for v in plan['fixes'].values()):,} fix(es), "
+                          f"{sum(len(v) for v in plan['manual'].values()):,} question(s).")
 
     @app.post("/api/fixes/check", status_code=202)
     def fixes_check():
         client = need_tmdb()
         job = jobs.start("health", lambda j: check_health(client, j))
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.get("/api/fixes")
-    def fixes():
+    def fixes(left: bool = False):
+        """left: the questions the reader left as is, instead of the open ones."""
         plan, _ = store.snapshot("health")
         if not plan:
-            return {"at": None, "fixes": {}, "manual": {}}
+            return {"at": None, "fixes": {}, "manual": {}, "left": 0}
+        gone = store.get("health.left") or {}
+        manual = {k: [q for q in v if (_question_key(q) in gone) == left] for k, v in plan["manual"].items()}
         return {"at": plan["at"],
                 "fixes": {k: {"count": len(v), "sample": v[:12]} for k, v in plan["fixes"].items()},
-                "manual": {k: {"count": len(v), "items": v[:200]} for k, v in plan["manual"].items()}}
+                "manual": {k: {"count": len(v), "items": v[:200]} for k, v in manual.items()},
+                "left": sum(_question_key(q) in gone for v in plan["manual"].values() for q in v)}
+
+    @app.post("/api/fixes/leave")
+    def fixes_leave(body: dict):
+        """The reader says a question is fine as it is: one question, or every question under a show or film
+        ('under': 'TV/The Office (US)'). 'back': ask it again."""
+        plan, _ = store.snapshot("health")
+        if not plan:
+            raise HTTPException(409, "Check the library first.")
+        under = str(body.get("under") or "")
+        wanted = {_question_key(q) for q in body.get("items") or [] if isinstance(q, dict) and q.get("path") and q.get("why")}
+        if under:
+            wanted |= {_question_key(q) for v in plan["manual"].values() for q in v
+                       if q["path"] == under or q["path"].startswith(under + "/")}
+        if not wanted:
+            raise HTTPException(422, "Choose a question first.")
+        gone = dict(store.get("health.left") or {})
+        for key in wanted:
+            if body.get("back"):
+                gone.pop(key, None)
+            else:
+                gone[key] = time.time()
+        store.put("health.left", gone)
+        return {"changed": len(wanted)}
 
     @app.post("/api/fixes/apply", status_code=202)
     def fixes_apply(body: dict):
@@ -802,10 +901,11 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.save_snapshot("last-fixes", result)
             job.begin("Checking the library again", 0)
             check_health(client, job)
+            failed = len(result["failed"])
+            job.result = f"{sum(result['done'].values()):,} fix(es) done" + (f", {failed} couldn't be: see Health." if failed else ".")
+            job.attention = bool(failed)
 
         job = jobs.start("fixes-apply", work)
-        if job is None:
-            raise HTTPException(409, "Another job is running. Try again when it's done.")
         return job.as_dict()
 
     @app.post("/api/fixes/choose")

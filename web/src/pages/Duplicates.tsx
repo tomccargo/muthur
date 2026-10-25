@@ -97,12 +97,17 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
           <p className="eyebrow">More than one copy</p>
           <h1>Duplicates</h1>
           <p className="lede">
-            {data?.at ? `${data.groups.length} episodes and films have more than one copy · checked ${when(data.at)}` : 'Not checked yet.'}
+            {data?.at ? `${data.groups.length} episodes and films have more than one copy · checked ${when(data.at)}`
+              : 'Not checked yet. Look for duplicates to compare the copies in your library.'}
           </p>
         </div>
         <div className="actions">
-          {!asking && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Look for duplicates'}</button>}
-          {!asking && (chosen.length > 0
+          {/* The main button is the next step: looking, until there is something to resolve (DESIGN.md §1.2). */}
+          {!asking && !data?.groups.length && (
+            <button className="btn btn-primary" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Look for duplicates'}</button>
+          )}
+          {!asking && Boolean(data?.groups.length) && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>Check again</button>}
+          {!asking && Boolean(data?.groups.length) && (chosen.length > 0
             ? <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>Resolve {chosen.length} selected</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Select groups first">Resolve selected</button>)}
         </div>
@@ -125,7 +130,7 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
         </section>
       )}
 
-      <JobProgress job={status?.job} />
+      <JobProgress job={status?.job} queue={status?.queue} />
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {last && !running && status?.job?.name === 'duplicates-apply' && (
         <div className={`banner ${last.stopped ? 'banner-warn' : 'banner-note'}`} role="status" style={{ flexDirection: 'column', alignItems: 'stretch' }}>

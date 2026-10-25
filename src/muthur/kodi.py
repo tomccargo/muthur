@@ -104,6 +104,15 @@ class Kodi:
                 return 1
         raise LookupError(path)
 
+    def notify(self, title: str, message: str, ms: int = 8000) -> bool:
+        """A short message on the TV (GUI.ShowNotification, displaytime in ms). False when Kodi doesn't answer:
+        never retried, and nothing is woken for it."""
+        try:
+            self.call("GUI.ShowNotification", {"title": title, "message": message, "displaytime": ms})
+            return True
+        except (requests.exceptions.RequestException, RuntimeError, ValueError):
+            return False
+
     def check(self) -> dict:
         """{'connected': True, 'version': '21.3'} or {'connected': False, 'problem': '…'}: a sentence a reader can act on."""
         try:
@@ -114,7 +123,8 @@ class Kodi:
         except requests.exceptions.ConnectTimeout:
             return {"connected": False, "problem": f"Kodi didn't answer. Is the {self.device} on?"}
         except requests.exceptions.ConnectionError:
-            return {"connected": False, "problem": "Nothing is listening there. Is “Allow remote control via HTTP” on in Kodi, and is the port right?"}
+            return {"connected": False, "problem": f"Kodi isn't running on the {self.device} (asleep, or Kodi is closed). "
+                                                  "If it is on, check “Allow remote control via HTTP” and the port."}
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 401:
                 return {"connected": False, "problem": "Kodi refused the username or password."}

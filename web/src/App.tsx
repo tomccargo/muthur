@@ -14,17 +14,22 @@ import { DuplicatesPage } from './pages/Duplicates';
 import { HealthPage } from './pages/Health';
 import { SignIn } from './pages/SignIn';
 
-// Only pages that exist are in the navigation (DESIGN.md §1.5).
+// Five sections, one per job (DESIGN.md §1.4): the downloads, the library, what muthur did, and how it works.
+// Downloads and Library hold their pages as tabs. Only pages that exist are in the navigation (§1.5).
 const SECTIONS = [
-  { to: '/', label: 'Dashboard', icon: 'dashboard' },
-  { to: '/inbox', label: 'Inbox', icon: 'inbox' },
-  { to: '/review', label: 'Review', icon: 'review' },
-  { to: '/library', label: 'Library', icon: 'library' },
-  { to: '/duplicates', label: 'Duplicates', icon: 'duplicates' },
-  { to: '/health', label: 'Health', icon: 'health' },
-  { to: '/history', label: 'History', icon: 'history' },
-  { to: '/settings', label: 'Settings', icon: 'settings' },
+  { to: '/', label: 'Dashboard', icon: 'dashboard', paths: ['/'] },
+  { to: '/inbox', label: 'Downloads', icon: 'inbox', paths: ['/inbox', '/review'] },
+  { to: '/library', label: 'Library', icon: 'library', paths: ['/library', '/duplicates', '/health'] },
+  { to: '/history', label: 'History', icon: 'history', paths: ['/history'] },
+  { to: '/settings', label: 'Settings', icon: 'settings', paths: ['/settings'] },
 ] as const;
+const TABS: Record<string, { to: string; label: string }[]> = {
+  '/inbox': [{ to: '/inbox', label: 'Inbox' }, { to: '/review', label: 'Review' }],
+  '/library': [{ to: '/library', label: 'Shows and films' }, { to: '/duplicates', label: 'Duplicates' }, { to: '/health', label: 'Health' }],
+};
+const TITLES: Record<string, string> = {
+  '/inbox': 'Inbox', '/review': 'Review', '/library': 'Library', '/duplicates': 'Duplicates', '/health': 'Health', '/history': 'History', '/settings': 'Settings',
+};
 
 export type StatusHook = { status: Status | null; error: string | null; refresh: () => void };
 
@@ -92,19 +97,31 @@ export function App() {
   return <Shell />;
 }
 
+// On a phone the rail's status isn't there: one dot in the top bar says whether Kodi and the backup are fine.
+function StatusDot({ status }: { status: Status | null }) {
+  const k = status?.kodi;
+  const text = !k ? 'Kodi not set up' : !k.connected ? 'Kodi unreachable' : status?.watched.paused ? 'Watched backup paused'
+    : `${status?.names.device} · Kodi ${k.version}`;
+  const kind = !k ? '' : k.connected && !status?.watched.paused ? 'dot-success' : 'dot-danger';
+  return <Link to="/settings" className="topbar-status" aria-label={text} title={text}><span className={`dot ${kind}`} /></Link>;
+}
+
 function Shell() {
   const { path } = useLocation();
   const hook = useStatus();
   const counts = hook.status?.inbox.counts ?? {};
   const counter: Record<string, number> = { '/inbox': counts.ready ?? 0, '/review': counts.review ?? 0, '/duplicates': hook.status?.duplicates ?? 0, '/health': hook.status?.fixes ?? 0 };
-  const current = SECTIONS.find((s) => s.to === path) ?? SECTIONS[0];
+  const page = path in TITLES ? path : '/';
+  const current = SECTIONS.find((s) => (s.paths as readonly string[]).includes(page)) ?? SECTIONS[0];
+  const total = (s: (typeof SECTIONS)[number]) => s.paths.reduce((n, p) => n + (counter[p] ?? 0), 0);
 
   useEffect(() => {
-    document.title = current.to === '/' ? 'muthur' : `${current.label} · muthur`;
-  }, [current]);
+    document.title = page === '/' ? 'muthur' : `${TITLES[page]} · muthur`;
+  }, [page]);
 
   return (
     <div className="shell">
+      <a className="skip-link" href="#main">Skip to the page</a>
       <nav className="rail" aria-label="Main">
         <Link to="/" className="brand" aria-label="muthur, dashboard">
           <span className="brand-mark" aria-hidden="true" />
@@ -115,7 +132,7 @@ function Shell() {
           {SECTIONS.map((s) => (
             <Link key={s.to} to={s.to} className="rail-link" aria-current={current.to === s.to ? 'page' : undefined}>
               <Icon name={s.icon} />{s.label}
-              {(counter[s.to] ?? 0) > 0 && <span className="counter">{counter[s.to]}</span>}
+              {total(s) > 0 && <span className="counter">{total(s)}</span>}
             </Link>
           ))}
         </div>
@@ -126,18 +143,28 @@ function Shell() {
         <Link to="/" className="brand" aria-label="muthur, dashboard">
           <span className="brand-mark" aria-hidden="true" /><span className="brand-name">MU/TH/UR</span>
         </Link>
+        <StatusDot status={hook.status} />
         <ThemeSwitch />
       </header>
 
-      <main className="main" id="main">
-        {current.to === '/' && <Dashboard {...hook} />}
-        {current.to === '/inbox' && <InboxPage {...hook} />}
-        {current.to === '/review' && <ReviewPage {...hook} />}
-        {current.to === '/library' && <LibraryPage {...hook} />}
-        {current.to === '/duplicates' && <DuplicatesPage {...hook} />}
-        {current.to === '/health' && <HealthPage {...hook} />}
-        {current.to === '/history' && <HistoryPage {...hook} />}
-        {current.to === '/settings' && <SettingsPage {...hook} />}
+      <main className="main" id="main" tabIndex={-1}>
+        {TABS[current.to] && (
+          <nav className="section-tabs" aria-label={current.label}>
+            {TABS[current.to].map((t) => (
+              <Link key={t.to} to={t.to} className="section-tab" aria-current={page === t.to ? 'page' : undefined}>
+                {t.label}{(counter[t.to] ?? 0) > 0 && <span className="counter">{counter[t.to]}</span>}
+              </Link>
+            ))}
+          </nav>
+        )}
+        {page === '/' && <Dashboard {...hook} />}
+        {page === '/inbox' && <InboxPage {...hook} />}
+        {page === '/review' && <ReviewPage {...hook} />}
+        {page === '/library' && <LibraryPage {...hook} />}
+        {page === '/duplicates' && <DuplicatesPage {...hook} />}
+        {page === '/health' && <HealthPage {...hook} />}
+        {page === '/history' && <HistoryPage {...hook} />}
+        {page === '/settings' && <SettingsPage {...hook} />}
       </main>
 
       <nav className="tabbar" aria-label="Main">

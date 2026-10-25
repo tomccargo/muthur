@@ -6,8 +6,9 @@ export function Dot({ kind = '' }: { kind?: string }) {
   return <span className={`dot ${kind}`} aria-hidden="true" />;
 }
 
-export function JobProgress({ job }: { job: Job | null | undefined }) {
+export function JobProgress({ job, queue }: { job: Job | null | undefined; queue?: Job[] }) {
   if (!job) return null;
+  const next = queue?.length ? <span className="small muted">Next: {queue.map((j) => JOBS[j.name] ?? j.name).join(', then ')}</span> : null;
   const label = JOBS[job.name] ?? job.name;
   if (job.running) {
     const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
@@ -18,6 +19,7 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
           <span className="muted num">{job.total ? `${job.done} of ${job.total}` : 'starting'}</span>
         </div>
         <div className="track" aria-hidden="true"><span className="fill" style={{ width: `${pct}%` }} /></div>
+        {next}
       </div>
     );
   }

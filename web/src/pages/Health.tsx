@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { QuarantinePanel } from './Quarantine';
 import { TitleCard } from './Review';
 import type { Card, Kind } from '../api';
-import { api, type FixKind, type FixResult, type Fixes } from '../api';
+import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, Footer, JobProgress } from '../components';
 import { libraryPath, middle, when } from '../labels';
@@ -17,6 +17,9 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
 const ORDER: FixKind[] = ['imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'leftovers', 'empty-films'];
+// 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
+const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
+
 const QUESTIONS: Record<string, string> = {
   seasons: 'Seasons numbered differently from TMDB',
   numbers: 'Episodes whose number can’t be trusted',
@@ -62,12 +65,16 @@ export function HealthPage({ status, refresh }: StatusHook) {
   const [last, setLast] = useState<FixResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [showLeft, setShowLeft] = useState(false);
   const running = Boolean(status?.job?.running);
+  const leave = (body: { items?: Question[]; under?: string; back?: boolean }) => {
+    api.leaveQuestions(body).then(() => api.fixes(showLeft)).then(setData).catch((e: Error) => setError(e.message));
+  };
 
   useEffect(() => {
-    api.fixes().then((d) => { setData(d); setChosen(new Set()); }).catch((e: Error) => setError(e.message));
+    api.fixes(showLeft).then((d) => { setData(d); setChosen(new Set()); }).catch((e: Error) => setError(e.message));
     api.fixesLast().then((r) => setLast('done' in r ? (r as FixResult) : null)).catch(() => undefined);
-  }, [running, status?.job?.finished]);
+  }, [running, status?.job?.finished, showLeft]);
 
   const available = ORDER.filter((k) => (data?.fixes[k]?.count ?? 0) > 0);
   const total = [...chosen].reduce((n, k) => n + (data?.fixes[k]?.count ?? 0), 0);
@@ -102,7 +109,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           </div>
         </section>
       )}
-      <JobProgress job={status?.job} />
+      <JobProgress job={status?.job} queue={status?.queue} />
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {note && <div className="banner banner-note" role="status">{note}</div>}
       {last && !running && status?.job?.name === 'fixes-apply' && (
@@ -144,17 +151,34 @@ export function HealthPage({ status, refresh }: StatusHook) {
         );
       })}
 
-      {data?.at && Object.entries(data.manual).some(([, v]) => (v?.count ?? 0) > 0) && (
+      {data?.at && (Object.entries(data.manual).some(([, v]) => (v?.count ?? 0) > 0) || data.left > 0) && (
         <section className="panel" aria-labelledby="manual-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">Needs you</h2><span className="small muted">muthur doesn’t guess these</span></div>
+          <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Needs you'}</h2>
+            {data.left > 0 || showLeft
+              ? <button type="button" className="btn-link small" onClick={() => setShowLeft(!showLeft)}>{showLeft ? 'Show the open questions' : `Show the ${data.left} left as is`}</button>
+              : <span className="small muted">muthur doesn’t guess these</span>}
+          </div>
+          {!Object.values(data.manual).some((v) => (v?.count ?? 0) > 0) && (
+            <p className="hint" style={{ margin: 0 }}>{showLeft ? 'Nothing is left as is.' : 'No open questions.'}</p>
+          )}
           {Object.entries(data.manual).filter(([, v]) => (v?.count ?? 0) > 0).map(([k, v]) => (
             <details key={k}>
               <summary style={{ cursor: 'pointer' }}><strong>{QUESTIONS[k] ?? k}</strong> <span className="num muted">{v!.count}</span></summary>
               <ul className="rows" style={{ marginTop: 6 }}>
-                {v!.items.map((q) => (
+                {v!.items.map((q, i) => (
                   <li key={q.path + (q.season ?? '')} style={{ flexDirection: 'column', gap: 2 }}>
+                    {/* A show's questions sit together: one 'leave all' per show, not on every row. */}
+                    {!showLeft && showOf(q) && showOf(q) !== showOf(v!.items[i - 1]) && v!.items.filter((x) => showOf(x) === showOf(q)).length > 1 && (
+                      <span className="actions" style={{ justifyContent: 'space-between' }}>
+                        <strong>{showOf(q)!.slice(3)}</strong>
+                        <button type="button" className="btn-link small" onClick={() => leave({ under: showOf(q)! })}>Leave all of {showOf(q)!.slice(3)} as is</button>
+                      </span>
+                    )}
                     <span className="mono small" style={{ wordBreak: 'break-all' }}>{libraryPath(q.path)}{q.season != null ? ` · season ${q.season}` : ''}</span>
                     <span className="small muted">{q.why}</span>
+                    <span className="actions">
+                      <button type="button" className="btn-link small" onClick={() => leave({ items: [q], back: showLeft })}>{showLeft ? 'Ask again' : 'Leave as is'}</button>
+                    </span>
                     {(k === 'shows' || k === 'films') && (
                       <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running}
                         onDone={(text) => { setNote(text); api.fixes().then(setData).catch(() => undefined); refresh(); }} />

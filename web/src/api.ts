@@ -4,8 +4,10 @@ export type PathState = { path: string; exists: boolean; readable: boolean; writ
 export type Job = {
   name: string; started: number; finished: number | null; done: number; total: number; error: string | null; running: boolean;
   step?: string | null;  // the part of a long job running now; done/total count that part
+  queued?: boolean;  // waiting for the job before it
 };
-export type KodiState = ({ connected: true; version: string } | { connected: false; problem: string }) & { pendingScan?: number | null; canWake?: boolean };
+export type KodiState = ({ connected: true; version: string; sources?: { tv: boolean; film: boolean } } | { connected: false; problem: string })
+  & { pendingScan?: number | null; canWake?: boolean };
 
 export type Names = { device: string; nas: string };  // what the reader calls the Kodi box and the NAS
 
@@ -24,7 +26,9 @@ export type Status = {
     live: boolean;  // listening to Kodi's notifications right now
   };
   duplicates: number;
+  duplicatesAt: number | null;  // null: never checked
   fixes: number;
+  queue: Job[];  // jobs waiting for the current one
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -117,6 +121,7 @@ export type Fixes = {
   at: number | null;
   fixes: Partial<Record<FixKind, { count: number; sample: FixItem[] }>>;
   manual: Partial<Record<'shows' | 'seasons' | 'numbers' | 'films', { count: number; items: Question[] }>>;
+  left: number;  // questions the reader left as is
 };
 export type FixResult = { done: Partial<Record<FixKind, number>>; failed: { path: string; why: string }[] };
 
@@ -194,7 +199,10 @@ export const api = {
   applyDuplicates: (choices: { id: string; keep: string }[]) =>
     call<Job>('/api/duplicates/apply', { method: 'POST', body: JSON.stringify({ choices }) }),
   duplicatesLast: () => call<DupResult | Record<string, never>>('/api/duplicates/last'),
-  fixes: () => call<Fixes>('/api/fixes'),
+  fixes: (left = false) => call<Fixes>(`/api/fixes${left ? '?left=true' : ''}`),
+  leaveQuestions: (body: { items?: Question[]; under?: string; back?: boolean }) =>
+    call<{ changed: number }>('/api/fixes/leave', { method: 'POST', body: JSON.stringify(body) }),
+  quarantineDownload: (id: string) => call<{ run: number }>('/api/inbox/quarantine', { method: 'POST', body: JSON.stringify({ id }) }),
   checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
   chooseForLibrary: (kind: Kind, path: string, tmdbId: number) =>

@@ -36,8 +36,10 @@ Section numbers are referenced from code comments; do not renumber.
 
 ### 1.4 Navigation
 
-- Desktop (wider than 960px): a **side rail** with icon + label per section. *Dashboard, Inbox, Review, Library, Duplicates, Health, History, Settings*. The current section is marked with `--accent-soft`. A counter pill sits after *Inbox*, *Review*, *Duplicates* and *Health*, only when it isn't zero.
-- Phone (960px or narrower): a **top bar** (brand, menu) and a **bottom tab bar** with the four daily sections (*Dashboard, Inbox, Review, Library*). The rest is in the menu.
+- **Five sections, one per job (0.24):** *Dashboard, Downloads, Library, History, Settings*. *Downloads* holds *Inbox* and *Review* as tabs; *Library* holds *Shows and films*, *Duplicates* and *Health*. Each page keeps its own address (`/review`, `/health`), and its tab is marked like the section.
+- Desktop (wider than 960px): a **side rail** with icon + label per section; the current section is marked with `--accent-soft`. A counter pill sits after a section and after a tab only when it isn't zero (a section's is the sum of its tabs').
+- Phone (960px or narrower): a **top bar** (brand, a status dot for Kodi and the watched backup, the theme switch) and a **bottom tab bar** with all five sections. Material 3 keeps a bottom bar to five destinations or fewer.
+- A **skip link** ("Skip to the page") is the first thing a keyboard reaches.
 - **One name per thing:** the rail item, the page title and every link to it use the same word. *Review* is never also *Queue* or *To check*.
 
 ### 1.5 The UI never describes behaviour the system does not have

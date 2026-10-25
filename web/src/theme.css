@@ -8,7 +8,7 @@
   --surface-muted: #1f2622;
   --surface-raised: #1b211e;
   --border: #2b342f;
-  --border-strong: #3b463f;
+  --border-strong: #636f68;  /* 3.3:1 on panels: field edges must show (WCAG 1.4.11) */
   --text: #ecf1ed;
   --muted: #a1ada5;
   --faint: #6f7b74;

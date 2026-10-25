@@ -119,7 +119,7 @@ export function HistoryPage({ status, refresh }: StatusHook) {
         </div>
       </header>
       {message && <div className="banner banner-error" role="alert">{message}</div>}
-      <JobProgress job={status?.job} />
+      <JobProgress job={status?.job} queue={status?.queue} />
       {runs && runs.length === 0 && (
         <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
           <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing yet</h2>

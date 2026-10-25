@@ -338,10 +338,11 @@ export function ReviewPage({ status, refresh }: StatusHook) {
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => go(-1)} disabled={index === 0} aria-keyshortcuts="ArrowLeft">← Previous</button>
             <span className="small muted num">{Math.min(index, items.length - 1) + 1} of {items.length}</span>
             <button className="btn btn-ghost btn-sm" type="button" onClick={() => go(1)} disabled={index >= items.length - 1} aria-keyshortcuts="ArrowRight">Next →</button>
+            <span className="small muted">Keys: ← → or j k</span>
           </div>
         )}
       </header>
-      <JobProgress job={status?.job} />
+      <JobProgress job={status?.job} queue={status?.queue} />
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {done && (
         <div className="banner banner-note" role="status">
