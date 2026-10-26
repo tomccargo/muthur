@@ -26,6 +26,7 @@ class NfoInfo:
     muthur: bool = False  # written by muthur
     genres: list[str] = field(default_factory=list)
     plot: str | None = None
+    aired: str | None = None  # '2017-01-17': an episode's <aired>, else <premiered>
 
 
 def _text(root, tag):
@@ -83,6 +84,7 @@ def parse_nfo_text(text: str) -> NfoInfo:
             pass
     year = _text(root, "year") or (_text(root, "premiered") or "")[:4]
     info.year = int(year) if year and year.isdigit() else None
+    info.aired = _text(root, "aired") or _text(root, "premiered")
 
     for el in root.findall("uniqueid"):
         typ = (el.get("type") or "").lower().strip()
@@ -108,6 +110,8 @@ def parse_nfo_text(text: str) -> NfoInfo:
     dur = root.find("fileinfo/streamdetails/video/durationinseconds")
     if dur is not None and dur.text and dur.text.strip().isdigit():
         info.duration_s = int(dur.text.strip())
+    elif (rt := _text(root, "runtime")) and rt.isdigit():  # minutes, as TMDB gives them
+        info.duration_s = int(rt) * 60
     return info
 
 

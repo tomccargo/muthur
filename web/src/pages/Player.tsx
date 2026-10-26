@@ -1,8 +1,8 @@
 // The player (docs/PLAYER.md): muthur's Watch section at /player, with TV and Films as tabs (TV first), each a row of
 // what was added last and a visual grid with filters; a show's seasons and episodes; and the watch view, which fits
 // the tab and goes full screen. Read-only: the files are played as they are, and nothing about watching is written.
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerAbout, type PlayerEpisode, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
 import { Loading } from '../components';
 import { hue } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
@@ -169,6 +169,8 @@ function ShowView({ folder }: { folder: string }) {
   const [show, setShow] = useState<PlayerShow | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [season, setSeason] = useState<number | null | undefined>(undefined);
+  const [picked, setPicked] = useState<PlayerEpisode | null>(null);
+  const close = useCallback(() => setPicked(null), []);
   useEffect(() => { api.playerShow(folder).then(setShow).catch((e: Error) => setError(e.message)); }, [folder]);
   if (error) return <p className="pl-empty">{error}</p>;
   if (!show) return <Loading label="Loading the show" />;
@@ -188,7 +190,7 @@ function ShowView({ folder }: { folder: string }) {
       </header>
       <div className="pl-seasons" role="tablist" aria-label="Seasons">
         {seasons.map((s) => (
-          <button key={String(s)} type="button" role="tab" aria-selected={s === current} onClick={() => setSeason(s)}>
+          <button key={String(s)} type="button" role="tab" aria-selected={s === current} onClick={() => { setSeason(s); setPicked(null); }}>
             {s == null ? 'Other' : s === 0 ? 'Specials' : `Season ${s}`}
           </button>
         ))}
@@ -199,31 +201,71 @@ function ShowView({ folder }: { folder: string }) {
             Download {current === 0 ? "the specials" : `season ${current}`} (ZIP)</a>
         </p>
       )}
-      <ul className="pl-episodes">
-        {show.episodes.filter((e) => e.season === current).map((e) => {
-          const name = `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
-          const inner = (
-            <>
-              <span className="pl-thumb">
-                {/* No thumbnail on the share, or one that doesn't load (26 Oct: big coloured blocks with initials looked
-                    broken): the show's backdrop, dimmed, with the episode's number on it. */}
-                <Art path={e.thumb} title={e.title ?? show.title} wide fallback={
-                  <span className="pl-art wide pl-art-show" style={show.fanart ? { backgroundImage: `url("${art(show.fanart)}")` } : undefined}>
-                    <span>{code(e.season, e.episodes)}</span></span>} />
-                {way(e.play) !== 'kodi' && <PlayMark />}</span>
-              <span className="pl-ep-text"><span className="pl-name">{name}</span>
-                <span className="pl-sub">{[way(e.play) === 'kodi' ? 'Kodi only' : null, e.watched ? 'Watched' : null].filter(Boolean).join(' · ')}</span></span>
-            </>
-          );
-          return (
+      {/* An episode opens its panel beside the list (decided 26 Oct); Play is in the panel. */}
+      <div className={`pl-split${picked ? ' open' : ''}`}>
+        <ul className="pl-episodes">
+          {show.episodes.filter((e) => e.season === current).map((e) => (
             <li key={e.id}>
-              {way(e.play) === 'kodi' ? <Link className="pl-ep dim" to={watchUrl(e.id, `${show.title} ${name}`)} title="Plays in Kodi only; open it for the TV, VLC or a download">{inner}</Link>
-                : <Link className="pl-ep" to={watchUrl(e.id, `${show.title} ${name}`)}>{inner}</Link>}
+              <button type="button" className={`pl-ep${way(e.play) === 'kodi' ? ' dim' : ''}`} aria-pressed={picked?.id === e.id}
+                onClick={() => setPicked(picked?.id === e.id ? null : e)}>
+                <span className="pl-thumb"><EpisodeArt e={e} show={show} /></span>
+                <span className="pl-ep-text"><span className="pl-name">{epName(e)}</span>
+                  <span className="pl-sub">{[way(e.play) === 'kodi' ? 'Kodi only' : null, e.watched ? 'Watched' : null].filter(Boolean).join(' · ')}</span></span>
+              </button>
             </li>
-          );
-        })}
-      </ul>
+          ))}
+        </ul>
+        {picked && <EpisodePanel key={picked.id} e={picked} show={show} onClose={close} />}
+      </div>
     </div>
+  );
+}
+
+const epName = (e: PlayerEpisode) => `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
+
+// The episode's thumbnail; without one on the share, or one that doesn't load (26 Oct: big coloured blocks with
+// initials looked broken), the show's backdrop, dimmed, with the episode's number on it.
+function EpisodeArt({ e, show }: { e: PlayerEpisode; show: PlayerShow }) {
+  return (
+    <Art path={e.thumb} title={e.title ?? show.title} wide fallback={
+      <span className="pl-art wide pl-art-show" style={show.fanart ? { backgroundImage: `url("${art(show.fanart)}")` } : undefined}>
+        <span>{code(e.season, e.episodes)}</span></span>} />
+  );
+}
+
+const DATE = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+
+// One episode, beside the list (on a phone: a sheet over it): its picture, date, length, score and summary, Play and
+// Download. Escape or × closes it.
+function EpisodePanel({ e, show, onClose }: { e: PlayerEpisode; show: PlayerShow; onClose: () => void }) {
+  const [about, setAbout] = useState<PlayerAbout | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const ref = useRef<HTMLElement>(null);
+  useEffect(() => {
+    api.playerAbout(e.id).then(setAbout).catch((err: Error) => setError(err.message));
+    ref.current?.focus();
+    const esc = (k: KeyboardEvent) => { if (k.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', esc);
+    return () => window.removeEventListener('keydown', esc);
+  }, [e.id, onClose]);
+  const kodi = way(e.play) === 'kodi';
+  const title = about?.title ?? e.title;
+  const aired = about?.aired && !Number.isNaN(Date.parse(about.aired)) ? DATE.format(new Date(about.aired)) : null;
+  const facts = [aired, about?.minutes ? `${about.minutes} min` : null, about?.rating ? `★ ${about.rating.toFixed(1)}` : null, e.watched ? 'Watched' : null];
+  return (
+    <aside className="panel pl-panel" ref={ref} tabIndex={-1} aria-label={`${code(e.season, e.episodes)} ${title ?? ''}`}>
+      <button type="button" className="pl-panel-close" onClick={onClose} aria-label="Close">×</button>
+      <span className="pl-thumb"><EpisodeArt e={e} show={show} /></span>
+      <h2>{code(e.season, e.episodes)}{title ? ` · ${title}` : ''}</h2>
+      {about && <p className="pl-sub">{facts.filter(Boolean).join(' · ')}</p>}
+      {error ? <p className="pl-sub">{error}</p> : !about ? <Loading label="Loading the episode" />
+        : <p className="pl-panel-plot">{about.plot ?? 'No summary in its NFO or at TMDB.'}</p>}
+      {kodi && <p className="pl-sub">Plays in Kodi only: no browser plays this kind of file. Open it for the TV, your own player or a download.</p>}
+      <div className="actions">
+        <Link className="btn btn-primary" to={watchUrl(e.id, `${show.title} ${epName(e)}`)}>{kodi ? 'Open' : '▶ Play'}</Link>
+        <a className="btn btn-secondary" href={`/api/player/video/${e.id}?download=1`} download title="The file as it is, for watching offline">Download</a>
+      </div>
+    </aside>
   );
 }
 

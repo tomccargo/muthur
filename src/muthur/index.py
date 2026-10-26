@@ -18,7 +18,7 @@ from .nfo import NfoInfo, read_nfo
 from .parse import BROKEN_EPISODE, EXTRA_NAME, SAMPLE, is_video
 from .subtitles import language
 
-NFO_PARSER = 3  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3; 3: genres and plot, 0.42)
+NFO_PARSER = 4  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3; 3: genres and plot, 0.42; 4: aired, runtime, 0.51)
 SCHEMA = "CREATE TABLE IF NOT EXISTS nfo_cache (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, body TEXT NOT NULL);"
 NUMBERS = re.compile(r"(?i)\bs(\d{1,3})((?:[ ._-]?e\d{1,3})+)")
 ART = (".jpg", ".jpeg", ".png", ".tbn")

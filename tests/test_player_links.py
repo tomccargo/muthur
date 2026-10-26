@@ -22,6 +22,20 @@ def test_downloads_and_the_playlist_for_an_outside_player(client):  # noqa: F811
     assert playlist.startswith("#EXTM3U") and f"/api/player/video/{vid}?key=" in playlist
 
 
+def test_an_episodes_panel_reads_its_nfo_and_tmdb_fills_in(client, monkeypatch):  # noqa: F811
+    """The episode panel (26 Oct): the NFO's title and score; TMDB's summary and air date where the NFO has none."""
+    plain = FakeTmdb.tv_season
+    monkeypatch.setattr(FakeTmdb, "tv_season", lambda self, i, n: {"episodes": [
+        {**x, "overview": f"What happens in {x['name']}.", "air_date": "2021-02-0%d" % x["episode_number"], "runtime": 22}
+        for x in plain(self, i, n)["episodes"]]})
+    eps = {e["episodes"][0]: e for e in client.get("/api/player/show", params={"folder": "Some Show"}).json()["episodes"] if e["season"] == 1}
+    two = client.get(f"/api/player/video/{eps[2]['id']}/about").json()
+    assert (two["title"], two["rating"], two["from"]) == ("Two", 7.0, "nfo")  # Sonarr's NFO: its title and score
+    assert (two["plot"], two["aired"], two["minutes"]) == ("What happens in Two.", "2021-02-02", 22)  # the rest from TMDB
+    one = client.get(f"/api/player/video/{eps[1]['id']}/about").json()  # no NFO at all
+    assert (one["title"], one["from"]) == ("One", "tmdb")
+
+
 def test_a_share_path_never_carries_kodis_password():
     where = player.share_paths("smb://kodi:secret@nostromo/Iedereen/Film/", "Dune (2021)/Dune (2021).mkv")
     assert where == {"smb": "smb://nostromo/Iedereen/Film/Dune (2021)/Dune (2021).mkv",

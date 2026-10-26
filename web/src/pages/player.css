@@ -44,8 +44,29 @@
 .pl-seasons button { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
 .pl-seasons button[aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .pl-episodes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
-.pl-ep { display: flex; flex-direction: column; gap: 6px; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }
+.pl-ep { display: flex; flex-direction: column; gap: 6px; width: 100%; padding: 0; border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; border-radius: var(--radius-sm); }
 .pl-ep.dim { opacity: 0.45; }
+.pl-ep .pl-thumb { transition: box-shadow 0.2s; }
+.pl-ep:hover .pl-thumb { box-shadow: 0 0 0 2px var(--border-strong); }
+.pl-ep[aria-pressed='true'] .pl-thumb { box-shadow: 0 0 0 3px var(--accent); }
+.pl-ep[aria-pressed='true'] { opacity: 1; }
+
+/* The episode panel (26 Oct): beside the list, which narrows; on a phone a sheet over the list. */
+.pl-split.open { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 400px); gap: 20px; align-items: start; }
+.pl-split.open .pl-episodes { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+.pl-panel { position: sticky; top: 16px; display: flex; flex-direction: column; gap: 10px; max-height: calc(100dvh - 32px); overflow: auto; }
+.pl-panel:focus { outline: none; }
+.pl-panel h2 { margin: 4px 0 0; font-size: 1.2rem; line-height: 1.3; padding-right: 32px; }
+.pl-panel-plot { margin: 0; font-size: 14px; line-height: 1.55; }
+.pl-panel .actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.pl-panel-close { position: absolute; top: 10px; right: 10px; width: 36px; height: 36px; border: 0; border-radius: 50%; background: var(--surface-muted); color: var(--text); font-size: 20px; line-height: 1; cursor: pointer; z-index: 1; }
+.pl-panel-close:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pl-panel .pl-thumb { margin-top: 30px; }
+@media (max-width: 900px) {
+  .pl-split.open { display: block; }
+  .pl-panel { position: fixed; inset: auto 0 0 0; top: auto; z-index: 30; max-height: 82dvh; border-radius: var(--radius) var(--radius) 0 0;
+    box-shadow: 0 -12px 32px rgb(0 0 0 / 0.35); padding-bottom: calc(18px + env(safe-area-inset-bottom, 0px)); }
+}
 .pl-thumb { position: relative; display: block; border-radius: var(--radius-sm); overflow: hidden; }
 .pl-ep-text { display: flex; flex-direction: column; gap: 2px; }
 

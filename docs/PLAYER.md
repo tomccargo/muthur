@@ -101,6 +101,7 @@ Considered and not chosen:
 | Downloads | **The file as it is**, and each `.srt` beside it; **a season as one ZIP**, packed as it is sent, without compression (the NAS converts nothing). For the few people in the house: a phone for a flight, a laptop for a holiday. |
 | Watched status | **Nothing**: the player doesn't read or write Kodi's watched status or resume points, and starts at the beginning. |
 | Place | **Watch, a section of muthur** (TV · Films · Test set as tabs); first decided as its own page with its own side bar, changed 26 Oct because it looked out of place. |
+| Episode details | **A panel beside the list** on click (on a phone a sheet from below): still, air date, length, score, summary (episode NFO, TMDB filling in), Play and Download. Chosen 26 Oct over a summary under each episode, a hover card and a page per episode. |
 | Local trial | **muthur's dev server on this PC** (`scripts/dev.py`, http://127.0.0.1:8580), reading `//nostromo/Iedereen/TV` and `Film` through Windows' own access. Dry run on in that local copy first, so it can't change a file on the share. |
 | Test set | **muthur picks one real file per kind** (below); a *Test set* filter shows only those. The reader judges them in Firefox. |
 | Filters | Watched / unwatched (read from muthur's backup), genre, year, rating, recently added. |

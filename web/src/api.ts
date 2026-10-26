@@ -244,6 +244,7 @@ export const api = {
   playerShow: (folder: string) => call<PlayerShow>(`/api/player/show?${new URLSearchParams({ folder })}`),
   playerTestSet: () => call<{ items: PlayerTest[] }>('/api/player/testset'),
   playerInfo: (id: string) => call<PlayerInfo>(`/api/player/video/${id}/info`),
+  playerAbout: (id: string) => call<PlayerAbout>(`/api/player/video/${id}/about`),
   playerScan: () => call<Job>('/api/player/scan', { method: 'POST' }),
   playerExtract: (id: string) => call<Job>(`/api/player/video/${id}/subtitles/extract`, { method: 'POST' }),
   playerLinks: (id: string) => call<PlayerLinks>(`/api/player/video/${id}/links`),
@@ -265,6 +266,11 @@ export type PlayerEpisode = {
   id: string; season: number | null; episodes: number[]; title: string | null; watched: boolean; added: number; thumb: string | null; play: Playback;
 };
 export type PlayerShow = Omit<PlayerShowTile, 'episodes' | 'watched' | 'seasons' | 'added'> & { plot: string | null; episodes: PlayerEpisode[] };
+// The episode panel: from the episode's NFO, TMDB filling in what it hasn't.
+export type PlayerAbout = {
+  title: string | null; plot: string | null; aired: string | null; minutes: number | null; rating: number | null;
+  season: number | null; episodes: number[]; from: 'nfo' | 'tmdb' | null;
+};
 export type PlayerTest = { id: string; kind: string; name: string; path: string; art: string | null; play: Playback };
 export type PlayerSub = { name: string; lang: string; label: string; forced: boolean };
 export type PlayerInfo = {

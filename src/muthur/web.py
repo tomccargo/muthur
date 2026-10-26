@@ -1114,6 +1114,36 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 "pictureSubs": max(0, int((f or {}).get("embeddedSubs") or 0) - len(text_tracks)), "adsOnly": ads,
                 "forcedLines": {s["name"]: player.cue_summary(os.path.join(os.path.dirname(full), s["name"])) for s in beside if s["forced"]}}
 
+    @app.get("/api/player/video/{vid}/about")
+    def player_about(vid: str):
+        """What the episode panel shows (decided 26 Oct): title, summary, air date, length and score, from the episode's
+        NFO; TMDB fills in what an NFO hasn't (no NFO, or one without a summary). Only reads."""
+        path, full = player_video(vid)
+        lib, _ = store.snapshot("library")
+        folder, _, rest = path.partition("/")[2].partition("/")
+        show = next((s for s in (lib or {}).get("shows", []) if s["folder"] == folder), None)
+        ep = next((e for e in (show or {}).get("episodes", []) if e["file"] == rest), None)
+        if not show or not ep:
+            raise HTTPException(404, "That isn't an episode in the index.")
+        info = index.nfo(os.path.splitext(full)[0] + ".nfo")
+        rating = (info.ratings.get("imdb") or info.ratings.get(info.default_rating or "")) if info else None
+        out = {"title": (info.title if info else None) or ep.get("title"), "plot": info.plot if info else None,
+               "aired": info.aired if info else None, "minutes": round(info.duration_s / 60) if info and info.duration_s else None,
+               "rating": rating[0] if rating else None, "season": ep["season"], "episodes": ep["episodes"], "from": "nfo" if info else None}
+        if (facts := play_facts.cached(full)) and facts.get("duration") and not out["minutes"]:
+            out["minutes"] = round(float(facts["duration"]) / 60)
+        client = tmdb()
+        if client and ep["season"] is not None and ep["episodes"] and not (out["plot"] and out["aired"]):
+            tmdb_id = show["ids"].get("tmdb") or store.tmdb_for_folder("tv", folder)
+            listed = (client.tv_season(int(tmdb_id), ep["season"]) or {}).get("episodes", []) if tmdb_id else []
+            if t := next((x for x in listed if x.get("episode_number") == ep["episodes"][0]), None):
+                out["title"] = out["title"] or t.get("name")
+                out["plot"] = out["plot"] or t.get("overview") or None
+                out["aired"] = out["aired"] or t.get("air_date") or None
+                out["minutes"] = out["minutes"] or t.get("runtime") or None
+                out["from"] = out["from"] or "tmdb"
+        return out
+
     @app.post("/api/player/video/{vid}/subtitles/extract", status_code=202)
     def player_extract(vid: str):
         """Copy the video's text subtitles out as .srt beside it (decided 26 Oct): English, Dutch only without English.
