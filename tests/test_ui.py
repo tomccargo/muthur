@@ -26,7 +26,7 @@ from test_review import FakeTmdb, _old  # noqa: E402
 
 PAGES = {  # path -> must it have exactly one primary button?
     "/": True, "/inbox": True, "/review": True, "/library": None, "/library?folder=The+Office+%28US%29": False,
-    "/duplicates": True, "/health": True, "/history": False, "/settings": True,
+    "/duplicates": True, "/health": True, "/history": False, "/settings": True, "/player": None, "/player?view=tv": None,
 }
 CODE_WORDS = re.compile(r"/data/|absolute-number|broken-episode-number|no-episode-number|looks-like-movie|other-episode"
                         r"|first_air_date|tmdb_id|\bundefined\b|\bNaN\b|\[object Object\]")

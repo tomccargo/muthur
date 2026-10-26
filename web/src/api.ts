@@ -239,4 +239,33 @@ export const api = {
     call<{ emptied: string[]; freed: number }>('/api/quarantine/empty', { method: 'POST', body: JSON.stringify({ days, confirm: 'delete' }) }),
   refreshScores: () => call<Job>('/api/scores/refresh', { method: 'POST' }),
   forget: (id: string) => call<Item>('/api/review/forget', { method: 'POST', body: JSON.stringify({ id }) }),
+  // The player (docs/PLAYER.md)
+  playerItems: () => call<PlayerItems>('/api/player/items'),
+  playerShow: (folder: string) => call<PlayerShow>(`/api/player/show?${new URLSearchParams({ folder })}`),
+  playerTestSet: () => call<{ items: PlayerTest[] }>('/api/player/testset'),
+  playerInfo: (id: string) => call<PlayerInfo>(`/api/player/video/${id}/info`),
+  playerScan: () => call<Job>('/api/player/scan', { method: 'POST' }),
+};
+
+// How a video plays in a browser: by itself, with the page decoding its sound, in Kodi only, or not read yet.
+export type Playback = 'native' | 'sound' | 'kodi' | 'unknown';
+export type PlayerFilm = {
+  id: string; key: string; title: string; year: number | null; genres: string[]; rating: number | null; plot: string | null;
+  watched: boolean; added: number; poster: string | null; fanart: string | null; play: Playback;
+};
+export type PlayerShowTile = {
+  folder: string; title: string; year: number | null; genres: string[]; rating: number | null; poster: string | null; fanart: string | null;
+  episodes: number; watched: number; seasons: number; added: number;
+};
+export type PlayerItems = { at: number | null; shows: PlayerShowTile[]; films: PlayerFilm[] };
+export type PlayerEpisode = {
+  id: string; season: number | null; episodes: number[]; title: string | null; watched: boolean; added: number; thumb: string | null; play: Playback;
+};
+export type PlayerShow = Omit<PlayerShowTile, 'episodes' | 'watched' | 'seasons' | 'added'> & { plot: string | null; episodes: PlayerEpisode[] };
+export type PlayerTest = { id: string; kind: string; name: string; path: string; art: string | null; play: Playback };
+export type PlayerSub = { name: string; lang: string; label: string; forced: boolean };
+export type PlayerInfo = {
+  id: string; path: string; name: string; play: Playback; subtitles: PlayerSub[];
+  facts: { container: string; video: { codec: string; width: number; height: number; tenBit: boolean; hdr: boolean }[];
+    audio: { codec: string; channels: number; lang: string | null; title: string | null; default: boolean }[]; embeddedSubs: number; duration: number } | null;
 };

@@ -35,7 +35,7 @@ from .kodi import Kodi, folder_name
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
-from . import nfo_write
+from . import nfo_write, player
 from . import quarantine as quarantine_notes
 from . import rename as renaming
 from .scores import ScoreRefresh
@@ -187,7 +187,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                  "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
                  "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed",
-                 "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names"}
+                 "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names", "player-scan": "Reading how each video plays"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -1018,6 +1018,94 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
             raise HTTPException(404, "Not an image in the library.")
         return FileResponse(full, media_type=ART_TYPES[ext], headers={"Cache-Control": "no-cache"})
+
+    # -- player (docs/PLAYER.md): read-only, the files are served as they are -------
+    play_facts = player.Facts(store)
+    catalogue_cache: dict = {}
+    VIDEO_TYPES = {".mkv": "video/x-matroska", ".webm": "video/webm", ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime"}
+
+    def library_full(path: str) -> str:
+        lib_name, _, rest = path.partition("/")
+        return os.path.join({"TV": cfg.tv, "Film": cfg.film}[lib_name], *rest.split("/"))
+
+    def play_of(path: str) -> str:
+        return player.playback(play_facts.cached(library_full(path)))
+
+    def player_video(vid: str) -> tuple[str, str]:
+        """(library path, full path) of a video by its id; only videos the index knows."""
+        lib, _ = store.snapshot("library")
+        if not lib:
+            raise HTTPException(404, "Index the library first.")
+        if catalogue_cache.get("at") != lib["at"]:
+            catalogue_cache.update(at=lib["at"], ids=player.catalogue(lib))
+        path = catalogue_cache["ids"].get(vid)
+        if not path or not os.path.isfile(full := library_full(path)):
+            raise HTTPException(404, "That video isn't in the library any more.")
+        return path, full
+
+    @app.get("/api/player/items")
+    def player_items():
+        lib, _ = store.snapshot("library")
+        return player.items(lib or {}, play_of)
+
+    @app.get("/api/player/testset")
+    def player_testset():
+        """The trial's test set (docs/PLAYER.md §6): one real file per kind, kept as {kind: library path}."""
+        out = []
+        for what, path in (store.get("player.testSet") or {}).items():
+            if not os.path.isfile(full := library_full(path)):
+                continue
+            stem, folder = path.rsplit(".", 1)[0], path.rsplit("/", 1)[0]
+            art = next((p for p in (f"{folder}/poster.jpg", f"{stem}-poster.jpg", f"{stem}-thumb.jpg") if os.path.isfile(library_full(p))), None)
+            out.append({"id": player.file_id(path), "kind": what, "name": os.path.basename(full), "path": path, "art": art,
+                        "play": player.playback(play_facts.cached(full))})
+        return {"items": out}
+
+    @app.get("/api/player/show")
+    def player_show(folder: str):
+        lib, _ = store.snapshot("library")
+        found = player.show(lib or {}, folder, play_of)
+        if found is None:
+            raise HTTPException(404, "That show isn't in the index.")
+        return found
+
+    @app.get("/api/player/video/{vid}/info")
+    def player_info(vid: str):
+        """What the player needs before it starts: how the video plays (the file is read now if it wasn't yet) and its subtitles."""
+        path, full = player_video(vid)
+        f = play_facts.get(full)
+        return {"id": vid, "path": path, "name": os.path.basename(full), "play": player.playback(f), "facts": f,
+                "subtitles": player.sidecars(full)}
+
+    @app.get("/api/player/video/{vid}")
+    def player_file(vid: str):
+        """The video exactly as it is on disk, with Range requests (seeking)."""
+        _, full = player_video(vid)
+        return FileResponse(full, media_type=VIDEO_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"),
+                            headers={"Cache-Control": "private, max-age=3600"})
+
+    @app.get("/api/player/video/{vid}/subtitles/{name}")
+    def player_subtitles(vid: str, name: str):
+        """One of the .srt files beside the video, as WebVTT (converted in memory; nothing is written)."""
+        _, full = player_video(vid)
+        if name not in {s["name"] for s in player.sidecars(full)}:
+            raise HTTPException(404, "No such subtitle file beside the video.")
+        with open(os.path.join(os.path.dirname(full), name), "rb") as fh:
+            return Response(player.srt_to_vtt(fh.read()), media_type="text/vtt; charset=utf-8")
+
+    @app.post("/api/player/scan", status_code=202)
+    def player_scan():
+        """Read how every video plays (ffprobe reads only the headers), so the player can mark what plays in Kodi only."""
+        def work(job):
+            lib, _ = store.snapshot("library")
+            paths = list(player.catalogue(lib or {}).values())
+            job.begin("Reading how each video plays", len(paths))
+            for n, p in enumerate(paths, 1):
+                play_facts.get(library_full(p))
+                job.done = n
+            job.result = f"{count(len(paths), 'video')} read."
+
+        return jobs.start("player-scan", work).as_dict()
 
     # -- duplicates ---------------------------------------------------------------
     def find_duplicates(job):

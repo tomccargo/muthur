@@ -186,7 +186,7 @@ function DuplicatesPanel({ groups }: { groups: DupGroup[] }) {
           </li>
         )}
       </ul>
-      <span className="actions"><Link to="/duplicates" className="btn">Choose which copy to keep</Link></span>
+      <span className="actions"><Link to="/duplicates" className="btn btn-secondary">Choose which copy to keep</Link></span>
     </section>
   );
 }

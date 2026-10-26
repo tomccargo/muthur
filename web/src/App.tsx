@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react';
 import { AUTH_EVENT, api, type AuthMode, type Status } from './api';
 import { Icon } from './icons';
 import { Backdrop } from './Backdrop';
@@ -15,6 +15,8 @@ import { LibraryPage } from './pages/Library';
 import { DuplicatesPage } from './pages/Duplicates';
 import { HealthPage } from './pages/Health';
 import { SignIn } from './pages/SignIn';
+// The player is its own page (docs/PLAYER.md), loaded only when opened.
+const PlayerApp = lazy(() => import('./pages/Player'));
 
 // Five sections, one per job (DESIGN.md §1.4): the downloads, the library, what muthur did, and how it works.
 // Downloads and Library hold their pages as tabs. Only pages that exist are in the navigation (§1.5).
@@ -101,6 +103,12 @@ export function App() {
   }, []);
   if (auth === 'checking') return null;
   if (auth !== 'ok') return <SignIn mode={auth} onDone={() => setAuth('ok')} />;
+  return <Pages />;
+}
+
+function Pages() {
+  const { path } = useLocation();
+  if (path === '/player' || path.startsWith('/player/')) return <Suspense fallback={null}><PlayerApp /></Suspense>;
   return <Shell />;
 }
 

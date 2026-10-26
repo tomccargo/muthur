@@ -1,0 +1,84 @@
+/* The player (docs/PLAYER.md): its own page, on muthur's tokens (theme.css). */
+.pl { display: grid; grid-template-columns: 200px 1fr; min-height: 100dvh; background: var(--bg); color: var(--text); font-family: var(--font-body); }
+.pl-side { position: sticky; top: 0; height: 100dvh; padding: 20px 14px; border-right: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 18px; }
+.pl-brand { font-family: var(--font-display); font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; padding: 0 8px; }
+.pl-brand span { color: var(--accent-text); font-weight: 600; }
+.pl-nav { display: flex; flex-direction: column; gap: 4px; }
+.pl-nav a { padding: 10px 12px; border-radius: var(--radius-sm); color: var(--muted); text-decoration: none; font-weight: 600; font-size: 15px; }
+.pl-nav a:hover { color: var(--text); background: var(--surface-muted); }
+.pl-nav a[aria-current='page'] { color: var(--accent-ink); background: var(--accent); }
+.pl-main { padding: 20px 24px 48px; min-width: 0; }
+.pl-empty, .pl-count { color: var(--muted); font-size: 14px; margin: 8px 0 14px; }
+
+.pl-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.pl-filters input, .pl-filters select {
+  min-height: 38px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); font: inherit; font-size: 14px;
+}
+.pl-filters input { flex: 1 1 200px; min-width: 0; }
+.pl-seg { display: inline-flex; border: 1px solid var(--border-strong); border-radius: 999px; overflow: hidden; }
+.pl-seg button { min-height: 36px; padding: 0 12px; border: 0; background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pl-seg button[aria-pressed='true'] { background: var(--accent); color: var(--accent-ink); }
+
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 16px; }
+.pl-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }
+.pl-tile.dim { opacity: 0.45; }
+.pl-cover { position: relative; display: block; border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow); transition: transform 0.2s, box-shadow 0.2s; }
+.pl-art { display: grid; place-items: center; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--poster-bg); }
+.pl-art.wide { aspect-ratio: 16 / 9; }
+.pl-art-empty { background: hsl(var(--hue) var(--tint-s) var(--tint-l)); color: rgb(255 255 255 / 0.8); font-family: var(--font-display); font-size: 28px; font-weight: 700; }
+.pl-play {
+  position: absolute; inset: 0; display: grid; place-items: center; color: #fff; opacity: 0; transition: opacity 0.2s;
+  background: radial-gradient(circle, rgb(0 0 0 / 0.55) 0 30px, rgb(0 0 0 / 0.25) 31px);
+}
+.pl-tile:hover .pl-play, .pl-tile:focus-visible .pl-play, .pl-ep:hover .pl-play, .pl-ep:focus-visible .pl-play { opacity: 1; }
+.pl-tile:hover .pl-cover, .pl-tile:focus-visible .pl-cover { transform: translateY(-3px); box-shadow: 0 0 0 2px var(--accent), 0 10px 24px rgb(0 0 0 / 0.4); }
+.pl-tile:focus-visible, .pl-ep:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+.pl-badge { position: absolute; left: 6px; bottom: 6px; padding: 2px 8px; border-radius: 999px; background: rgb(0 0 0 / 0.75); color: #fff; font-size: 12px; font-weight: 600; }
+.pl-tick { position: absolute; right: 6px; top: 6px; width: 22px; height: 22px; display: grid; place-items: center; border-radius: 50%; background: var(--good); color: #0a0c0b; font-size: 13px; font-weight: 800; }
+.pl-name { font-weight: 650; font-size: 14px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.pl-sub { color: var(--muted); font-size: 13px; }
+
+.pl-hero { margin: -20px -24px 0; background: var(--surface) center / cover no-repeat; }
+.pl-hero-in { display: flex; gap: 24px; align-items: flex-end; padding: 96px 24px 24px; background: linear-gradient(to bottom, rgb(0 0 0 / 0.1), var(--bg) 92%); }
+.pl-hero-poster { width: 150px; flex: none; border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow); }
+.pl-hero h1 { font-family: var(--font-display); font-size: 32px; margin: 0 0 4px; }
+.pl-plot { max-width: 70ch; color: var(--text); opacity: 0.9; font-size: 14px; line-height: 1.55; margin: 10px 0 0; }
+.pl-seasons { display: flex; gap: 6px; flex-wrap: wrap; margin: 18px 0 12px; }
+.pl-seasons button { min-height: 36px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-strong); background: transparent; color: var(--muted); font: inherit; font-size: 14px; font-weight: 600; cursor: pointer; }
+.pl-seasons button[aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.pl-episodes { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 14px; }
+.pl-ep { display: flex; flex-direction: column; gap: 6px; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }
+.pl-ep.dim { opacity: 0.45; }
+.pl-thumb { position: relative; display: block; border-radius: var(--radius-sm); overflow: hidden; }
+.pl-ep-text { display: flex; flex-direction: column; gap: 2px; }
+
+/* Watching: the video fills the tab (or the screen), black around it. */
+.pl-watch { position: fixed; inset: 0; background: #000; color: #fff; display: grid; place-items: center; }
+.pl-watch video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }  /* never taller than the tab */
+.pl-watch-top {
+  position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 12px; padding: 12px 16px;
+  background: linear-gradient(rgb(0 0 0 / 0.7), transparent); opacity: 1; transition: opacity 0.3s;
+}
+.pl-watch:not(:hover) .pl-watch-top { opacity: 0; }
+.pl-watch-title { flex: 1; min-width: 0; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-btn { min-width: 40px; min-height: 40px; border-radius: 50%; border: 0; background: rgb(255 255 255 / 0.14); color: #fff; font-size: 18px; cursor: pointer; }
+.pl-btn:hover { background: rgb(255 255 255 / 0.26); }
+.pl-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.pl-watch-msg { max-width: 46ch; text-align: center; padding: 16px; font-size: 15px; line-height: 1.5; }
+.pl-watch-msg.corner { position: absolute; bottom: 64px; left: 16px; right: 16px; margin: 0 auto; background: rgb(0 0 0 / 0.7); border-radius: var(--radius-sm); font-size: 14px; pointer-events: none; }
+video::cue { font-size: 1.1em; background: rgb(0 0 0 / 0.6); }
+
+@media (max-width: 760px) {
+  .pl { grid-template-columns: 1fr; }
+  .pl-side { position: static; height: auto; flex-direction: row; align-items: center; padding: 10px 16px; border-right: 0; border-bottom: 1px solid var(--border); }
+  .pl-nav { flex-direction: row; }
+  .pl-nav a { padding: 8px 10px; }
+  .pl-main { padding: 16px; }
+  .pl-grid { grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 16px 12px; }
+  .pl-hero { margin: -16px -16px 0; }
+  .pl-hero-in { padding: 64px 16px 16px; gap: 14px; }
+  .pl-hero-poster { width: 96px; }
+  .pl-hero h1 { font-size: 24px; }
+  .pl-episodes { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { .pl-cover, .pl-play, .pl-watch-top { transition: none; } }

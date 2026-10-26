@@ -1,6 +1,6 @@
 # Player: watching the library in the browser
 
-Status: designed 2026-10-26, not built yet. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
+Status: step 1 built 2026-10-26 (0.42.0: browse, native play, full screen, .srt subtitles), in the local trial. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
 
 ## 1. What it is
 

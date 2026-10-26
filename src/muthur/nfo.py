@@ -24,6 +24,8 @@ class NfoInfo:
     season: int | None = None
     episode: int | None = None
     muthur: bool = False  # written by muthur
+    genres: list[str] = field(default_factory=list)
+    plot: str | None = None
 
 
 def _text(root, tag):
@@ -59,6 +61,8 @@ def parse_nfo_text(text: str) -> NfoInfo:
     info.kind = root.tag.lower()
     info.muthur = "written by muthur" in text[:400]
     info.title = _text(root, "title")
+    info.genres = list(dict.fromkeys(g.text.strip() for g in root.findall("genre") if g.text and g.text.strip()))
+    info.plot = _text(root, "plot") or _text(root, "outline")
     for tag in ("season", "episode"):
         v = _text(root, tag)
         if v and v.lstrip("-").isdigit():

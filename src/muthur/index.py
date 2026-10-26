@@ -18,7 +18,7 @@ from .nfo import NfoInfo, read_nfo
 from .parse import BROKEN_EPISODE, SAMPLE, is_video
 from .subtitles import language
 
-NFO_PARSER = 2  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3)
+NFO_PARSER = 3  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3; 3: genres and plot, 0.42)
 SCHEMA = "CREATE TABLE IF NOT EXISTS nfo_cache (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, body TEXT NOT NULL);"
 NUMBERS = re.compile(r"(?i)\bs(\d{1,3})((?:[ ._-]?e\d{1,3})+)")
 ART = (".jpg", ".jpeg", ".png", ".tbn")
@@ -115,6 +115,7 @@ class Index:
         show: dict[str, Any] = {"folder": folder, "title": (info.title if info and info.title else folder), "year": info.year if info else None,
                 "ids": ids, "nfo": bool(info and info.readable), "muthur": bool(info and info.muthur),
                 "poster": "poster.jpg" in present, "fanart": "fanart.jpg" in present, "rating": _shown(info),
+                "genres": info.genres if info else [], "plot": info.plot if info else None,
                 "episodes": [], "loose": []}
         stems = set()
         for f in sorted(files):
@@ -128,10 +129,11 @@ class Index:
             if season is None and nfo and nfo.season is not None and nfo.episode is not None:
                 season, numbers = nfo.season, [nfo.episode]
             try:
-                size = os.path.getsize(os.path.join(base, f))
+                st = os.stat(os.path.join(base, f))
+                size, added = st.st_size, int(st.st_mtime)
             except OSError:
-                size = 0
-            ep = {"file": f, "size": size, "season": season, "episodes": numbers, "nfo": bool(nfo and nfo.readable),
+                size, added = 0, 0
+            ep = {"file": f, "size": size, "added": added, "season": season, "episodes": numbers, "nfo": bool(nfo and nfo.readable),
                   "muthur": bool(nfo and nfo.muthur), "title": nfo.title if nfo else None, "rating": _shown(nfo),
                   "imdb": list(nfo.ratings["imdb"]) if nfo and "imdb" in nfo.ratings else None,
                   "thumb": any(stem + s in present for s in ("-thumb.jpg", ".tbn", "-thumb.png")),
@@ -169,8 +171,31 @@ class Index:
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),
                 "nfoFile": os.path.relpath(unit.nfo, self.film_root).replace(os.sep, "/") if unit.nfo else None,
                 "twins": _twins_of(unit.nfo),
+                "genres": info.genres if info else [], "plot": info.plot if info else None,
+                "added": _mtime(os.path.join(self.film_root, *unit.main.parts)) if unit.main else 0,
+                "posterFile": _poster_of(self.film_root, unit.main.parts) if unit.main else None,
             })
         return out
+
+
+def _poster_of(root: str, parts: list[str]) -> str | None:
+    """The image Kodi takes as a film's poster, relative to the Film folder: 'poster.jpg' or 'folder.jpg' in a film's own
+    folder, else '<video name>-poster.jpg' beside it."""
+    stem = os.path.splitext(parts[-1])[0]
+    try:
+        names = set(os.listdir(os.path.join(root, *parts[:-1])))
+    except OSError:
+        return None
+    own = ["poster.jpg", "poster.png", "folder.jpg"] if len(parts) > 1 else []
+    found = next((n for n in [*own, f"{stem}-poster.jpg", f"{stem}-poster.png"] if n in names), None)
+    return "/".join([*parts[:-1], found]) if found else None
+
+
+def _mtime(path: str) -> int:
+    try:
+        return int(os.stat(path).st_mtime)
+    except OSError:
+        return 0
 
 
 def _twin(f: str, present: set[str]) -> bool:

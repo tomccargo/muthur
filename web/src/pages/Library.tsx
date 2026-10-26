@@ -22,11 +22,11 @@ const FIX_HINT: Partial<Record<Filter, [string, string, string]>> = {
   damaged: ['Health lists these under Needs you, to say which episode each one is.', '/health', 'Open Health'],
 };
 const FILTERS: [Filter, string][] = [['all', 'All'], ['noNfo', 'Missing NFO'], ['noScore', 'No IMDb score'], ['duplicates', 'Duplicates'], ['damaged', 'Damaged names']];
-const art = (path: string) => `/api/library/art?${new URLSearchParams({ path })}`;
+export const art = (path: string) => `/api/library/art?${new URLSearchParams({ path })}`;
 const code = (s: number | null, e: number[]) => (s == null ? '—' : `S${String(s).padStart(2, '0')}${e.map((n) => `E${String(n).padStart(2, '0')}`).join('')}`);
 
 // A poster from the library, or the title's initials when there is none (DESIGN.md §8).
-function Cover({ src, title, width = '100%', hero = false }: { src: string | null; title: string; width?: number | string; hero?: boolean }) {
+export function Cover({ src, title, width = '100%', hero = false }: { src: string | null; title: string; width?: number | string; hero?: boolean }) {
   const [failed, setFailed] = useState(false);
   const style = { width, ...(hero ? { viewTransitionName: 'hero' } : {}) };
   if (!src || failed) {
