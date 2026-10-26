@@ -1074,8 +1074,38 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """What the player needs before it starts: how the video plays (the file is read now if it wasn't yet) and its subtitles."""
         path, full = player_video(vid)
         f = play_facts.get(full)
+        original = original_language(path)
         return {"id": vid, "path": path, "name": os.path.basename(full), "play": player.playback(f), "facts": f,
-                "subtitles": player.sidecars(full)}
+                "subtitles": player.sidecars(full), "original": original, "audio": player.audio_pick(f, original)}
+
+    languages: dict[tuple, str | None] = {}
+
+    def original_language(path: str) -> str | None:
+        """The film's or show's original language from TMDB ('ja'), for the audio track to play; None when unknown."""
+        lib, _ = store.snapshot("library")
+        lib_name, _, rest = path.partition("/")
+        if lib_name == "Film":
+            owner = next((f for f in (lib or {}).get("films", []) if f.get("file") == rest), None)
+        else:
+            owner = next((s for s in (lib or {}).get("shows", []) if s["folder"] == rest.split("/", 1)[0]), None)
+        client = tmdb()
+        if not owner or not client:
+            return None
+        kind, ids = ("movie" if lib_name == "Film" else "tv"), owner["ids"]
+        key = (kind, ids.get("tmdb"), ids.get("imdb"))
+        if key not in languages:
+            try:
+                if str(ids.get("tmdb", "")).isdigit():
+                    found = client.movie(int(ids["tmdb"])) if kind == "movie" else client.tv(int(ids["tmdb"]))
+                elif ids.get("imdb"):
+                    hits = client.find(ids["imdb"], "imdb_id")
+                    found = (hits.get("movie_results" if kind == "movie" else "tv_results") or [{}])[0]
+                else:
+                    found = {}
+                languages[key] = (found or {}).get("original_language") or None
+            except Exception:  # TMDB unreachable: the file's default track plays
+                return None
+        return languages[key]
 
     @app.get("/api/player/video/{vid}")
     def player_file(vid: str):

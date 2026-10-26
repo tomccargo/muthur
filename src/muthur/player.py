@@ -75,6 +75,27 @@ def playback(f: dict | None) -> str:
     return f"{way}-hi10" if hi10 and way != "kodi" else way
 
 
+# ISO 639-1 (TMDB's original_language) -> the ISO 639-2 codes files tag their tracks with (B and T forms).
+ISO2 = {"en": ["eng"], "nl": ["dut", "nld"], "fr": ["fre", "fra"], "de": ["ger", "deu"], "es": ["spa"], "it": ["ita"], "ja": ["jpn"],
+        "ko": ["kor"], "zh": ["chi", "zho"], "cn": ["chi", "zho"], "ru": ["rus"], "pt": ["por"], "sv": ["swe"], "da": ["dan"],
+        "no": ["nor", "nob", "nno"], "nb": ["nob", "nor"], "fi": ["fin"], "pl": ["pol"], "cs": ["cze", "ces"], "hu": ["hun"],
+        "tr": ["tur"], "el": ["gre", "ell"], "he": ["heb"], "ar": ["ara"], "hi": ["hin"], "th": ["tha"], "is": ["ice", "isl"],
+        "ro": ["rum", "ron"], "uk": ["ukr"], "fa": ["per", "fas"], "id": ["ind"], "ta": ["tam"], "te": ["tel"], "ga": ["gle"]}
+
+
+def audio_pick(f: dict | None, original: str | None) -> int | None:
+    """Which audio track to play: the first in the original language (docs/PLAYER.md §4), else the default one. An
+    index into the file's audio tracks, in file order; None without audio."""
+    if not f or not f["audio"]:
+        return None
+    codes = ISO2.get(original or "", [original] if original else [])
+    for i, a in enumerate(f["audio"]):
+        if a.get("lang") in codes:
+            return i
+    default = main_audio(f)
+    return f["audio"].index(default) if default else 0
+
+
 def main_audio(f: dict) -> dict | None:
     """The track a browser plays: the first one marked default, else the first."""
     return next((a for a in f["audio"] if a["default"]), f["audio"][0] if f["audio"] else None)

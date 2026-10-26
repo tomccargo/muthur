@@ -266,6 +266,8 @@ export type PlayerTest = { id: string; kind: string; name: string; path: string;
 export type PlayerSub = { name: string; lang: string; label: string; forced: boolean };
 export type PlayerInfo = {
   id: string; path: string; name: string; play: Playback; subtitles: PlayerSub[];
+  original: string | null;  // the film's or show's original language (TMDB, 'ja')
+  audio: number | null;  // the audio track to play: the first in the original language, else the default
   facts: { container: string; video: { codec: string; width: number; height: number; tenBit: boolean; hdr: boolean }[];
     audio: { codec: string; channels: number; lang: string | null; title: string | null; default: boolean }[]; embeddedSubs: number; duration: number } | null;
 };

@@ -13,6 +13,15 @@ def _facts(container=".mkv", video="h264", audio=("aac",)):
             "embeddedSubs": 0, "duration": 6000.0}
 
 
+def test_the_original_language_plays():
+    f = _facts(audio=("aac", "aac"))
+    f["audio"][0]["lang"], f["audio"][1]["lang"] = "eng", "jpn"
+    assert player.audio_pick(f, "ja") == 1  # Spirited Away in Japanese, though English comes first and is the default
+    assert player.audio_pick(f, "fr") == 0  # no French track: the default one
+    assert player.audio_pick(f, None) == 0
+    assert player.audio_pick(_facts(audio=()), "ja") is None
+
+
 def test_how_a_video_plays():
     assert player.playback(None) == "unknown"
     assert player.playback(_facts()) == "native"

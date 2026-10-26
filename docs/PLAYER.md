@@ -1,6 +1,6 @@
 # Player: watching the library in the browser
 
-Status: step 1 built 2026-10-26 (0.42.0: browse, native play, full screen, .srt subtitles), in the local trial. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
+Status: steps 1 and 2 built 2026-10-26 (0.42.0: browse, direct play, full screen, .srt subtitles; 0.43.0: repacking in the browser, sound for AC3/E-AC3/DTS as stereo FLAC, the original-language track, seeking), in the local trial. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
 
 ## 1. What it is
 
@@ -55,12 +55,30 @@ Measured on this PC (built-in browser, Chrome 152 engine, NVIDIA GPU), with a te
 - `audioTracks` is off by default in Firefox and Chrome [3].
 - RTX Video Super Resolution works in Firefox 126+ on a plain video element [4].
 
+**Firefox stutters on some MKVs (26 Oct).** Dune (HEVC 10-bit) and Welcome to the Sticks (H.264) drop about 25% of their frames in Firefox and none in Chrome. Removing the sound track changes nothing. **The same picture, copied unchanged into MP4, plays smoothly.** So Firefox's MKV reader (new since 145) is the cause, not the files, the share or the decoder; Valerian's MKV is unaffected.
+
+**What each browser can do with a stream built in the page** (Media Source Extensions and WebCodecs, measured on this PC with `caps.html`):
+
+| | Firefox 158 | Chrome 152 |
+|---|---|---|
+| Player accepts H.264, HEVC (8/10-bit), AV1 in an MP4 stream | yes | yes |
+| H.264 10-bit in an MP4 stream | no | yes |
+| Sound as AAC, Opus or FLAC in the stream | yes | yes |
+| AC-3 / E-AC-3 in the stream | no | no |
+| Encode sound in the page: Opus | 5.1 and stereo | stereo only |
+| Encode sound in the page: AAC | no | stereo only |
+| Decode HEVC in the page (WebCodecs, to draw the picture yourself) | **no** | yes |
+
+So the picture must go through the browser's own player, never be drawn by the page (Firefox can't decode HEVC in WebCodecs).
+
 Server side: Starlette's `FileResponse` answers HTTP Range requests (206), so seeking works without extra code [5].
 
 **Sound without touching the file:**
 - **Mediabunny** (MPL-2.0, ~7.4k stars) reads MKV and MP4 over HTTP and decodes with WebCodecs [6].
 - Its **@mediabunny/ac3** extension (MPL-2.0) is a size-optimised WebAssembly build of FFmpeg's AC-3/E-AC-3 decoders [7][8].
 - **@mediabunny/dts** does the same for DTS [9].
+- **@mediabunny/flac-encoder** encodes FLAC in the page with libFLAC as WebAssembly; no browser encodes FLAC itself [13].
+- Mediabunny copies tracks without re-encoding when it can, can drop tracks, and writes fragmented MP4 that a Media Source Extensions buffer takes [14][15].
 - Mediabunny doesn't read subtitle tracks from MKV [6].
 
 Considered and not chosen:
@@ -73,7 +91,9 @@ Considered and not chosen:
 
 | Question | Decision |
 |---|---|
-| Sound for AC3/E-AC3/DTS | **Native picture, browser sound**: the video element plays the picture (hardware, RTX upscaling, HDR as is); Mediabunny + its AC3/DTS extensions decode the sound in the browser, kept in sync by muthur. The same path can later play another audio track. |
+| Sound for AC3/E-AC3/DTS | **Lossless FLAC in a stream built in the browser** (decided after the Firefox measurements): Mediabunny reads the file, copies the picture unchanged, decodes the sound (AC3/DTS extensions), mixes it down to **stereo** (the browser always plays on stereo speakers) and encodes it as FLAC. The fragmented MP4 goes to the browser's own player, which keeps sync, pause and seeking itself. |
+| When to repack | **Only when needed**: direct play when the browser handles the file well. Repack in the browser for every MKV in Firefox (its MKV reader stutters on some, unpredictably), for every file whose sound needs decoding, and when the track to play isn't the file's default. |
+| Audio track | **Always the original language**: the film's or show's original language (TMDB's `original_language`), so Spirited Away plays in Japanese and Bienvenue chez les Ch'tis in French. When no track is tagged with it, the file's default. Subtitles stay English first. |
 | Subtitles | **Existing `.srt` files first**, turned into WebVTT on the fly (nothing written). Embedded subtitles later. |
 | Watched status | **Nothing**: the player doesn't read or write Kodi's watched status or resume points, and starts at the beginning. |
 | Place | **A button to `/player`**; the player is its own page with its own TV / Films side bar. |
@@ -94,7 +114,7 @@ Considered and not chosen:
 ### How a file plays
 
 1. **Native**: `<video src="/api/player/file/{id}">`. The browser fetches with Range requests; muthur serves the file as it is.
-2. **Native picture, browser sound**: the video element plays the same URL muted for its picture. Mediabunny opens the same URL (Range requests), decodes the default audio track (AC3/E-AC3/DTS via the extensions) and plays it through the Web Audio API, scheduled against the video's clock. Play, pause, seek and rate follow the video element; drift beyond about 40 ms is corrected by rescheduling. Decided by the file's codecs, before playing.
+2. **Repacked in the browser**: Mediabunny opens the same URL (Range requests) and builds a fragmented MP4 into a Media Source Extensions buffer of a `<video>` element. The picture's packets are copied unchanged. The chosen audio track is copied when the browser plays it (AAC, Opus, FLAC); otherwise it is decoded (AC3/E-AC3/DTS), mixed to stereo and encoded as FLAC. The page stays about a minute ahead of the playhead and drops what is well behind. A seek outside what is buffered restarts the build from the key frame before that point. Decided by the browser, the file's container and codecs, and the original language, before playing.
 3. **Kodi only**: no play.
 
 ### Backend (muthur)
@@ -108,9 +128,9 @@ Considered and not chosen:
 ## 6. Steps
 
 1. **Trial, browse and native play**: `/player` with TV/Films, poster grid, filters, the test set, the player page with native playback, full screen, and `.srt` subtitles. Run locally against the share, with dry run on.
-2. **Browser sound**: Mediabunny + AC3/DTS extensions for the silent third, with A/V sync, seeking and pause.
+2. **Repacking in the browser**: Mediabunny with the AC3, DTS and FLAC-encoder extensions; picture copied, sound copied or decoded to stereo FLAC; the original-language track; seeking. Fixes the silent third and Firefox's MKV stutter.
 3. **On the NAS**: the codec scan as a job, then release and deploy (only while muthur is idle).
-4. Later, each its own decision: embedded text subtitles (muthur's own cache), image subtitles (PGS/VobSub, e.g. libpgs-js, MIT), choosing an audio track, watched status and resume, VLC hand-off for what won't play.
+4. Later, each its own decision: embedded text subtitles (muthur's own cache), image subtitles (PGS/VobSub, e.g. libpgs-js, MIT), an audio-track menu, watched status and resume, VLC hand-off for what won't play.
 
 ### Test set (one real file per kind, picked from the scan)
 
@@ -140,3 +160,6 @@ Considered and not chosen:
 10. movi-player: https://github.com/mrujjwalg/movi-player
 11. libav.js: https://github.com/Yahweasel/libav.js
 12. vlc.js status: https://forum.videolan.org/viewtopic.php?p=545739
+13. @mediabunny/flac-encoder: https://mediabunny.dev/guide/extensions/flac-encoder
+14. Mediabunny, converting media files (copy, discard): https://mediabunny.dev/guide/converting-media-files
+15. Mediabunny, writing media files (fragmented MP4, append-only for MSE): https://mediabunny.dev/guide/writing-media-files

@@ -17,9 +17,10 @@ type Way = 'native' | 'sound' | 'kodi' | 'unknown';
 // H.264 in 10-bit plays in Chrome and Edge but not in Firefox (measured 26 Oct, docs/PLAYER.md §3): decided here, by the browser.
 const HI10 = !/firefox/i.test(navigator.userAgent);
 const way = (p: Playback): Way => (p.endsWith('-hi10') ? (HI10 ? (p.slice(0, -5) as Way) : 'kodi') : (p as Way));
+const MSE = typeof window !== 'undefined' && 'MediaSource' in window;  // repacking in the browser (repack.ts) needs it
 const PLAY_NOTE: Record<Way, string | null> = {
   native: null,
-  sound: 'Sound in a later step: the browser shows the picture, but this file’s sound (AC3, E-AC3 or DTS) needs the page to decode it.',
+  sound: MSE ? null : 'This browser can’t decode this file’s sound (AC3, E-AC3 or DTS): it plays without sound.',
   kodi: 'Plays in Kodi only: no browser plays this kind of file.',
   unknown: null,
 };
@@ -225,7 +226,7 @@ function Browse({ view, show }: { view: View; show: string | null }) {
 }
 
 // ---- watching -------------------------------------------------------------------------------
-function Watch({ id, title }: { id: string; title: string }) {
+function Watch({ id, title, mute = false }: { id: string; title: string; mute?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
   const [info, setInfo] = useState<PlayerInfo | null>(null);
@@ -255,13 +256,31 @@ function Watch({ id, title }: { id: string; title: string }) {
   });
   useEffect(() => { document.title = `${title} · muthur`; }, [title]);
   const how = info ? way(info.play) : null;
+  // Repack in the browser (docs/PLAYER.md §4) when the sound needs decoding, for every MKV in Firefox (its MKV reader
+  // stutters on some), and when the original-language track isn't the file's default; otherwise the file plays directly.
+  const defaultAudio = info?.facts ? Math.max(0, info.facts.audio.findIndex((a) => a.default)) : 0;
+  const repack = Boolean(info && how !== 'kodi' && MSE
+    && (how === 'sound' || (!HI10 && info.facts?.container === '.mkv') || (info.audio != null && info.audio !== defaultAudio)));
+  const src = `/api/player/video/${id}`;
+  useEffect(() => {
+    if (!repack || !info || !video.current) return;
+    let engine: { destroy: () => void } | null = null;
+    let gone = false;
+    import('./repack').then(({ Repack }) => {
+      if (gone || !video.current) return;
+      const r = new Repack(video.current, src, { audio: info.audio, onError: (m) => setError(`Repacking stopped: ${m}`) });
+      engine = r;
+      r.start().catch((e: Error) => setError(`Repacking failed: ${e.message}`));
+    }).catch((e: Error) => setError(`The repacker didn’t load: ${e.message}`));
+    return () => { gone = true; engine?.destroy(); };
+  }, [repack, info, src]);
   const note = info && how ? (how === 'kodi' && info.play.endsWith('-hi10') ? 'Firefox doesn’t play this video (H.264 in 10-bit): Chrome, Edge and Kodi do.' : PLAY_NOTE[how]) : null;
   const firstEnglish = info?.subtitles.findIndex((s) => s.lang === 'en' && !s.forced) ?? -1;
   return (
     <div className={`pl-watch${full ? ' full' : ''}`} ref={box}>
       {error && <p className="pl-watch-msg">{error}</p>}
       {info && how !== 'kodi' && (
-        <video ref={video} src={`/api/player/video/${id}`} controls autoPlay playsInline preload="auto">
+        <video ref={video} src={repack ? undefined : src} controls autoPlay playsInline preload="auto" muted={mute}>
           {info.subtitles.map((s, i) => (
             <track key={s.name} kind="subtitles" src={`/api/player/video/${id}/subtitles/${encodeURIComponent(s.name)}`}
               srcLang={s.lang === 'und' ? undefined : s.lang} label={s.label} default={i === firstEnglish} />
@@ -271,6 +290,7 @@ function Watch({ id, title }: { id: string; title: string }) {
       <div className="pl-watch-top">
         <button type="button" className="pl-btn" onClick={back} aria-label="Back">←</button>
         <span className="pl-watch-title" title={info?.path}>{title}</span>
+        {info && how !== 'kodi' && <span className="pl-watch-how" title="How this video plays">{repack ? 'repacked in the browser' : 'direct'}</span>}
         <button type="button" className="pl-btn" onClick={toggleFull} aria-label={full ? 'Leave full screen' : 'Full screen'}>{full ? '⤡' : '⤢'}</button>
       </div>
       {note && <p className={`pl-watch-msg${how === 'kodi' ? '' : ' corner'}`}>{note}</p>}
@@ -282,7 +302,7 @@ function Watch({ id, title }: { id: string; title: string }) {
 export default function PlayerApp() {
   const { path, search } = useLocation();
   const q = new URLSearchParams(search);
-  if (path === '/player/watch' && q.get('id')) return <Watch id={q.get('id')!} title={q.get('t') ?? 'Video'} />;
+  if (path === '/player/watch' && q.get('id')) return <Watch id={q.get('id')!} title={q.get('t') ?? 'Video'} mute={q.get('mute') === '1'} />;
   const view = (q.get('view') ?? 'films') as View;
   return <Browse view={['films', 'tv', 'test'].includes(view) ? view : 'films'} show={q.get('show')} />;
 }
