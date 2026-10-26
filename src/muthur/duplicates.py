@@ -409,9 +409,9 @@ def _apply_one(dups: Duplicates, journal, run: int, g: dict, quarantine: str) ->
             move(src, _full(dups, o["dst"]), "move")
 
 
-def _carry(kodi, g: dict, before: dict, prefixes: dict) -> dict:
-    """After a group changed on disk: Kodi scans the kept video's folder, the kept item gets the
-    highest play count and resume point of all copies, and entries for the old files go."""
+def _carry(kodi, g: dict, before: dict, prefixes: dict, scan: bool = True) -> dict:
+    """After a group changed on disk: Kodi scans the kept video's folder (unless the caller did), the kept item gets
+    the highest play count and resume point of all copies, and entries for the old files go."""
     lib, _, rel = g["plan"]["final"].partition("/")
     prefix = prefixes.get(lib)
     if not prefix:
@@ -422,7 +422,8 @@ def _carry(kodi, g: dict, before: dict, prefixes: dict) -> dict:
     resume = max((s for s in states if s["resume"] > 0), key=lambda s: s["resume"], default=None)
     final_file = prefix + rel
     try:
-        kodi.scan_and_wait(final_file.rsplit("/", 1)[0] + "/")
+        if scan:
+            kodi.scan_and_wait(final_file.rsplit("/", 1)[0] + "/")
         method, key, id_key = (("VideoLibrary.GetEpisodes", "episodes", "episodeid") if g["kind"] == "episode"
                                else ("VideoLibrary.GetMovies", "movies", "movieid"))
         found = kodi.call(method, {"properties": ["file", "playcount", "resume"],

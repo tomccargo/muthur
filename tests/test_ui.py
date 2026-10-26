@@ -165,6 +165,11 @@ def test_clicking_from_the_list_into_a_show_and_back(server, browser):
     page.wait_for_load_state("networkidle")
     page.click('a[href*="folder="]')
     page.wait_for_selector("text=TV/The Office (US)/")
+    page.set_viewport_size({"width": 375, "height": 800})
+    page.click('button[aria-label^="Actions for"] >> nth=0')  # an episode's menu: it opens in its row
+    page.wait_for_selector("text=Re-read in Kodi")
+    assert page.evaluate("document.documentElement.scrollWidth - innerWidth") <= 0
+    page.set_viewport_size({"width": 1280, "height": 800})
     page.click("text=← Library")
     page.wait_for_selector("h1:has-text('Shows and films')")
     page.close()

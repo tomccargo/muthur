@@ -34,7 +34,9 @@ from .kodi import Kodi, folder_name
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
+from . import nfo_write
 from . import quarantine as quarantine_notes
+from . import rename as renaming
 from .scores import ScoreRefresh
 from .shield import COMPONENT, Shield, ShieldError
 from .store import Store
@@ -182,7 +184,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     JOB_NAMES = {"inbox": "Checking the downloads", "apply": "Filing downloads", "undo": "Putting a run back",
                  "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
-                 "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed"}
+                 "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed",
+                 "rename": "Renaming an episode"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -702,8 +705,157 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if not show:
             raise HTTPException(404, "That show isn't in the index. Index the library again.")
         dup = _duplicates(show["episodes"])
-        return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup} for e in show["episodes"]], "loose": show["loose"],
-                "scoreNotes": score_notes(show)}
+        names_now = episode_names(show)
+        return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup, "renameTo": names_now.get(e["file"])} for e in show["episodes"]],
+                "loose": show["loose"], "scoreNotes": score_notes(show)}
+
+    def season_titles(tmdb_id: int, season: int) -> dict[int, dict]:
+        client = tmdb()
+        try:
+            return {x["episode_number"]: x for x in ((client.tv_season(tmdb_id, season) if client else None) or {}).get("episodes", [])}
+        except Exception:
+            return {}
+
+    def episode_names(show: dict) -> dict[str, str]:
+        """file -> the name the library gives it ('Show - S01E02 - TMDB's title.mkv'), where that differs: one
+        numbered episode per file, and TMDB knows the episode."""
+        tid = str(show["ids"].get("tmdb", ""))
+        if not tid.isdigit():
+            return {}
+        titles: dict[int, dict] = {}
+        out = {}
+        for e in show["episodes"]:
+            if e["season"] is None or len(e["episodes"]) != 1 or e["damaged"]:
+                continue
+            if e["season"] not in titles:
+                titles[e["season"]] = season_titles(int(tid), e["season"])
+            title = (titles[e["season"]].get(e["episodes"][0]) or {}).get("name")
+            if title:
+                name = renaming.new_name(show["folder"], e["file"], e["season"], e["episodes"], title)
+                if name != e["file"].rsplit("/", 1)[-1]:
+                    out[e["file"]] = name
+        return out
+
+    # -- one episode: the show page's menu ----------------------------------------
+    def episode_at(path: str) -> tuple[dict, dict]:
+        lib, _ = store.snapshot("library")
+        lib_name, _, rest = path.partition("/")
+        folder, _, file = rest.partition("/")
+        show = next((s for s in (lib or {}).get("shows", []) if s["folder"] == folder), None) if lib_name == "TV" else None
+        e = next((x for x in (show or {}).get("episodes", []) if x["file"] == file), None)
+        if not show or not e or not os.path.isfile(os.path.join(cfg.tv, folder, *file.split("/"))):
+            raise HTTPException(404, "That episode isn't in the index any more. Index the library again.")
+        return show, e
+
+    def episode_label(show: dict, s: int | None, n: int | None) -> str:
+        return f"{show['title']} S{s:02d}E{n:02d}" if s is not None and n is not None else show["title"]
+
+    @app.post("/api/library/episode/reread")
+    def episode_reread(body: dict):
+        path = str(body.get("path") or "")
+        episode_at(path)
+        k = kodi()
+        if not k:
+            raise HTTPException(409, "Kodi isn't set up in Settings.")
+        nfo = os.path.join(cfg.tv, *path.partition("/")[2].rsplit(".", 1)[0].split("/")) + ".nfo"  # Kodi's entry is found by the name
+        if not k.check().get("connected"):
+            remember_refresh([nfo])
+            return {"text": f"Kodi is off: it re-reads this episode when the {names()['device']} is on again."}
+        r = k.refresh_files([nfo], {"TV": cfg.tv, "Film": cfg.film})
+        return {"text": "Kodi re-read it." if r.get("refreshed") else "Kodi doesn’t have this episode yet; it adds it at its next scan."}
+
+    @app.post("/api/library/episode/nfo")
+    def episode_nfo(body: dict):
+        path = str(body.get("path") or "")
+        show, e = episode_at(path)
+        client = need_tmdb()
+        if e["nfo"]:
+            raise HTTPException(409, "It has an NFO already.")
+        if e["season"] is None or len(e["episodes"]) != 1:
+            raise HTTPException(409, "muthur can’t tell which episode this is from its name. Use “It’s another episode”.")
+        tool = health_tool(client)
+        imdb_id, tmdb_id = tool.scores.show_ids(show["folder"])
+        if not tmdb_id:
+            raise HTTPException(409, "The show’s NFO has no TMDB ID. Change the show’s match first.")
+        stem = path.rsplit(".", 1)[0]
+        x = {"path": stem + ".nfo", "video": path, "tmdb": tmdb_id, "season": e["season"], "episode": e["episodes"][0], "show": show["title"],
+             "imdbShow": imdb_id, "thumb": None if e["thumb"] else stem + "-thumb.jpg"}
+        label = episode_label(show, e["season"], e["episodes"][0])
+
+        def work() -> dict:
+            run = journal.start("library")
+            tool._episode_nfos(run, x, [])
+            journal.finish(run, {"label": f"NFO for {label}"})
+            return {"run": run, "nfo": x["path"], "text": f"NFO written for {label}."}
+
+        return edit(work)
+
+    @app.post("/api/library/episode/rename", status_code=202)
+    def episode_rename(body: dict):
+        """Rename an episode to the library's naming. With season and episode: it is another episode than its name
+        says, so it gets that number and title, and its NFO describes that episode. Kodi follows (rename.py)."""
+        not_dry()
+        client = need_tmdb()
+        path = str(body.get("path") or "")
+        show, e = episode_at(path)
+        tid = str(show["ids"].get("tmdb", ""))
+        if not tid.isdigit():
+            raise HTTPException(409, "The show’s NFO has no TMDB ID. Change the show’s match first.")
+        other = body.get("season") is not None
+        try:
+            s, n = (int(body["season"]), int(body["episode"])) if other else (e["season"], e["episodes"][0] if len(e["episodes"]) == 1 else None)
+        except (KeyError, TypeError, ValueError):
+            raise HTTPException(422, "Choose a season and an episode.")
+        if s is None or n is None:
+            raise HTTPException(409, "muthur can’t tell which episode this is from its name. Use “It’s another episode”.")
+        ep = season_titles(int(tid), s).get(n)
+        if not ep:
+            raise HTTPException(409, f"TMDB has no S{s:02d}E{n:02d} for this show.")
+        k = kodi(timeout=30)
+        if not k:
+            raise HTTPException(409, "Renaming needs Kodi, so the episode keeps its watched status. Set Kodi up in Settings.")
+        label = episode_label(show, s, n)
+
+        def work(job):
+            if not k.check().get("connected"):
+                job.begin(f"Waking the {names()['device']}", 0)
+                try:
+                    wake_kodi()
+                except ShieldError:
+                    pass
+                if not k.check().get("connected"):
+                    raise RuntimeError(f"Kodi is off, and renaming now would leave the watched status behind. Turn the {names()['device']} on and try again.")
+            job.begin("Reading what Kodi knows", 0)
+            roots = {"TV": cfg.tv}
+            before = renaming.read_before(k, roots)
+            new = renaming.new_name(show["folder"], e["file"], s, [n] if other else e["episodes"], ep.get("name"))
+            run = journal.start("library")
+            try:
+                moved = renaming.rename(journal, run, cfg.tv, "TV", f"{show['folder']}/{e['file']}", new)
+            except (OSError, ValueError) as err:
+                journal.undo(run)
+                journal.finish(run, {"label": f"Rename of {label} stopped"})
+                raise RuntimeError(f"Nothing was renamed: {getattr(err, 'strerror', None) or err}.")
+            if other:  # the NFO describes the episode it really is
+                nfo = os.path.join(cfg.tv, *moved.partition("/")[2].rsplit(".", 1)[0].split("/")) + ".nfo"
+                imdb_id = health_tool(client).scores.show_ids(show["folder"])[0]
+                data = nfo_write.episode_nfo(show["title"], s, ep, int(tid), imdb=imdb.episode(imdb_id, s, n, None) if imdb_id else None)
+                if os.path.lexists(nfo):
+                    journal.replace(run, moved, nfo, data, os.path.join(cfg.config_dir, "backups"))
+                else:
+                    journal.create(run, moved, nfo, data)
+            job.begin("Kodi takes the new name", 0)
+            followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before)
+            journal.finish(run, {"label": f"Renamed {label}", "kodi": followed})
+            job.result = (f"Renamed {label} to {new}." + ("" if followed["followed"] else
+                          f" Kodi didn’t take it all: {followed['problems'][0]['why'] if followed['problems'] else 'unknown'}"))
+            job.attention = not followed["followed"]
+            start_library(by_user=False)
+
+        if any(j.name == "rename" for j in [jobs.current, *jobs.waiting()] if j and (j.running or j.queued)):
+            raise HTTPException(409, "Another episode is being renamed. Try again when it’s done.")  # jobs of one name merge
+        job = jobs.start("rename", work)
+        return job.as_dict()
 
     def score_notes(show: dict) -> dict[str, str]:
         """For each season with episodes lacking an IMDb score: why (DESIGN.md §8: a score left out says so)."""
@@ -890,7 +1042,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.put("health.counts", {
             "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
             "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
-            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])),
+            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])), "renames": len(f.get("renames", [])),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def check_health(client, job):

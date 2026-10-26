@@ -15,6 +15,7 @@ import os
 import time
 
 from . import nfo_write, quarantine, subtitles
+from . import rename as renaming
 from .art import poster_problem
 from .identify import identify_movie, identify_show
 from .index import JUNK
@@ -25,7 +26,8 @@ from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
-FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores")
+# In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
+FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores", "renames")
 
 
 class Health:
@@ -114,21 +116,29 @@ class Health:
                                              "Episodes whose name confirms TMDB's title at their number are still fixed; the others are listed."})
         for e in numbered:
             s, n = e["season"], e["episodes"][0]
-            if e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1):
-                continue
+            written = e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1)  # nothing to write or score: only its name is checked
             named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
             if s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n])):
-                manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
-                                          "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
-                                                 f"TMDB's S{s:02d}E{n:02d} “{season(s).get(n) or 'nothing'}”."})
+                if not written:
+                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
+                                              "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
+                                                     f"TMDB's S{s:02d}E{n:02d} “{season(s).get(n) or 'nothing'}”."})
                 continue
             if named and season(s).get(n) and similarity(_bare(named), _bare(titles[s][n])) < OTHER_EPISODE and any(
                     similarity(_bare(named), _bare(t or "")) >= SAME_EPISODE for k, t in titles[s].items() if k != n):
-                manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
-                                          "why": f"Named “{named}”, but TMDB’s S{s:02d}E{n:02d} is “{titles[s][n]}”."})
+                if not written:
+                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
+                                              "why": f"Named “{named}”, but TMDB’s S{s:02d}E{n:02d} is “{titles[s][n]}”."})
                 continue
             label = f"{title} S{s:02d}E{n:02d}"
             stem = f"TV/{folder}/{e['file'].rsplit('.', 1)[0]}"
+            # Its number is trusted (as for writing its NFO): the library's name, with TMDB's title.
+            if len(e["episodes"]) == 1 and not e["mismatch"] and season(s).get(n):
+                new = renaming.new_name(folder, e["file"], s, e["episodes"], season(s)[n])
+                if new != e["file"].rsplit("/", 1)[-1]:
+                    fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": label, "why": new})
+            if written:
+                continue
             if not e["nfo"]:
                 if len(e["episodes"]) > 1:
                     continue  # double-episode NFOs: not written by muthur yet
@@ -187,8 +197,14 @@ class Health:
     # -- fixing ------------------------------------------------------------------------------
     def apply(self, plan: dict, kinds: list[str], kodi=None, job=None) -> dict:
         items = [(k, x) for k in FIXES if k in kinds for x in plan["fixes"].get(k, [])]
+        self._renamed: list[tuple[str, str]] = []
+        self._before: dict | None = None  # Kodi's items before the renames; None: Kodi is off, so nothing is renamed
+        if "renames" in kinds and kodi and kodi.check().get("connected"):
+            if job:
+                job.begin("Reading what Kodi knows", 0)
+            self._before = renaming.read_before(kodi, {"TV": self.roots["TV"]})
         if job:
-            job.total, job.done = len(items), 0
+            job.step, job.total, job.done = None, len(items), 0
         run = self.journal.start("health")
         done, failed, nfos = {k: 0 for k in kinds}, [], []  # type: ignore[var-annotated]
         for kind, x in items:
@@ -200,6 +216,10 @@ class Health:
             if job:
                 job.done += 1
         summary = {"done": done, "failed": failed}
+        if kodi and self._renamed and self._before is not None:
+            if job:
+                job.begin(f"Kodi takes {len(self._renamed):,} new names", 0)
+            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, {"TV": self.roots["TV"]}, self._before)
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
@@ -303,6 +323,17 @@ class Health:
         else:
             self._write(run, x["path"], data)
         nfos.append(x["nfo"])
+
+    def _renames(self, run, x, nfos):
+        """The library's name for an episode, with its NFO, thumbnail and subtitles; only while Kodi answers, so its
+        watched status follows (rename.py)."""
+        if self._before is None:
+            raise ValueError("Kodi is off: renaming now would leave the watched status behind. Turn Kodi on and apply again")
+        rel = x["path"].partition("/")[2]
+        if not os.path.isfile(self._full(x["path"])):
+            raise ValueError("the video isn't there any more")
+        new = renaming.rename(self.journal, run, self.roots["TV"], "TV", rel, x["to"])
+        self._renamed.append((x["path"], new))
 
     def _imdb_scores(self, run, x, nfos):
         full = self._full(x["path"])

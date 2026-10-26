@@ -29,7 +29,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
-  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; questions?: number };  // from the last library check
+  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -96,6 +96,7 @@ export type LibEpisode = {
   file: string; size: number; season: number | null; episodes: number[]; nfo: boolean; muthur: boolean; title: string | null;
   rating: Score; imdb: [number, number] | null; thumb: boolean; subs: number; subLangs?: string[]; damaged: boolean; sample: boolean; mismatch: boolean;
   watched: number | null; duplicate: boolean;
+  renameTo?: string | null;  // the name the library gives it, when that differs
 };
 export type ShowDetail = Omit<ShowSummary, never> & { episodes: LibEpisode[]; loose: string[]; scoreNotes?: Record<string, string> };
 export type Film = {
@@ -117,7 +118,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 export type Question = { path: string; why: string; season?: number };
 export type Fixes = {
@@ -196,6 +197,10 @@ export const api = {
     call<{ posters: { path: string; language: string | null; votes: number }[] }>(`/api/library/posters?${new URLSearchParams({ kind, tmdbId: String(tmdbId) })}`),
   libraryPoster: (target: string, image: string) => call<{ label: string }>('/api/library/poster', { method: 'POST', body: JSON.stringify({ target, image }) }),
   indexLibrary: () => call<Job>('/api/library/scan', { method: 'POST' }),
+  episodeReread: (path: string) => call<{ text: string }>('/api/library/episode/reread', { method: 'POST', body: JSON.stringify({ path }) }),
+  episodeNfo: (path: string) => call<{ text: string }>('/api/library/episode/nfo', { method: 'POST', body: JSON.stringify({ path }) }),
+  episodeRename: (path: string, as?: { season: number; episode: number }) =>
+    call<Job>('/api/library/episode/rename', { method: 'POST', body: JSON.stringify({ path, ...(as ?? {}) }) }),
   duplicates: () => call<{ at: number | null; groups: DupGroup[] }>('/api/duplicates'),
   scanDuplicates: () => call<Job>('/api/duplicates/scan', { method: 'POST' }),
   duplicatePlan: (id: string, keep: string) => call<DupPlan>('/api/duplicates/plan', { method: 'POST', body: JSON.stringify({ id, keep }) }),

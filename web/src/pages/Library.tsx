@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Film, type LibEpisode, type LibProblems, type Library, type ShowDetail, type ShowSummary } from '../api';
+import { api, type Film, type LibEpisode, type LibProblems, type Library, type Season, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
 import { middle, score, size, when } from '../labels';
@@ -54,12 +54,70 @@ function problemsText(p: LibProblems, film = false): string[] {
 }
 
 // ---- a show -------------------------------------------------------------------------------
-function EpisodeRow({ e }: { e: LibEpisode }) {
+// One episode's actions, opened from its row: Kodi re-reads it, an NFO where it has none, the library's name,
+// or the number it really has. The result shows here (DESIGN.md §7.5); a rename runs as a job.
+function EpisodeMenu({ e, path, tmdbId, onClose }: { e: LibEpisode; path: string; tmdbId: number | null; onClose: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [result, setResult] = useState<{ kind: 'note' | 'error'; text: string } | null>(null);
+  const [other, setOther] = useState<Season | null>(null);
+  const [season, setSeason] = useState<number>(e.season ?? 1);
+  const [episode, setEpisode] = useState<number | null>(null);
+  const run = (key: string, request: () => Promise<{ text: string }>) => {
+    setBusy(key);
+    setResult(null);
+    request().then((r) => setResult({ kind: 'note', text: r.text })).catch((err: Error) => setResult({ kind: 'error', text: err.message })).finally(() => setBusy(null));
+  };
+  const renamed = (as?: { season: number; episode: number }) =>
+    run(as ? 'other' : 'rename', () => api.episodeRename(path, as).then(() => ({ text: 'Renaming: the bar at the top shows it; this page updates when it’s done.' })));
+  const loadSeason = (s: number) => {
+    if (!tmdbId) return;
+    setSeason(s);
+    setEpisode(null);
+    api.season(tmdbId, s).then(setOther).catch((err: Error) => setResult({ kind: 'error', text: err.message }));
+  };
+  const picked = other?.episodes.find((x) => x.episode === episode);
+  return (
+    <div style={{ gridColumn: '1 / -1', display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 0 4px' }}>
+      <div className="actions" style={{ flexWrap: 'wrap' }}>
+        <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'kodi'} onClick={() => run('kodi', () => api.episodeReread(path))}>Re-read in Kodi</button>
+        {!e.nfo && <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'nfo'} onClick={() => run('nfo', () => api.episodeNfo(path))}>Write its NFO</button>}
+        {e.renameTo && (
+          <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'rename'} title={e.renameTo} onClick={() => renamed()}>
+            Rename to “{middle(e.renameTo, 60)}”
+          </button>
+        )}
+        {tmdbId && !other && <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadSeason(e.season ?? 1)}>It’s another episode</button>}
+        <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
+      </div>
+      {other && (
+        <div className="actions" style={{ flexWrap: 'wrap' }}>
+          <select className="field" aria-label="Season" value={season} onChange={(ev) => loadSeason(Number(ev.target.value))} style={{ width: 'auto' }}>
+            {other.seasons.map((s) => <option key={s.season} value={s.season}>{s.season === 0 ? 'Specials' : `Season ${s.season}`}</option>)}
+          </select>
+          <select className="field" aria-label="Episode" value={episode ?? ''} onChange={(ev) => setEpisode(Number(ev.target.value) || null)} style={{ width: 'auto', minWidth: 0, maxWidth: '100%' }}>
+            <option value="">Which episode?</option>
+            {other.episodes.map((x) => <option key={x.episode} value={x.episode}>{`E${String(x.episode).padStart(2, '0')}`} · {x.title ?? '—'}</option>)}
+          </select>
+          {picked && (
+            <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'other'} onClick={() => renamed({ season, episode: picked.episode })}>
+              It’s {code(season, [picked.episode])} “{picked.title}”
+            </button>
+          )}
+        </div>
+      )}
+      {other && <p className="hint" style={{ margin: 0 }}>The file gets that number and title, and its NFO describes that episode. Kodi keeps the watched status.</p>}
+      {result && <div className={`banner banner-${result.kind}`} role={result.kind === 'error' ? 'alert' : 'status'}>{result.text}</div>}
+    </div>
+  );
+}
+
+function EpisodeRow({ e, path, tmdbId }: { e: LibEpisode; path: string; tmdbId: number | null }) {
+  const [open, setOpen] = useState(false);
   const name = e.file.split('/').pop() ?? e.file;
   const flags = [!e.nfo && 'no NFO', e.damaged && 'damaged number', e.season == null && !e.damaged && 'no number', e.duplicate && 'number twice', e.mismatch && 'NFO says another number']
     .filter(Boolean) as string[];
   return (
-    <li style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr) auto', gap: '2px 12px', alignItems: 'baseline' }}>
+    <li style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr) auto auto', gap: '2px 12px', alignItems: 'baseline' }}>
       <span className="mono small">{code(e.season, e.episodes)}</span>
       <span style={{ minWidth: 0 }}>
         <span className="ellipsis" style={{ display: 'block' }}>{e.title ?? <span className="muted">—</span>}</span>
@@ -71,16 +129,20 @@ function EpisodeRow({ e }: { e: LibEpisode }) {
         <span className="small num">{score(e.rating) || <span className="muted">no score</span>}</span>
         <span className="status small">{e.watched ? <><Dot kind="dot-success" />Watched</> : e.watched === 0 ? <><Dot />Not watched</> : <span className="muted">—</span>}</span>
       </span>
+      <button type="button" className="btn btn-ghost btn-sm" aria-expanded={open} aria-label={`Actions for ${code(e.season, e.episodes)}`}
+        title="Re-read, NFO, rename" onClick={() => setOpen(!open)}>⋯</button>
+      {open && <EpisodeMenu e={e} path={path} tmdbId={tmdbId} onClose={() => setOpen(false)} />}
     </li>
   );
 }
 
-function ShowPage({ folder }: { folder: string }) {
+function ShowPage({ folder, finished }: { folder: string; finished?: number | null }) {
   const [show, setShow] = useState<ShowDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [flying] = useState(isFlying);
-  useEffect(() => { api.libraryShow(folder).then(setShow).catch((e: Error) => { setError(e.message); heroLanded(); }); }, [folder]);
+  // Again after every job (a rename, the index built again): the page shows the library as it is now.
+  useEffect(() => { api.libraryShow(folder).then(setShow).catch((e: Error) => { setError(e.message); heroLanded(); }); }, [folder, finished]);
   useEffect(() => { if (show && flying) heroLanded(); }, [show, flying]);
   const seasons = useMemo(() => {
     const m = new Map<number | null, LibEpisode[]>();
@@ -137,7 +199,9 @@ function ShowPage({ folder }: { folder: string }) {
                     {why}{why.includes('Health') && <> <Link to="/health">Open Health</Link></>}
                   </p>
                 )}
-                <ul className="rows">{eps.map((e) => <EpisodeRow key={e.file} e={e} />)}</ul>
+                <ul className="rows">
+                  {eps.map((e) => <EpisodeRow key={e.file} e={e} path={`TV/${show.folder}/${e.file}`} tmdbId={show.ids.tmdb ? Number(show.ids.tmdb) : null} />)}
+                </ul>
               </section>
             );
           })()}
@@ -214,7 +278,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
   // Every hook comes before the returns below: the list and a show are one component, and React counts its hooks.
   const [starting, setStarting] = useState<string | null>(null);
 
-  if (folder) return <ShowPage folder={folder} />;
+  if (folder) return <ShowPage folder={folder} finished={status?.job?.finished} />;
   const film = filmKey ? lib?.films.find((f) => f.key === filmKey) : null;
   if (film) return <FilmPage film={film} />;
 
