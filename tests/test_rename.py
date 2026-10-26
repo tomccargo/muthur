@@ -54,7 +54,10 @@ class FakeKodi:
     def source_prefix(self, name):
         return "smb://nas/TV/" if name == "TV" else None
 
-    def scan_and_wait(self, folder):
+    def check(self):
+        return {"connected": True}
+
+    def scan_and_wait(self, folder, limit=300):
         self.scans.append(folder)
         return True
 
@@ -70,6 +73,10 @@ def test_kodi_scans_once_carries_the_play_count_and_drops_the_old_entry():
     before = {"tv/show/season 1/show.s01e01.mkv": {"kodiid": 7, "playcount": 2, "lastplayed": "2024-01-01 20:00:00", "resume": 0, "total": 0}}
     r = follow_in_kodi(k, [("TV/Show/Season 1/Show.S01E01.mkv", "TV/Show/Season 1/Show - S01E01 - Pilot.mkv")], {"TV": "/data/TV"}, before)
     assert r == {"followed": 1, "problems": []} and k.scans == ["smb://nas/TV/Show/Season 1/"]
+    many = [(f"TV/Show/Season {s}/Show.S0{s}E01.mkv", f"TV/Show/Season {s}/Show - S0{s}E01 - X.mkv") for s in range(1, 6)]
+    k.scans.clear()
+    follow_in_kodi(k, many, {"TV": "/data/TV"}, {})
+    assert k.scans == ["smb://nas/TV/"]  # five season folders: one scan of the source, not five
     seen: list[str] = []
     follow_in_kodi(k, [("TV/Show/Season 1/Show.S01E01.mkv", "TV/Show/Season 1/Show - S01E01 - Pilot.mkv")], {"TV": "/data/TV"}, before, done=seen.append)
     assert seen == ["TV/Show/Season 1/Show.S01E01.mkv"]  # each one Kodi took is crossed off the waiting list

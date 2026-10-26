@@ -11,6 +11,7 @@ import os
 from .apply import SUBTITLE_EXTS, belongs_to
 from .naming import episode_path
 
+MANY_FOLDERS = 3  # above this many renamed folders in one source, Kodi scans the source once instead
 ART_TYPES = ("thumb", "poster", "fanart", "clearlogo", "clearart", "banner", "landscape", "discart", "disc", "logo", "characterart", "keyart")
 
 
@@ -71,20 +72,34 @@ def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], 
     from .kodi import folder_name
 
     prefixes = {lib: kodi.source_prefix(folder_name(root)) for lib, root in roots.items()}
+
+    def folder_of(new: str) -> str | None:
+        lib, _, rel = new.partition("/")
+        prefix = prefixes.get(lib)
+        return prefix + (rel.rsplit("/", 1)[0] + "/" if "/" in rel else "") if prefix else None
+
+    # Many folders in one source: one scan of the whole source. Kodi skips every folder whose modification time
+    # didn't change, so it only reads the renamed ones, without waiting on each folder in turn.
+    per_source: dict[str, set[str]] = {}
+    for _, new in renamed:
+        if (f := folder_of(new)) is not None:
+            per_source.setdefault(prefixes[new.partition("/")[0]] or "", set()).add(f)
+    whole = {src for src, folders in per_source.items() if len(folders) > MANY_FOLDERS}
     scanned: set[str] = set()
     followed, problems = 0, []  # type: ignore[var-annotated]
     for n, (old, new) in enumerate(renamed):
-        lib, _, rel = new.partition("/")
-        prefix = prefixes.get(lib)
+        folder = folder_of(new)
+        source = prefixes.get(new.partition("/")[0])
         try:
-            if prefix:
-                folder = prefix + (rel.rsplit("/", 1)[0] + "/" if "/" in rel else "")
-                if folder not in scanned:
-                    kodi.scan_and_wait(folder)
-                    scanned.add(folder)
+            if folder and source in whole and source not in scanned:
+                kodi.scan_and_wait(source, limit=3600)
+                scanned.add(source)
+            elif folder and source not in whole and folder not in scanned:
+                kodi.scan_and_wait(folder)
+                scanned.add(folder)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}
-        g = {"kind": "episode" if lib == "TV" else "movie", "plan": {"final": new}, "copies": [{"path": old}]}
+        g = {"kind": "episode" if new.startswith("TV/") else "movie", "plan": {"final": new}, "copies": [{"path": old}]}
         r = _carry(kodi, g, before, prefixes, scan=False)
         if not r.get("ok") and not kodi.check().get("connected"):
             return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}
