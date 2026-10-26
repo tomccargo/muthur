@@ -642,7 +642,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def scheduler():
         """Every hour: follow Kodi's watched status. Once a day: the Health check (read-only; it also builds
         the library index). Once a week: the IMDb scores. Fixes are never applied from here."""
-        time.sleep(300)  # let a fresh start settle first
+        time.sleep(60)  # let a fresh start settle first
+        if not outdated_check():
+            time.sleep(240)  # sooner only when Health can't show the fixes an update added
         while True:
             try:
                 k = kodi(timeout=90)
@@ -654,7 +656,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 client = tmdb()
                 _, checked = store.snapshot("health")
                 _, indexed = store.snapshot("library")
-                if client and (not checked or time.time() - checked > 86400):  # a day old: check again
+                # A day old, or from before an update that added kinds of fixes: check again (read-only).
+                if client and (not checked or time.time() - checked > 86400 or outdated_check()):
                     jobs.start("health", lambda j, c=client: check_health(c, j), by_user=False)
                 elif not client and (not indexed or time.time() - indexed > 86400):
                     start_library(by_user=False)  # without TMDB only the index can be built
@@ -1041,11 +1044,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """What the Dashboard shows of the library's problems, kept small so the status poll stays cheap."""
         gone = store.get("health.left") or {}
         f = plan["fixes"]
+        n = lambda *kinds: sum(len(f.get(k, [])) for k in kinds)  # noqa: E731
         store.put("health.counts", {
-            "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
-            "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
-            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])), "renames": len(f.get("renames", [])) + len(f.get("film-renames", [])),
+            # 'at' only for a check that knew every kind of fix: one from before an update isn't 'in order'.
+            **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
+            "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("episode-nfos", "show-nfos", "film-nfos"),
+            "leftovers": n("leftovers", "empty-films"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
+
+    def outdated_check() -> bool:
+        """The last Health check is from before an update that added kinds of fixes: it can't show them."""
+        plan, _ = store.snapshot("health")
+        return bool(plan) and not set(FIXES) <= set(plan["fixes"])
 
     def check_health(client, job):
         lib = index.build(watched.latest(), job)

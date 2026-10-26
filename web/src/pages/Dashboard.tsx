@@ -131,7 +131,9 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         <WatchedPanel status={status} refresh={refresh} />
 
         <section className="panel" aria-labelledby="lib-h">
-          <div className="panel-head"><h2 id="lib-h">Library</h2></div>
+          <div className="panel-head"><h2 id="lib-h">Library</h2>
+            <span className="small muted">{status?.library?.at ? `checked ${when(status.library.at)} · ` : ''}<Link to="/health">Health</Link></span>
+          </div>
           <LibraryProblems status={status} />
         </section>
 
@@ -204,6 +206,10 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['Leftovers', l.leftovers, '/health'],
   ];
   const shown = tiles.filter(([, n]) => (n ?? 0) > 0);
+  if (!shown.length && !l.at) {
+    // Never counted (a new install, or kinds of fixes added by an update): not 'in order', just not known yet.
+    return <span className="status"><Dot kind="dot-warning" />Not checked yet · <Link to="/health">Check in Health</Link></span>;
+  }
   if (!shown.length) {
     return <span className="status"><Dot kind="dot-success" />{status?.duplicatesAt ? 'In order' : 'In order · duplicates not checked yet'}</span>;
   }

@@ -172,5 +172,11 @@ def test_clicking_from_the_list_into_a_show_and_back(server, browser):
     page.set_viewport_size({"width": 1280, "height": 800})
     page.click("text=← Library")
     page.wait_for_selector("h1:has-text('Shows and films')")
+    page.click("nav.rail >> text=Health")  # its own place in the rail, not a tab under Library
+    page.wait_for_selector("h1:has-text('Health')")
+    page.set_viewport_size({"width": 375, "height": 800})
+    tabs = page.evaluate("[...document.querySelectorAll('.tabbar .tab')].map((t) => [t.innerText.trim(), t.scrollWidth - t.clientWidth])")
+    assert [t for t, _ in tabs] == ["Dashboard", "Downloads", "Library", "Health", "History", "Settings"]
+    assert all(over <= 0 for _, over in tabs), tabs  # six tabs fit on a phone
     page.close()
     assert not errors, errors

@@ -20,13 +20,15 @@ import { SignIn } from './pages/SignIn';
 const SECTIONS = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', paths: ['/'] },
   { to: '/inbox', label: 'Downloads', icon: 'inbox', paths: ['/inbox', '/review'] },
-  { to: '/library', label: 'Library', icon: 'library', paths: ['/library', '/duplicates', '/health'] },
+  { to: '/library', label: 'Library', icon: 'library', paths: ['/library', '/duplicates'] },
+  // Its own place, not a tab under Library: what needs fixing is found from anywhere (DESIGN.md §1.4).
+  { to: '/health', label: 'Health', icon: 'health', paths: ['/health'] },
   { to: '/history', label: 'History', icon: 'history', paths: ['/history'] },
   { to: '/settings', label: 'Settings', icon: 'settings', paths: ['/settings'] },
 ] as const;
 const TABS: Record<string, { to: string; label: string }[]> = {
   '/inbox': [{ to: '/inbox', label: 'Inbox' }, { to: '/review', label: 'Review' }],
-  '/library': [{ to: '/library', label: 'Shows and films' }, { to: '/duplicates', label: 'Duplicates' }, { to: '/health', label: 'Health' }],
+  '/library': [{ to: '/library', label: 'Shows and films' }, { to: '/duplicates', label: 'Duplicates' }],
 };
 const TITLES: Record<string, string> = {
   '/inbox': 'Inbox', '/review': 'Review', '/library': 'Library', '/duplicates': 'Duplicates', '/health': 'Health', '/history': 'History', '/settings': 'Settings',

@@ -29,7 +29,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
-  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; questions?: number };  // from the last library check
+  library: { at?: number; imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
