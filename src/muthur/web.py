@@ -29,6 +29,7 @@ from .health import FIXES, Health
 from .inbox import Inbox
 from .library_edit import LibraryEdit
 from .index import Index
+from .index import _played as index_played
 from .jobs import Busy, Jobs
 from .journal import Journal
 from .kodi import Kodi, folder_name
@@ -1485,7 +1486,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             result["done"].update(extra)
             store.save_snapshot("last-fixes", result)
             job.begin("Checking the library again", 0)
-            check_health(client, job)
+            recheck_touched(client, job, plan, kinds, result)
             failed = len(result["failed"])
             lost = len((result.get("kodiRenames") or {}).get("problems", []))
             job.result = f"{count(sum(result['done'].values()), 'fix', 'fixes')} done" + (f", {failed} couldn't be: see Health." if failed else ".") + (
@@ -1537,6 +1538,47 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.put("library.films", choices)
             tool._film(film, fixes_new, manual_new)
             return merge_plan(plan, lambda x: x["path"] == path or x.get("video") == path, fixes_new, manual_new)
+
+    def recheck_touched(client, job, plan: dict, kinds: list[str], result: dict) -> None:
+        """After applying fixes: read and check again only the shows and films the applied kinds touched (decided 26 Oct:
+        seconds instead of minutes); the rest of Health's list stays. A score download touches every show's NFOs, and
+        without an index there is nothing to start from: then the whole library is checked."""
+        lib, _ = store.snapshot("library")
+        if "imdb-data" in kinds or not lib:
+            check_health(client, job)
+            return
+        paths = [x["path"] for k in kinds for x in plan["fixes"].get(k, [])]
+        shows = sorted({p.split("/")[1] for p in paths if p.startswith("TV/")})
+        films = any(p.startswith("Film/") for p in paths)
+        played = index_played(watched.latest())
+        tool = health_tool(client)
+        job.begin("Checking what the fixes changed", len(shows) + int(films))
+        for folder in shows:
+            fresh = index._show(folder, played) if os.path.isdir(os.path.join(cfg.tv, folder)) else None
+            lib["shows"] = sorted([s for s in lib["shows"] if s["folder"] != folder] + ([fresh] if fresh else []),
+                                  key=lambda s: s["folder"].lower())
+            fixes_new: dict = {k: [] for k in FIXES}
+            manual_new: dict = {k: [] for k in plan["manual"]}
+            if fresh:
+                tool._show(fresh, fixes_new, manual_new)
+            merge_plan(plan, lambda x, f=folder: x["path"] == f"TV/{f}" or x["path"].startswith(f"TV/{f}/"), fixes_new, manual_new)
+            job.done += 1
+        if films:  # a renamed film has a new folder: the film list is read again whole (its NFOs are cached)
+            lib["films"] = index._films(played)
+            fixes_new, manual_new = {k: [] for k in FIXES}, {k: [] for k in plan["manual"]}
+            for f in lib["films"]:
+                tool._film(f, fixes_new, manual_new)
+            merge_plan(plan, lambda x: x["path"].startswith("Film/"), fixes_new, manual_new)
+            job.done += 1
+        failed = {x["path"] for x in result.get("failed", [])}
+        for k in WHOLE_CHECK & set(kinds):  # only a whole check finds these: what was done is just no longer to do
+            plan["fixes"][k] = [x for x in plan["fixes"].get(k, []) if x["path"] in failed]
+        store.save_snapshot("library", lib)
+        store.save_snapshot("duplicates", {"at": time.time(), "groups": dups.find(lib)})
+        store.save_snapshot("health", plan)
+        health_counts(plan)
+        job.result = (f"Library checked: {count(sum(len(v) for v in plan['fixes'].values()), 'fix', 'fixes')}, "
+                      f"{count(sum(len(v) for v in plan['manual'].values()), 'question')}.")
 
     def merge_plan(plan: dict, mine, fixes_new: dict, manual_new: dict) -> dict:
         """One show or film checked again: its old fixes and questions make way for the new ones."""
