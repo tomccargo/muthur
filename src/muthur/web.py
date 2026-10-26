@@ -865,7 +865,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.put("health.counts", {
             "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
             "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
-            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])),
+            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def check_health(client, job):

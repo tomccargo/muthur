@@ -14,10 +14,11 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'episode-nfos': { title: 'Write NFOs for episodes that have none', what: 'Writes an NFO (and a thumbnail where missing) from TMDB, with IMDb’s score. Only for seasons TMDB numbers the way your library does.' },
   'show-nfos': { title: 'Write tvshow.nfo for show folders that have none', what: 'Writes the show’s NFO, poster, fanart and logo from TMDB where they’re missing.' },
   'film-nfos': { title: 'Write NFOs for films that have none', what: 'Writes the NFO, poster, fanart and logo from TMDB where missing, for films muthur recognises with certainty by name, year and length.' },
-  leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db and NFOs or thumbnails of videos that are gone.' },
+  subtitles: { title: 'Put subtitles where Kodi finds them', what: 'English and Dutch go beside the video under its name; other languages and extra copies go to quarantine.' },
+  leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db, and NFOs, thumbnails or subtitles of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'subtitles', 'leftovers', 'empty-films'];
 // 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
 const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
 

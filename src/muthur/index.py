@@ -16,6 +16,7 @@ from typing import Any
 from .library import scan_film
 from .nfo import NfoInfo, read_nfo
 from .parse import BROKEN_EPISODE, SAMPLE, is_video
+from .subtitles import language
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS nfo_cache (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, body TEXT NOT NULL);"
 NUMBERS = re.compile(r"(?i)\bs(\d{1,3})((?:[ ._-]?e\d{1,3})+)")
@@ -26,10 +27,6 @@ KEEP = {"tvshow.nfo", "poster.jpg", "fanart.jpg", "clearlogo.png", "banner.jpg",
         "characterart.png", "logo.png", "theme.mp3", ".actors"}
 
 
-LANG_WORDS = {"english": "EN", "dutch": "NL", "nederlands": "NL", "flemish": "NL", "french": "FR", "german": "DE", "spanish": "ES",
-              "italian": "IT", "portuguese": "PT", "swedish": "SV", "danish": "DA", "norwegian": "NO", "finnish": "FI", "polish": "PL"}
-
-
 def _sub_langs(stem: str, files: list[str]) -> list[str]:
     """Languages of the subtitles beside a video, from their names: 'x.en.srt' EN, 'x.English.srt' EN, 'x.srt' SUB."""
     out: list[str] = []
@@ -37,10 +34,8 @@ def _sub_langs(stem: str, files: list[str]) -> list[str]:
         if not (f.startswith(stem + ".") and f.lower().endswith(SUBTITLES)):
             continue
         bare = os.path.splitext(f)[0]  # 'x.en.srt' -> 'x.en'; 'x.srt' -> 'x' (no tags)
-        tags = bare[len(stem) + 1:].split(".") if len(bare) > len(stem) else []
-        lang = next((LANG_WORDS[t.lower()] for t in tags if t.lower() in LANG_WORDS), None) or next(
-            (t.upper()[:2] for t in tags if re.fullmatch(r"[A-Za-z]{2,3}", t) and t.lower() not in ("sdh", "cc", "hi", "for")), None)
-        label = lang or "SUB"
+        lang = language(bare[len(stem):]) if len(bare) > len(stem) else None
+        label = lang.upper() if lang else "SUB"
         if label not in out:
             out.append(label)
     return out

@@ -196,6 +196,7 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['Scores to add', l.scores, '/health'],
     ['NFOs to write', l.nfos, '/health'],
     ['Duplicates', status?.duplicatesAt ? status.duplicates : undefined, '/duplicates'],
+    ['Subtitles Kodi misses', l.subtitles, '/health'],
     ['Questions', l.questions, '/health'],
     ['Leftovers', l.leftovers, '/health'],
   ];

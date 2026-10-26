@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import time
 
-from . import nfo_write, quarantine
+from . import nfo_write, quarantine, subtitles
 from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
@@ -24,7 +24,7 @@ from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
-FIXES = ("imdb-data", "leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
+FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
 
 
 class Health:
@@ -60,6 +60,7 @@ class Health:
         folder = show["folder"]
         for f in show["loose"]:
             fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": "junk" if JUNK.search(f) else "belongs to no video"})
+        self._subtitles_of("TV", folder, fixes)
         imdb_id, tmdb_id = self.scores.show_ids(folder)
         eps = show["episodes"]
         if not tmdb_id and (not show["nfo"] or any(not e["nfo"] for e in eps)):
@@ -134,7 +135,14 @@ class Health:
             elif score := self.imdb.episode(imdb_id, s, n, counts.get(s)):
                 fixes["imdb-scores"].append({"path": stem + ".nfo", "score": list(score), "label": label})
 
+    def _subtitles_of(self, lib: str, folder: str, fixes: dict) -> None:
+        moves, orphans = subtitles.plan(lib, self.roots[lib], folder)
+        fixes["subtitles"] += moves
+        fixes["leftovers"] += orphans
+
     def _film(self, f: dict, fixes: dict, manual: dict) -> None:
+        if f["folder"] and f["file"]:
+            self._subtitles_of("Film", f["key"], fixes)
         if not f["file"]:
             if f["folder"]:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
@@ -203,6 +211,19 @@ class Health:
     def _leftovers(self, run, x, nfos):
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
                          else "A leftover in the library: it belonged to a video that is gone.")
+
+    def _subtitles(self, run, x, nfos):
+        """Subtitles beside their video under its name, where Kodi finds them; other languages to quarantine."""
+        if not os.path.isfile(self._full(x["path"])):
+            raise ValueError("the video isn't there any more")
+        for src, dst in x["move"]:
+            self.journal.move(run, src, self._full(src), self._full(dst), "move")
+        for src in x["drop"]:
+            self._quarantine(run, src, "A subtitle in a language you don't keep, or a second one in a language the video already has.")
+        for d in x["dirs"]:  # subtitle folders the moves emptied
+            full = self._full(d)
+            if os.path.isdir(full) and not [n for n in os.listdir(full) if not n.startswith(("@", ".")) and n.lower() != "thumbs.db"]:
+                self._quarantine(run, d, "A subtitle folder muthur emptied.")
 
     def _empty_films(self, run, x, nfos):
         if any(is_video(n) and os.path.isfile(os.path.join(d, n)) for d, _, names in os.walk(self._full(x["path"])) for n in names):
