@@ -74,7 +74,7 @@ def scan_film(root: str) -> list[MovieUnit]:
             stem, ext = os.path.splitext(name)
             if is_video(name):
                 units[stem] = MovieUnit(stem, folder=False, main=FileEntry(parts, size))
-            elif ext.lower() == ".nfo":
+            elif ext.lower() == ".nfo" and (stem not in loose_nfos or ext == ".nfo"):  # '.nfo' over '.NFO': see below
                 loose_nfos[stem] = os.path.join(root, name)
         else:
             folder_files.setdefault(parts[0], []).append((parts, size))
@@ -103,7 +103,8 @@ def scan_film(root: str) -> list[MovieUnit]:
         else:
             unit.flags.append("missing-video")
 
-        nfos = [p for p, _ in files if p[-1].lower().endswith(".nfo")]
+        # 'x.nfo' first: the name Kodi asks for. A download's release notes are often 'x.NFO' beside it.
+        nfos = sorted((p for p, _ in files if p[-1].lower().endswith(".nfo")), key=lambda p: not p[-1].endswith(".nfo"))
         top = [p for p in nfos if len(p) == 2]
         if unit.main is not None:
             # Kodi reads the NFO next to the video, which may sit a folder deeper ('Film/X (1999)/X (1999)/x.mkv').

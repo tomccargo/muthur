@@ -1102,6 +1102,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
             "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("episode-nfos", "show-nfos", "film-nfos"),
             "leftovers": n("leftovers", "empty-films"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
+            "kodiEntries": n("kodi-entries"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def outdated_check() -> bool:
@@ -1113,7 +1114,23 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def check_health(client, job):
         lib = index.build(watched.latest(), job)
         store.save_snapshot("library", lib)
-        plan = health_tool(client).check(lib, job)
+        # What Kodi lists, for its old entries (Health's 'kodi-entries'); without Kodi that kind waits for the next check.
+        items, prefixes = None, None
+        k = kodi(timeout=90)  # the whole library in one answer
+        try:
+            if k and k.check().get("connected"):
+                if job:
+                    job.begin("Reading what Kodi lists", 0)
+                items = Watched.read_kodi(k)
+                prefixes = {lib_: k.source_prefix(folder_name(root)) for lib_, root in (("TV", cfg.tv), ("Film", cfg.film))}
+                follow_watched(items)  # a watched backup comes free with it
+        except Exception:  # Kodi went away: the rest of the check doesn't need it
+            items, prefixes = None, None
+        plan = health_tool(client).check(lib, job, items, prefixes)
+        # Duplicates with it: an NFO written since the last look can make two copies the same film.
+        if job:
+            job.begin("Looking for duplicates", 0)
+        store.save_snapshot("duplicates", {"at": time.time(), "groups": dups.find(lib, job)})
         plan["version"] = __version__
         store.save_snapshot("health", plan)
         health_counts(plan)
@@ -1247,7 +1264,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def merge_plan(plan: dict, mine, fixes_new: dict, manual_new: dict) -> dict:
         """One show or film checked again: its old fixes and questions make way for the new ones."""
-        for k in set(plan["fixes"]) | set(fixes_new):
+        for k in (set(plan["fixes"]) | set(fixes_new)) - {"kodi-entries"}:  # Kodi's entries come only from a whole check
             plan["fixes"][k] = [x for x in plan["fixes"].get(k, []) if not mine(x)] + fixes_new.get(k, [])
         for k in plan["manual"]:
             plan["manual"][k] = [x for x in plan["manual"][k] if not mine(x)] + manual_new.get(k, [])

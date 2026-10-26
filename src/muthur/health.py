@@ -15,7 +15,7 @@ import os
 import re
 import time
 
-from . import nfo_write, quarantine, subtitles
+from . import kodi_entries, nfo_write, quarantine, subtitles
 from . import rename as renaming
 from .art import poster_problem
 from .identify import identify_movie, identify_show
@@ -30,7 +30,8 @@ from .text import similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
 FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
-         "renames", "film-renames")
+         "renames", "film-renames", "kodi-entries")
+TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 
 
 class Health:
@@ -46,7 +47,9 @@ class Health:
         return os.path.join(self.roots[lib], *rel.split("/"))
 
     # -- finding problems --------------------------------------------------------------------
-    def check(self, lib: dict, job=None) -> dict:
+    def check(self, lib: dict, job=None, kodi_items: list[dict] | None = None, prefixes: dict | None = None) -> dict:
+        """kodi_items, prefixes: Kodi's films and episodes (Watched.read_kodi) and its source per library, when Kodi
+        answered; then Kodi's old entries are checked too."""
         self._have = None
         fixes: dict[str, list] = {k: [] for k in FIXES}
         manual: dict[str, list] = {"shows": [], "seasons": [], "numbers": [], "films": []}
@@ -58,6 +61,8 @@ class Health:
                 job.done += 1
         for f in lib["films"]:
             self._film(f, fixes, manual)
+        if kodi_items is not None and prefixes:
+            fixes["kodi-entries"] = kodi_entries.extra(kodi_items, self.roots, prefixes)
         if job:
             job.done += 1
         return {"at": time.time(), "fixes": fixes, "manual": manual}
@@ -65,7 +70,8 @@ class Health:
     def _show(self, show: dict, fixes: dict, manual: dict) -> None:
         folder = show["folder"]
         for f in show["loose"]:
-            fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": "junk" if JUNK.search(f) else "belongs to no video"})
+            why = "junk" if JUNK.search(f) else TWIN if f.lower().endswith(".nfo") and not f.endswith(".nfo") else "belongs to no video"
+            fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": why})
         self._subtitles_of("TV", folder, fixes)
         imdb_id, tmdb_id = self.scores.show_ids(folder)
         eps = show["episodes"]
@@ -199,6 +205,9 @@ class Health:
     def _film(self, f: dict, fixes: dict, manual: dict) -> None:
         if f["folder"] and f["file"]:
             self._subtitles_of("Film", f["key"], fixes)
+        for t in f.get("twins", []):
+            beside = f["nfoFile"].rsplit("/", 1)[0] + "/" if "/" in f["nfoFile"] else ""
+            fixes["leftovers"].append({"path": f"Film/{beside}{t}", "why": TWIN})
         if f["nfo"] and f["file"] and f.get("year") and f["title"] and not f["others"] and f["file"].count("/") == (1 if f["folder"] else 0):
             # 'Title (Year)/Title (Year).mkv' from its NFO. A film with extra videos, or one a folder deeper, keeps its name.
             want = movie_path(f["title"], f["year"], os.path.splitext(f["file"])[1])
@@ -241,7 +250,7 @@ class Health:
     # -- fixing ------------------------------------------------------------------------------
     def apply(self, plan: dict, kinds: list[str], kodi=None, job=None, backup=None) -> dict:
         """backup(items): muthur's watched backup, taken from Kodi right before any rename (rename.read_before)."""
-        items = [(k, x) for k in FIXES if k in kinds for x in plan["fixes"].get(k, [])]
+        items = [(k, x) for k in FIXES if k in kinds and k != "kodi-entries" for x in plan["fixes"].get(k, [])]
         self._renamed: list[tuple[str, str]] = []
         self._before: dict | None = None  # Kodi's items before the renames; None: Kodi is off, so nothing is renamed
         if {"renames", "film-renames"} & set(kinds) and kodi and kodi.check().get("connected"):
@@ -267,6 +276,13 @@ class Health:
             renaming.remember(self.store, self._renamed)  # until Kodi took each one, even across a restart
             summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before,
                                                              done=lambda old: renaming.forget(self.store, old))
+        if entries := plan["fixes"].get("kodi-entries", []) if "kodi-entries" in kinds else []:
+            # After the renames: Kodi has their new entries by now.
+            if job:
+                job.begin(f"Kodi drops {len(entries):,} old entries", len(entries))
+            r = kodi_entries.remove(kodi, entries, backup, (lambda d: setattr(job, "done", d)) if job else None)
+            done["kodi-entries"] = r["done"]
+            failed += r["failed"]
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
@@ -309,7 +325,8 @@ class Health:
 
     def _leftovers(self, run, x, nfos):
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
-                         else "A leftover in the library: it belonged to a video that is gone.")
+                         else "Release notes named like the video’s NFO but for capitals; Kodi could read them instead of the NFO."
+                         if x.get("why") == TWIN else "A leftover in the library: it belonged to a video that is gone.")
 
     def _subtitles(self, run, x, nfos):
         """Subtitles beside their video under its name, where Kodi finds them; other languages to quarantine."""

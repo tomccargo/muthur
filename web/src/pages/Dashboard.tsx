@@ -188,7 +188,8 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to'])],
     ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles'])],
     ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer'],
-    ['Tidy up', (l.renames ?? 0) + dups + (l.leftovers ?? 0), parts([l.renames, 'name'], [dups, 'duplicate'], [l.leftovers, 'leftover'])],
+    ['Tidy up', (l.renames ?? 0) + dups + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),
+      parts([l.renames, 'name'], [dups, 'duplicate'], [l.kodiEntries, 'old Kodi entry', 'old Kodi entries'], [l.leftovers, 'leftover'])],
   ];
   const shown = tiles.filter(([, n]) => n > 0);
   if (!shown.length && !l.at) {

@@ -148,7 +148,7 @@ class Index:
             if is_video(f) or f in KEEP or low.endswith(SUBTITLES) or re.match(r"(?i)^season(\d+|-specials|-all)-(poster|banner|fanart|landscape)\.(jpg|png)$", f.rsplit("/", 1)[-1]):
                 continue
             stem = re.sub(r"(?i)(-thumb)?\.(nfo|jpg|jpeg|png|tbn)$", "", f)
-            if (low.endswith((".nfo",) + ART) and stem not in stems and "/" in f) or JUNK.search(f):
+            if (low.endswith((".nfo",) + ART) and stem not in stems and "/" in f) or JUNK.search(f) or _twin(f, present):
                 show["loose"].append(f)
         return show
 
@@ -168,8 +168,26 @@ class Index:
                 "poster": bool(unit.folder and unit.main and os.path.isfile(os.path.join(self.film_root, *unit.main.parts[:-1], "poster.jpg"))),
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),
                 "nfoFile": os.path.relpath(unit.nfo, self.film_root).replace(os.sep, "/") if unit.nfo else None,
+                "twins": _twins_of(unit.nfo),
             })
         return out
+
+
+def _twin(f: str, present: set[str]) -> bool:
+    """'x.NFO' beside 'x.nfo': a download's release notes. Kodi reads the share without regard to case, so either
+    one could be the NFO it gets."""
+    return f.lower().endswith(".nfo") and not f.endswith(".nfo") and f[:-4] + ".nfo" in present
+
+
+def _twins_of(nfo: str | None) -> list[str]:
+    """The other files named like a film's NFO but for case ('x.NFO' beside 'x.nfo'), by name."""
+    if not nfo or not nfo.endswith(".nfo"):
+        return []
+    folder, name = os.path.split(nfo)
+    try:
+        return sorted(n for n in os.listdir(folder) if n != name and n.lower() == name.lower())
+    except OSError:
+        return []
 
 
 def _shown(info: NfoInfo | None) -> list | None:
