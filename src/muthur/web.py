@@ -378,7 +378,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             state = k.check()
             if state.get("connected"):
                 try:  # a video source in Kodi for each library folder (the setup checklist)
-                    state["sources"] = {lib: bool(k.source_prefix(folder_name(root))) for lib, root in (("tv", cfg.tv), ("film", cfg.film))}
+                    prefixes = {lib: k.source_prefix(folder_name(root)) for lib, root in (("TV", cfg.tv), ("Film", cfg.film))}
+                    state["sources"] = {lib.lower(): bool(p) for lib, p in prefixes.items()}
+                    if all(prefixes.values()) and store.get("player.sources") != prefixes:
+                        store.put("player.sources", prefixes)  # the share, for the player's 'Open with', whenever Kodi answers
                 except Exception:
                     pass
             kodi_seen.update(url=k.url, at=time.time(), state=state)
@@ -1187,25 +1190,24 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                             filename=name if download else None, headers={"Referrer-Policy": "no-referrer"})
 
     @app.get("/api/player/video/{vid}/playlist.m3u")
-    def player_playlist(vid: str, windows: int = 0):
+    def player_playlist(request: Request, vid: str, windows: int = 0):
         """A one-line playlist for the PC's own player (VLC, mpv, MPC-HC, IINA): the share path, so the player finds the
-        .srt beside the video itself. Windows gets the \\\\nas\\share path, other systems smb://."""
+        .srt beside the video itself (Windows gets the \\\\nas\\share path, other systems smb://). Before muthur learnt the
+        share from Kodi: muthur's own link with a key (12 hours), which plays but leaves the .srt behind."""
         path, full = player_video(vid)
         lib_name, _, rel = path.partition("/")
         where = player.share_paths(source_prefixes().get(lib_name), rel)
-        if not where:
-            raise HTTPException(409, "muthur doesn't know the share yet: it learns it from Kodi at the next Health check.")
+        line = (where["unc"] if windows else where["smb"]) if where else f"{str(request.base_url).rstrip('/')}/api/player/video/{vid}?key={auth.link_key(vid)}"
         name = os.path.splitext(os.path.basename(full))[0]
-        body = f"#EXTM3U\n#EXTINF:-1,{name}\n{where['unc'] if windows else where['smb']}\n"
+        body = f"#EXTM3U\n#EXTINF:-1,{name}\n{line}\n"
         return Response(body, media_type="audio/x-mpegurl", headers={"Content-Disposition": f'attachment; filename="{_ascii(name)}.m3u"'})
 
     @app.post("/api/player/video/{vid}/tv")
     def player_tv(vid: str):
-        """Kodi plays the video on the TV (Player.Open with its path in Kodi's source)."""
+        """Kodi plays the video on the TV (Player.Open with its path in Kodi's source). When Kodi isn't running, the box
+        is woken and Kodi started first, if waking is set up in Settings (the reader asked for it, 26 Oct)."""
         path, _ = player_video(vid)
-        k = kodi(timeout=10)
-        if not k:
-            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        k = kodi_ready(timeout=10)
         lib_name, _, rel = path.partition("/")
         try:
             prefix = k.source_prefix(folder_name(cfg.tv if lib_name == "TV" else cfg.film))

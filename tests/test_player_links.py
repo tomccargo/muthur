@@ -18,7 +18,8 @@ def test_downloads_and_the_playlist_for_an_outside_player(client):  # noqa: F811
     assert srt.status_code == 200 and srt.text.replace("\r", "").startswith("1\n00:00:01,000")  # the file itself, not WebVTT
     links = client.get(f"/api/player/video/{vid}/links").json()
     assert links["stream"].startswith(f"/api/player/video/{vid}?key=") and links["share"] is None  # the share isn't known yet
-    assert client.get(f"/api/player/video/{vid}/playlist.m3u").status_code == 409  # says so instead of a broken playlist
+    playlist = client.get(f"/api/player/video/{vid}/playlist.m3u").text  # before muthur knows the share: its own link
+    assert playlist.startswith("#EXTM3U") and f"/api/player/video/{vid}?key=" in playlist
 
 
 def test_a_share_path_never_carries_kodis_password():

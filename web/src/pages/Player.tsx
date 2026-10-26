@@ -237,7 +237,7 @@ function Browse({ view, show }: { view: View; show: string | null }) {
 const ANDROID = /android/i.test(navigator.userAgent);
 const WINDOWS = /windows/i.test(navigator.userAgent);
 
-function OpenMenu({ id, onNote }: { id: string; onNote: (text: string) => void }) {
+function OpenMenu({ id, onNote }: { id: string; onNote: (text: string, stay?: boolean) => void }) {
   const [open, setOpen] = useState(false);
   const [links, setLinks] = useState<PlayerLinks | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -256,6 +256,7 @@ function OpenMenu({ id, onNote }: { id: string; onNote: (text: string) => void }
   const copy = (text: string, what: string) => navigator.clipboard.writeText(text).then(() => onNote(`${what} copied.`), () => onNote(text));
   const tv = () => {
     setOpen(false);
+    onNote('Starting on the TV… (if Kodi isn’t running, muthur wakes it first: up to a minute)', true);
     api.playerTv(id).then((r) => onNote(`Playing on ${r.device}.`)).catch((e: Error) => onNote(e.message));
   };
   return (
@@ -270,7 +271,7 @@ function OpenMenu({ id, onNote }: { id: string; onNote: (text: string) => void }
               {links.tv && <button type="button" role="menuitem" onClick={tv}>Play on the TV</button>}
               {ANDROID && <a role="menuitem" href={intent('org.videolan.vlc')}>Open in VLC</a>}
               {ANDROID && <a role="menuitem" href={intent(null)}>Open in another app</a>}
-              {!ANDROID && links.share && (
+              {!ANDROID && (
                 <a role="menuitem" href={`/api/player/video/${id}/playlist.m3u${WINDOWS ? '?windows=1' : ''}`} download>Open in your own player (.m3u)</a>
               )}
               {links.share && <button type="button" role="menuitem" onClick={() => copy(WINDOWS ? links.share!.unc : links.share!.smb, 'Path')}>Copy path</button>}
@@ -309,6 +310,7 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
   const [subNote, setSubNote] = useState<string | null>(null);
   const [subProgress, setSubProgress] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);  // what an Open-with entry just did
+  const flashTimer = useRef(0);
   useEffect(() => { if (info) setSubList(info.subtitles); }, [info]);
   useEffect(() => {
     if (!info || !info.extractable.length) return;
@@ -449,7 +451,7 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
         <button type="button" className="pl-btn" onClick={back} aria-label="Back">←</button>
         <span className="pl-watch-title" title={info?.path}>{title}</span>
         {info && how !== 'kodi' && <span className="pl-watch-how" title="How this video plays">{repack ? 'repacked in the browser' : 'direct'}</span>}
-        <OpenMenu id={id} onNote={(t) => { setFlash(t); setTimeout(() => setFlash(null), 4000); }} />
+        <OpenMenu id={id} onNote={(t, stay) => { window.clearTimeout(flashTimer.current); setFlash(t); if (!stay) flashTimer.current = window.setTimeout(() => setFlash(null), 5000); }} />
         {subs.length > 0 && (
           <button type="button" className="pl-btn" onClick={nextCue} title={`Subtitle size: ${cue === 's' ? 'small' : cue === 'm' ? 'medium' : 'large'}`}
             aria-label="Subtitle size">{cue === 's' ? 'a' : cue === 'm' ? 'Aa' : 'AA'}</button>
