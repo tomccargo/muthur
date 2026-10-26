@@ -112,6 +112,16 @@ a.tile:hover { background: var(--surface-muted); }
 .btn-danger { background: var(--danger-text); color: var(--bg); }
 .btn-link { background: none; border: 0; padding: 0; min-height: 0; color: var(--accent-text); font: inherit; font-weight: 650; cursor: pointer; }
 .btn:disabled, .btn[aria-disabled='true'] { opacity: 0.55; cursor: not-allowed; }
+/* Hover (0.37): what can be pressed answers the pointer. A button's border lights up in the accent and a soft glow
+   rises around it; links and segments brighten. Not on a button that can't be pressed. */
+.btn-primary:hover:not(:disabled):not([aria-disabled='true']) { box-shadow: 0 0 0 1px var(--accent-hover), 0 0 18px var(--glow); }
+.btn-secondary:hover:not(:disabled):not([aria-disabled='true']) { border-color: var(--accent); color: var(--accent-strong); box-shadow: 0 0 14px var(--glow); }
+.btn-ghost:hover:not(:disabled):not([aria-disabled='true']) { color: var(--accent-text); box-shadow: 0 0 12px var(--glow); }
+.btn-danger-outline:hover:not(:disabled):not([aria-disabled='true']) { box-shadow: 0 0 14px var(--glow-danger); }
+.btn-danger:hover:not(:disabled) { box-shadow: 0 0 16px var(--glow-danger); }
+.btn-link:hover { text-decoration: underline; text-underline-offset: 3px; }
+.seg button:hover:not([aria-pressed='true']) { color: var(--text); background: var(--surface); }
+a.tile:hover { border-color: var(--accent); }
 .seg { display: inline-flex; flex-wrap: wrap; align-self: flex-start; background: var(--surface-muted); border: 1px solid var(--border); border-radius: 999px; padding: 2px; gap: 2px; }
 .seg button { font: inherit; font-size: 13px; font-weight: 600; border: 0; background: none; color: var(--muted); padding: 5px 12px; min-height: 30px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; }
 .seg button:hover { color: var(--text); }
@@ -220,7 +230,7 @@ input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-
   ::view-transition-group(rail), ::view-transition-group(topbar), ::view-transition-group(tabbar) { animation: none; }
   /* Buttons and tiles answer a press. */
   .btn:active:not(:disabled), a.tile:active, .poster-tile:active { transform: scale(0.97); }
-  .btn, a.tile, .poster-tile { transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.12s; }
+  .btn, a.tile, .poster-tile, .seg button { transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.2s, transform 0.12s; }
 }
 @keyframes rise { from { opacity: 0; transform: translateY(28px); } }
 @keyframes drop { from { opacity: 0; transform: translateY(18px); } }

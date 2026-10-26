@@ -32,6 +32,8 @@
   --tint-s: 30%;
   --tint-l: 20%;
   --sheen: rgb(255 255 255 / 0.35);  /* the light passing over a working bar */
+  --glow: rgb(240 169 91 / 0.38);  /* a hovered button: the accent, softly around it */
+  --glow-danger: rgb(255 179 167 / 0.32);
 
   --radius: 12px;
   --radius-sm: 8px;
@@ -68,6 +70,8 @@
     --track: #b4beb8;
     --poster-bg: #1a1f1c;
     --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
+    --glow: rgb(235 154 63 / 0.45);
+    --glow-danger: rgb(138 28 28 / 0.25);
   }
 }
 
@@ -97,6 +101,8 @@
   --track: #b4beb8;
   --poster-bg: #1a1f1c;
   --shadow: 0 1px 2px rgb(16 24 40 / 0.1), 0 4px 14px rgb(16 24 40 / 0.08);
+  --glow: rgb(235 154 63 / 0.45);
+  --glow-danger: rgb(138 28 28 / 0.25);
 }
 
 /* ---- Base ---------------------------------------------------------------- */

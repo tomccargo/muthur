@@ -209,7 +209,7 @@ Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not 
 - **Tiles and posters** drop in one after another, 60 ms apart, with a slight overshoot (600 ms).
 - **Numbers** in tiles and panels count up from 0 (1.2 s, ease-out) and always end on the real value; a newer value from the server wins at once.
 - **A poster flies** into its show or film page (560 ms); the page change waits at most 400 ms for the cover.
-- **Hover and press:** background, border and colour in 150 ms; buttons, tiles and posters press in to 97 %.
+- **Hover and press:** background, border and colour in 150 ms; buttons, tiles and posters press in to 97 %. A button's border lights up in the accent and a soft glow (`--glow`) rises around it in 200 ms (0.37); links underline, segments brighten, tiles get an accent edge. Never on a button that can't be pressed.
 - **Bars and job progress** move with real progress; a skeleton shimmers while a list loads.
 - **Livelier (0.28):** tiles and posters lift on hover (3 px, with a shadow) and spring back; panels and tiles arrive with a little overshoot; a counter that changes pops; a working bar has a light passing over it. Only while something works: the job bar is still when it is hidden.
 
