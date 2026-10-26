@@ -153,3 +153,19 @@ def test_every_page(server, browser, width, theme):
     problems += errors
     ctx.close()
     assert not problems, "\n".join(problems)
+
+
+def test_clicking_from_the_list_into_a_show_and_back(server, browser):
+    """The list and a show are one component: opening a show from the list must render (React error #300 in 0.29.0)."""
+    page = browser.new_page()
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.route("**/*", lambda r: r.continue_() if r.request.url.startswith(server) else r.abort())
+    page.goto(server + "/library")
+    page.wait_for_load_state("networkidle")
+    page.click('a[href*="folder="]')
+    page.wait_for_selector("text=TV/The Office (US)/")
+    page.click("text=← Library")
+    page.wait_for_selector("h1:has-text('Shows and films')")
+    page.close()
+    assert not errors, errors

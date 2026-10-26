@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -141,7 +141,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
 
       {message && <div className="banner banner-error" role="alert">{message}</div>}
       {note && <div className="banner banner-note" role="status">{note}</div>}
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!data && !message && <Loading label="Loading the downloads" />}
       {status?.job && !status.job.running && status.job.name === 'apply' && !status.job.error && (
         <div className="banner banner-note" role="status">

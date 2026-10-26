@@ -13,7 +13,7 @@ import os
 import re
 import time
 
-from . import nfo_write, quarantine
+from . import nfo_write, quarantine, subtitles
 from .journal import Journal
 
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
@@ -174,16 +174,27 @@ class Applier:
     def _subtitles(self, run: int, item: str, src: str, dst: str, single: bool = True) -> int:
         """Subtitles follow their video: next to it with the same name ('x.mkv' + 'x.en.srt'), or in a
         'Subs' folder of the download, as 'Subs/x/2_English.srt' or, when the download holds one video,
-        'Subs/English.srt'. They get the video's new name plus their language ('… (1999).English.srt')."""
+        'Subs/English.srt'. They get the video's new name plus their language ('… (1999).en.srt'). Only
+        English, Dutch and ones without a language come along, one per language (a forced track is its own);
+        the rest stays in the download and goes to quarantine with what is left of it."""
         folder, stem = os.path.dirname(src), os.path.splitext(os.path.basename(src))[0]
         new_stem = os.path.splitext(dst)[0]
-        n = 0
-        for name in sorted(os.listdir(folder)):
-            if belongs_to(name, stem) and name.lower().endswith(SUBTITLE_EXTS):
-                target = new_stem + name[len(stem):]
-                if not os.path.lexists(target):
-                    self._move(run, item, os.path.join(folder, name), target, "move")
-                    n += 1
+        n, have = 0, set()
+
+        def wanted(name: str) -> bool:
+            lang, forced, _ = subtitles.kind(name)
+            if lang is not None and (lang not in subtitles.KEEP or (lang, forced) in have):
+                return False
+            if lang:
+                have.add((lang, forced))
+            return True
+
+        beside = [x for x in sorted(os.listdir(folder)) if belongs_to(x, stem) and x.lower().endswith(SUBTITLE_EXTS)]
+        for name in sorted(beside, key=lambda x: subtitles.kind(x[len(stem):])[2]):  # plain before SDH
+            target = new_stem + name[len(stem):]
+            if wanted(name[len(stem):]) and not os.path.lexists(target):
+                self._move(run, item, os.path.join(folder, name), target, "move")
+                n += 1
         if os.path.normpath(folder) == os.path.normpath(self.downloads):
             return n  # a loose file in the downloads folder: its 'Subs' would belong to nobody in particular
         for d in sorted(os.listdir(folder)):
@@ -194,13 +205,15 @@ class Applier:
             source = own if os.path.isdir(own) else base if single else None
             if source is None:
                 continue
-            for name in sorted(os.listdir(source)):
-                if not name.lower().endswith(SUBTITLE_EXTS) or not os.path.isfile(os.path.join(source, name)):
+            names = [x for x in os.listdir(source) if x.lower().endswith(SUBTITLE_EXTS) and os.path.isfile(os.path.join(source, x))]
+            for name in sorted(names, key=lambda x: (subtitles.kind(x)[2], x)):
+                bare, ext = os.path.splitext(name)
+                if not wanted(bare):
                     continue
-                label = re.sub(r"^\d+[_ .-]*", "", os.path.splitext(name)[0]) or "sub"
-                target, k = f"{new_stem}.{label}{os.path.splitext(name)[1].lower()}", 2
-                while os.path.lexists(target):
-                    target, k = f"{new_stem}.{label}.{k}{os.path.splitext(name)[1].lower()}", k + 1
+                parts, k = subtitles.new_name(new_stem, *subtitles.kind(bare)), 2
+                target = ".".join(parts) + ext.lower()
+                while os.path.lexists(target):  # 'x.2.en.srt': the language stays last, where Kodi reads it
+                    target, k = ".".join([parts[0], str(k), *parts[1:]]) + ext.lower(), k + 1
                 self._move(run, item, os.path.join(source, name), target, "move")
                 n += 1
         return n

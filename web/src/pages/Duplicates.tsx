@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type DupGroup, type DupPlan, type DupResult } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { libraryPath, middle, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -137,7 +137,7 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
         </section>
       )}
 
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!data && !error && <Loading label="Loading the duplicates" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {last && !running && status?.job?.name === 'duplicates-apply' && (

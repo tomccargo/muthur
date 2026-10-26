@@ -4,7 +4,7 @@ import { TitleCard } from './Review';
 import type { Card, Kind } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { libraryPath, middle, when } from '../labels';
 
 // What each fix does to the reader's files (DESIGN.md §1.7: name what happens, not the record).
@@ -118,7 +118,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           </div>
         </section>
       )}
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!data && !error && <Loading label="Loading the library check" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {note && <div className="banner banner-note" role="status">{note}</div>}

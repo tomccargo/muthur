@@ -219,6 +219,12 @@ input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-
   background: linear-gradient(90deg, var(--surface-muted) 25%, var(--border) 37%, var(--surface-muted) 63%); background-size: 400% 100%;
   animation: shimmer 1.2s ease infinite; }
 .rail-job { display: flex; flex-direction: column; gap: 6px; }
+/* The running job along the top edge, over everything: nothing moves when it appears or leaves. */
+.job-bar { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 50; pointer-events: none; overflow: hidden;
+  opacity: 0; transition: opacity 0.25s ease; }
+.job-bar.on { opacity: 1; }
+.job-bar .fill { border-radius: 0; }
+@media (prefers-reduced-motion: reduce) { .job-bar { transition: none; } }
 .rail-job .status { gap: 8px; }
 .topbar-status .spinner { width: 12px; height: 12px; color: var(--accent-text); }
 @keyframes spin { to { transform: rotate(360deg); } }

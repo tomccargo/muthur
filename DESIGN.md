@@ -249,7 +249,8 @@ A result appears where the action was taken (under the button or at the top of i
 Every wait shows itself, the same way everywhere (`components.tsx`):
 - **The button pressed spins** (`aria-busy="true"` draws the ring) until its request is answered; a second press does nothing meanwhile. Only that button spins: a section with several actions keeps one busy key, never one shared flag.
 - **A long wait counts** (*Waking the Shield… 12 s*) after 3 seconds.
-- **A job** shows its bar on the page (indeterminate until it has counted its work), its step and count in the rail on every page, and a spinning dot in the phone's top bar. Jobs started meanwhile wait in line (*Next: …*).
+- **A job** is a thin bar pinned along the top of the window (indeterminate until it has counted its work), its step, count and queue (*Next: …*) in the rail on every page, and a spinning dot in the phone's top bar. It never takes room on the page (0.29.1).
+- **Nothing pops into the page while waiting.** A progress indicator lies over the page or sits in a place that is always there; it never pushes content down and pulls it back up. It appears only after 0.4 s and, once shown, stays at least 0.6 s, so a short job never flashes ([Fluent 2: wait UX](https://fluent2.microsoft.design/wait-ux), [Firefox Acorn: loading indicators](https://acorn.firefox.com/latest/foundations/global-patterns/loading-indicators-SKyqf3Lj), Android's ContentLoadingProgressBar). A job that stopped with a problem is the one thing said on the page (§7.5).
 - **A page loading** shows shimmering placeholders where its data will be; a failed load says why, with *Try again*.
 - **Busy always clears**, on success and on error, and the result stays where the action was taken (§7.5).
 

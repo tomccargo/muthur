@@ -161,13 +161,18 @@ def test_subtitles_in_a_subs_folder_follow_the_film(env):
     (rel / "Some.Film.1999.1080p.mkv").write_bytes(b"film" * 1000)
     (rel / "Subs" / "2_English.srt").write_text("en")
     (rel / "Subs" / "3_Dutch.srt").write_text("nl")
+    (rel / "Subs" / "4_English.srt").write_text("en again")  # one per language
+    (rel / "Subs" / "5_English [SDH].srt").write_text("en sdh")
+    (rel / "Subs" / "6_English [Forced].srt").write_text("en forced")  # a forced track is its own
+    (rel / "Subs" / "7_German.srt").write_text("de")  # not a language you keep
     item = {**film, "id": "Some.Film.1999.1080p",
             "files": [{"source": "Some.Film.1999.1080p/Some.Film.1999.1080p.mkv", "library": "Film", "target": "Een Film (1999)/Een Film (1999).mkv"}]}
     assert applier.apply([item])["applied"] == 1
     folder = tmp / "Film" / "Een Film (1999)"
-    assert (folder / "Een Film (1999).English.srt").read_text() == "en"
-    assert (folder / "Een Film (1999).Dutch.srt").read_text() == "nl"
-    assert not (tmp / "complete" / "Some.Film.1999.1080p").exists()  # nothing playable or readable left behind
+    subs = sorted(p.name for p in folder.iterdir() if p.suffix == ".srt")
+    assert subs == ["Een Film (1999).en.forced.srt", "Een Film (1999).en.srt", "Een Film (1999).nl.srt"]
+    assert (folder / "Een Film (1999).en.srt").read_text() == "en"
+    assert not (tmp / "complete" / "Some.Film.1999.1080p").exists()  # the rest went to quarantine with the download's remains
 
 
 def test_every_change_is_journalled_as_done_with_its_fingerprint(env):

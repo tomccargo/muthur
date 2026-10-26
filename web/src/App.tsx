@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AUTH_EVENT, api, type AuthMode, type Status } from './api';
 import { Icon } from './icons';
-import { JobLine, Spinner } from './components';
+import { JobBar, JobLine, Spinner } from './components';
 import { when } from './labels';
 import { Link, useLocation } from './nav';
 import { useTheme, type ThemeChoice } from './theme';
@@ -68,7 +68,7 @@ function RailFoot({ status, onChange }: { status: Status | null; onChange: () =>
   const [waking, setWaking] = useState(false);
   return (
     <div className="rail-foot">
-      <JobLine job={status?.job} />
+      <JobLine job={status?.job} queue={status?.queue} />
       {k === undefined ? null : k === null ? (
         <span className="status"><span className="dot" />Kodi not set up</span>
       ) : k.connected ? (
@@ -129,6 +129,7 @@ function Shell() {
 
   return (
     <div className="shell">
+      <JobBar job={hook.status?.job} />
       <a className="skip-link" href="#main">Skip to the page</a>
       <nav className="rail" aria-label="Main">
         <Link to="/" className="brand" aria-label="muthur, dashboard">

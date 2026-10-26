@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Film, type LibEpisode, type LibProblems, type Library, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
@@ -210,13 +210,14 @@ export function LibraryPage({ status, refresh }: StatusHook) {
   const shows = useMemo(() => (lib?.shows ?? []).filter((s) => matches(s.title, s.problems)), [lib, filter, query]); // eslint-disable-line react-hooks/exhaustive-deps
   const films = useMemo(() => (lib?.films ?? []).filter((f) => matches(f.title, f.problems)), [lib, filter, query]); // eslint-disable-line react-hooks/exhaustive-deps
   const count = (f: Filter) => (kind === 'tv' ? lib?.shows ?? [] : lib?.films ?? []).filter((x: ShowSummary | Film) => f === 'all' || x.problems[f] > 0).length;
+  // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
+  // Every hook comes before the returns below: the list and a show are one component, and React counts its hooks.
+  const [starting, setStarting] = useState<string | null>(null);
 
   if (folder) return <ShowPage folder={folder} />;
   const film = filmKey ? lib?.films.find((f) => f.key === filmKey) : null;
   if (film) return <FilmPage film={film} />;
 
-  // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
-  const [starting, setStarting] = useState<string | null>(null);
   const begin = (key: string, request: () => Promise<unknown>) => {
     setStarting(key);
     setError(null);
@@ -241,7 +242,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           </button>
         </div>
       </header>
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!lib && !error && <Loading label="Loading the library" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="inline">

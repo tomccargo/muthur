@@ -42,13 +42,13 @@ def language(name: str) -> str | None:
     return None
 
 
-def _kind(name: str) -> tuple[str | None, bool, bool]:
+def kind(name: str) -> tuple[str | None, bool, bool]:
     """(language, forced, for the hard of hearing) from a subtitle's name."""
     tokens = set(re.split(r"[\s._\-\[\]()]+", name.lower()))
     return language(name), "forced" in tokens, bool(tokens & {"sdh", "cc", "hi"})
 
 
-def _new_name(stem: str, lang: str | None, forced: bool, sdh: bool) -> list[str]:
+def new_name(stem: str, lang: str | None, forced: bool, sdh: bool) -> list[str]:
     """'x.sdh.en.forced': Kodi 21 reads the name from the right, takes 'forced' (and 'default') as flags and the
     first word it knows as the language, so 'sdh' goes before the language and 'hi' (Hindi to Kodi) never appears."""
     return [stem, *(["sdh"] if sdh else []), *([lang] if lang else []), *(["forced"] if forced else [])]
@@ -99,7 +99,7 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
         if kodi_finds(folder, name):
             for d, s in every:
                 if name.lower().startswith(s.lower()) and d in (folder, folder.rsplit("/", 1)[0]):
-                    lang, forced, _ = _kind(os.path.splitext(name)[0][len(s):])
+                    lang, forced, _ = kind(os.path.splitext(name)[0][len(s):])
                     have.setdefault((d, s), set()).add((lang, forced))
     per_video: dict[tuple[str, str], dict] = {}
     leftovers: list[dict] = []
@@ -109,7 +109,7 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
         if not kodi_finds(folder, name):
             groups.setdefault((folder, os.path.splitext(name)[0]), []).append(name)
     # Of two in one language the plain one is kept and the one for the hard of hearing set aside.
-    for (folder, bare), names in sorted(groups.items(), key=lambda g: _kind(g[0][1])[2]):
+    for (folder, bare), names in sorted(groups.items(), key=lambda g: kind(g[0][1])[2]):
         found = owner(folder, names[0])
         paths = [f"{lib}/{folder}/{n}" for n in names]
         if found is None:
@@ -117,7 +117,7 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
                 leftovers += [{"path": p, "why": "belongs to no video"} for p in paths]
             continue
         d, stem = found
-        lang, forced, sdh = _kind(bare[len(stem):] if bare.lower().startswith(stem.lower()) else bare)
+        lang, forced, sdh = kind(bare[len(stem):] if bare.lower().startswith(stem.lower()) else bare)
         item = per_video.setdefault(found, {"path": f"{lib}/{d}/{stem}", "move": [], "drop": [], "dirs": []})
         if folder.startswith(d + "/"):
             for k in range(folder.count("/"), d.count("/"), -1):  # the folders between it and the video, emptied by the move
@@ -127,7 +127,7 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
         if lang is not None and (lang not in KEEP or (lang, forced) in have.get(found, set())):
             item["drop"] += paths
             continue
-        parts = _new_name(stem, lang, forced, sdh)
+        parts = new_name(stem, lang, forced, sdh)
         new, k = ".".join(parts), 2
         exts = [os.path.splitext(n)[1].lower() for n in names]
         while any(f"{d}/{new}{e}".lower() in taken or os.path.lexists(os.path.join(root, d, new + e)) for e in exts):

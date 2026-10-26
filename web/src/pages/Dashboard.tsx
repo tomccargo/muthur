@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { WatchedPanel } from './Watched';
 import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, useElapsed } from '../components';
+import { Dot, JobError, useElapsed } from '../components';
 import { when } from '../labels';
 import { Link } from '../nav';
 
@@ -70,7 +70,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           <Link to="/settings">Settings</Link>
         </div>
       )}
-      <JobProgress job={job} queue={status?.queue} />
+      <JobError job={job} />
 
       <section className="tiles" aria-label="Downloads">
         <Link className="tile" to="/inbox?show=ready"><span className="label">Ready</span><strong>{counts.ready ?? 0}</strong></Link>

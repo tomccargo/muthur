@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { SIGNALS, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
@@ -342,7 +342,7 @@ export function ReviewPage({ status, refresh }: StatusHook) {
           </div>
         )}
       </header>
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!items && !error && <Loading label="Loading what needs you" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {done && (

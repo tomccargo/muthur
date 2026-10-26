@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Op, type Run } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobProgress, Loading } from '../components';
+import { Dot, JobError, Loading } from '../components';
 import { libraryPath, middle, size, splitId, when } from '../labels';
 
 const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder', update: 'New scores in' };
@@ -121,7 +121,7 @@ export function HistoryPage({ status, refresh }: StatusHook) {
         </div>
       </header>
       {message && <div className="banner banner-error" role="alert">{message}</div>}
-      <JobProgress job={status?.job} queue={status?.queue} />
+      <JobError job={status?.job} />
       {!runs && !message && <Loading label="Loading what muthur did" />}
       {runs && runs.length === 0 && (
         <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
