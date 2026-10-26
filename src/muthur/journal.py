@@ -70,6 +70,12 @@ class Journal:
     def finish(self, run_id: int, summary: dict) -> None:
         self._exec("UPDATE runs SET finished = ?, summary = ? WHERE id = ?", (time.time(), json.dumps(summary), run_id))
 
+    def last_change(self) -> float:
+        """When muthur last finished or put back a run that changed files: 0 when it never did."""
+        with self.store.lock:
+            row = self.store.db.execute("SELECT MAX(MAX(COALESCE(finished, 0)), MAX(COALESCE(undone, 0))) FROM runs").fetchone()
+        return float(row[0] or 0)
+
     def unfinished(self) -> list[dict]:
         """Runs that started but never finished: at start-up, the ones a restart cut short."""
         with self.store.lock:

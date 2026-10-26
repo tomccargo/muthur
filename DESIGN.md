@@ -92,6 +92,7 @@ muthur examples:
 - A page shows **numbers, status and actions**. What a panel means is explained once, in Settings or the docs, not on every visit. At most one short clause says what a number is for when the label alone was unclear: *Known shows 162 · their new episodes go straight to their folder*, not a paragraph. A button that changes nothing says so (*Read the TV folder · changes nothing*).
 - A **problem keeps its sentence and its way out** (§1.5): a paused backup, a folder that can't be read, Kodi that doesn't answer (*Off (asleep, or Kodi closed)* with *Wake the Shield*).
 - A panel with **nothing to say is left out**: the Folders panel appears only when a folder has a problem.
+- **The Dashboard's order (0.35):** the download tiles; **Health** at the full width (a tile per kind of fix, *Open Health*); then *Kodi*, *Watched status* and *IMDb scores*. *Known shows* (the show folders muthur files new episodes into directly) and *Read the TV folder* live on the Library page, where shows are.
 - Tiles are a label and a number; a status line joins its facts with ` · ` (*Backed up 20:38 · 783 of 5,335 watched · hourly*).
 
 ---

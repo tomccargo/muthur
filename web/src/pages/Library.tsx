@@ -299,8 +299,16 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           <p className="lede">
             {lib?.at ? `${count(lib.shows.length, 'show')} · ${count(episodes, 'episode')} · ${count(lib.films.length, 'film')} · indexed ${when(lib.at)}` : 'Not indexed yet.'}
           </p>
+          {/* Known shows: the show folders muthur is sure about, so a new episode goes straight into the right one. */}
+          <p className="small muted" style={{ margin: '4px 0 0' }}>
+            {count(status?.memory.shows ?? 0, 'show')} muthur files new episodes into directly · the rest it searches on TMDB
+          </p>
         </div>
         <div className="actions">
+          <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'learn'}
+            {...(status?.tmdb.configured ? {} : { 'aria-disabled': true })}
+            title={status?.tmdb.configured ? 'Matches every show folder on TMDB and remembers the ones that agree with their tvshow.nfo. Changes no files. Useful after you add or rename show folders yourself.' : 'Add the TMDB token in Settings first'}
+            onClick={status?.tmdb.configured ? () => begin('learn', api.learnShows) : undefined}>Read the TV folder</button>
           <button className={lib?.at ? 'btn btn-secondary btn-sm' : 'btn btn-primary'} type="button" aria-busy={starting === 'index'} onClick={index}>
             {lib?.at ? 'Index again' : 'Index the library'}
           </button>

@@ -692,8 +692,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 client = tmdb()
                 _, checked = store.snapshot("health")
                 _, indexed = store.snapshot("library")
-                # A day old, or from before an update that added kinds of fixes: check again (read-only).
-                if client and (not checked or time.time() - checked > 86400 or outdated_check()):
+                # A day old, from before an update that added kinds of fixes, or older than muthur's last change to the
+                # library (a run a restart cut short never got its own check): check again (read-only).
+                if client and (not checked or time.time() - checked > 86400 or outdated_check() or checked < journal.last_change()):
                     jobs.start("health", lambda j, c=client: check_health(c, j), by_user=False)
                 elif not client and (not indexed or time.time() - indexed > 86400):
                     start_library(by_user=False)  # without TMDB only the index can be built

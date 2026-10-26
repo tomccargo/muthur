@@ -1,3 +1,3 @@
 """muthur: sorts downloads into a Kodi library."""
 
-__version__ = "0.34.2"
+__version__ = "0.35.0"

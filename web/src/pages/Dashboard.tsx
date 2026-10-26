@@ -80,6 +80,14 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         <Link className="tile" to="/inbox?show=ignored"><span className="label">Ignored</span><strong>{counts.ignored ?? 0}</strong></Link>
       </section>
 
+      {/* What needs fixing in the library, the full width, straight under the downloads (it is Health's, by name too). */}
+      <section className="panel" aria-labelledby="health-h">
+        <div className="panel-head"><h2 id="health-h">Health</h2>
+          <span className="small muted">{status?.library?.at ? `checked ${when(status.library.at)} · ` : ''}<Link to="/health">Open Health</Link></span>
+        </div>
+        <LibraryProblems status={status} />
+      </section>
+
       <div className="grid-2">
         <section className="panel" aria-labelledby="kodi-h">
           <div className="panel-head"><h2 id="kodi-h">Kodi on the {device}</h2><Link to="/settings" className="small">Settings</Link></div>
@@ -113,29 +121,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           {kodiNote && <div className={`banner banner-${kodiNote.kind}`} role="alert" style={{ marginTop: 10 }}>{kodiNote.text}</div>}
         </section>
 
-        <section className="panel" aria-labelledby="mem-h">
-          <div className="panel-head"><h2 id="mem-h">Known shows</h2></div>
-          <p style={{ margin: '0 0 12px' }}>
-            <strong className="num" style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>{status?.memory.shows ?? 0}</strong>
-            <span className="muted"> · their new episodes go straight to their folder</span>
-          </p>
-          <div className="actions">
-            {tmdb
-              ? <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'learn'} onClick={() => start('learn', api.learnShows)}
-                title="Reads the TV folder and matches each show to TMDB, so new episodes find their folder. Changes no files.">Read the TV folder</button>
-              : <button className="btn btn-secondary btn-sm" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Read the TV folder</button>}
-            <span className="small muted">changes nothing</span>
-          </div>
-        </section>
-
         <WatchedPanel status={status} refresh={refresh} />
-
-        <section className="panel" aria-labelledby="lib-h">
-          <div className="panel-head"><h2 id="lib-h">Library</h2>
-            <span className="small muted">{status?.library?.at ? `checked ${when(status.library.at)} · ` : ''}<Link to="/health">Health</Link></span>
-          </div>
-          <LibraryProblems status={status} />
-        </section>
 
         <section className="panel" aria-labelledby="scores-h">
           <div className="panel-head"><h2 id="scores-h">IMDb scores</h2></div>
