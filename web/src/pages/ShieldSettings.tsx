@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api } from '../api';
-import { Dot, HowTo } from '../components';
+import { Dot, HowTo, useElapsed } from '../components';
 
 export type ShieldDraft = { shieldOn: boolean; shieldPort: string; shieldApp: string };
 
@@ -9,23 +9,24 @@ export function ShieldSettings({ draft, edit, device }: { draft: ShieldDraft; ed
   const [apps, setApps] = useState<string[] | null>(null);
   const [current, setCurrent] = useState<string | null>(null);
   const [state, setState] = useState<{ ok: boolean; text: string } | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<'apps' | 'wake' | null>(null);
+  const took = useElapsed(busy !== null);
 
   const load = () => {
-    setBusy(true);
+    setBusy('apps');
     setState(null);
     api.shieldApps()
       .then((r) => { setApps(r.apps); setCurrent(r.current); setState({ ok: true, text: `Connected · ${r.apps.length} apps on the ${device}` }); })
       .catch((e: Error) => setState({ ok: false, text: e.message }))
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
   const wake = () => {
-    setBusy(true);
+    setBusy('wake');
     setState(null);
     api.wakeShield()
       .then((r) => setState({ ok: true, text: r.note ?? `The ${device} is awake and Kodi answers.` }))
       .catch((e: Error) => setState({ ok: false, text: e.message }))
-      .finally(() => setBusy(false));
+      .finally(() => setBusy(null));
   };
   const onScreen = apps?.find((a) => current && a.startsWith(current + '/'));
 
@@ -54,12 +55,12 @@ export function ShieldSettings({ draft, edit, device }: { draft: ShieldDraft; ed
         </label>
       </div>
       <div className="actions">
-        <button className="btn btn-secondary btn-sm" type="button" disabled={busy} onClick={load}>Read the {device}’s apps</button>
+        <button className="btn btn-secondary btn-sm" type="button" disabled={busy !== null} aria-busy={busy === 'apps'} onClick={load}>Read the {device}’s apps</button>
         {onScreen && draft.shieldApp !== onScreen && (
           <button className="btn btn-secondary btn-sm" type="button" onClick={() => edit({ shieldApp: onScreen })}>Use the app on screen ({onScreen.split('/')[0]})</button>
         )}
-        <button className="btn btn-secondary btn-sm" type="button" disabled={busy || !draft.shieldApp} onClick={wake}>Wake the {device} now</button>
-        {busy && <span className="small muted">Talking to the {device}…</span>}
+        <button className="btn btn-secondary btn-sm" type="button" disabled={busy !== null || !draft.shieldApp} aria-busy={busy === 'wake'} onClick={wake}>Wake the {device} now</button>
+        {busy && <span className="small muted">Talking to the {device}…{took}</span>}
         {state && <span className="status small"><Dot kind={state.ok ? 'dot-success' : 'dot-danger'} />{state.text}</span>}
       </div>
     </div>

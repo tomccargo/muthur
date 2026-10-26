@@ -250,3 +250,17 @@ def test_questions_left_as_is_stay_away_until_they_change(client):
     plan["manual"]["films"][0]["why"] = "unsure, and now its NFO disagrees"  # the situation changed: asked again
     client.app.state.store.save_snapshot("health", plan)
     assert client.get("/api/fixes").json()["manual"]["films"]["count"] == 1
+
+
+
+def test_a_clients_complete_folder_is_opened_and_incomplete_is_skipped(tmp_path):
+    from muthur.inbox import Inbox
+    from muthur.store import Store
+
+    dl = tmp_path / "torrent-output"
+    (dl / "complete").mkdir(parents=True)
+    (dl / "complete" / "Some.Film.1999.mkv").write_bytes(b"x")
+    (dl / "incomplete" / "Half.Done.S01E01").mkdir(parents=True)
+    (dl / "A.Game [NSP]").mkdir()
+    entries = Inbox(None, Store(str(tmp_path / "m.db")), str(dl)).entries()
+    assert entries == ["A.Game [NSP]", "complete/Some.Film.1999.mkv"]

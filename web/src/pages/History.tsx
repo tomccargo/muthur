@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Op, type Run } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { libraryPath, middle, size, splitId, when } from '../labels';
 
 const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder', update: 'New scores in' };
@@ -87,7 +87,7 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
       <div className="actions">
         <button className="btn btn-secondary btn-sm" type="button" aria-expanded={open} onClick={() => setOpen(!open)}>{open ? 'Hide the changes' : 'Show the changes'}</button>
         {!run.undone && !asking && (
-          <button className="btn btn-danger-outline btn-sm" type="button" disabled={busy} onClick={() => setAsking(true)}>
+          <button className="btn btn-danger-outline btn-sm" type="button" disabled={busy} aria-busy={busy} onClick={() => setAsking(true)}>
             Put this run back…
           </button>
         )}
@@ -122,6 +122,7 @@ export function HistoryPage({ status, refresh }: StatusHook) {
       </header>
       {message && <div className="banner banner-error" role="alert">{message}</div>}
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!runs && !message && <Loading label="Loading what muthur did" />}
       {runs && runs.length === 0 && (
         <section className="panel" style={{ textAlign: 'center', padding: '40px 16px' }}>
           <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing yet</h2>

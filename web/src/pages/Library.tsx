@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Film, type LibEpisode, type LibProblems, type Library, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
@@ -84,6 +84,7 @@ function ShowPage({ folder }: { folder: string }) {
     <div className="page">
       <Link to="/library" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}>← Library</Link>
       {error && <div className="banner banner-error" role="alert">{error}</div>}
+      {!show && !error && <Loading rows={4} label="Loading the show" />}
       {show && (
         <>
           <header style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
@@ -187,7 +188,14 @@ export function LibraryPage({ status, refresh }: StatusHook) {
   const film = filmKey ? lib?.films.find((f) => f.key === filmKey) : null;
   if (film) return <FilmPage film={film} />;
 
-  const index = () => { setError(null); api.indexLibrary().then(refresh).catch((e: Error) => setError(e.message)); };
+  // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
+  const [starting, setStarting] = useState<string | null>(null);
+  const begin = (key: string, request: () => Promise<unknown>) => {
+    setStarting(key);
+    setError(null);
+    request().then(refresh).catch((e: Error) => setError(e.message)).finally(() => setStarting(null));
+  };
+  const index = () => begin('index', api.indexLibrary);
   const episodes = (lib?.shows ?? []).reduce((n, s) => n + s.count, 0);
 
   return (
@@ -201,12 +209,13 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           </p>
         </div>
         <div className="actions">
-          <button className={lib?.at ? 'btn btn-secondary btn-sm' : 'btn btn-primary'} type="button" disabled={running} onClick={index}>
+          <button className={lib?.at ? 'btn btn-secondary btn-sm' : 'btn btn-primary'} type="button" aria-busy={starting === 'index'} onClick={index}>
             {lib?.at ? 'Index again' : 'Index the library'}
           </button>
         </div>
       </header>
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!lib && !error && <Loading label="Loading the library" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="inline">
         <div className="seg" role="group" aria-label="Library">

@@ -244,6 +244,15 @@ Head, scrolling body, foot. Only the body scrolls, so the buttons stay on screen
 
 A result appears where the action was taken (under the button or at the top of its panel) and survives a redraw. Not a toast that disappears, and not at the top of the page out of sight.
 
+### 7.6 Waiting (0.27)
+
+Every wait shows itself, the same way everywhere (`components.tsx`):
+- **The button pressed spins** (`aria-busy="true"` draws the ring) until its request is answered; a second press does nothing meanwhile. Only that button spins: a section with several actions keeps one busy key, never one shared flag.
+- **A long wait counts** (*Waking the Shield… 12 s*) after 3 seconds.
+- **A job** shows its bar on the page (indeterminate until it has counted its work), its step and count in the rail on every page, and a spinning dot in the phone's top bar. Jobs started meanwhile wait in line (*Next: …*).
+- **A page loading** shows shimmering placeholders where its data will be; a failed load says why, with *Try again*.
+- **Busy always clears**, on success and on error, and the result stays where the action was taken (§7.5).
+
 ---
 
 ## 8. Media rules

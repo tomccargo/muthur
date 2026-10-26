@@ -80,6 +80,11 @@ _PART_OF_A_RELEASE = re.compile(r"(?i)^(season[ ._-]?\d+|s\d{1,2}|specials?|extr
 
 _RELEASE_MARKERS = ("season", "episode", "year", "screen_size", "source", "video_codec", "release_group")
 
+# Folders a download client keeps inside the downloads folder: finished ones are opened up like a category,
+# in-progress ones are never looked at ('torrent-output/complete', 'torrent-output/incomplete').
+FINISHED_DIRS = {"complete", "completed", "finished", "done"}
+IN_PROGRESS_DIRS = {"incomplete", "temp", "tmp", "downloading", "partial"}
+
 ARCHIVE = re.compile(r"(?i)\.(rar|zip|7z|r\d\d|part\d+\.rar)$")
 
 # Programs that sometimes travel under episode or film names. They are never media.
@@ -175,7 +180,9 @@ class Inbox:
             if e.startswith((".", "@", "#")):
                 continue
             path = os.path.join(self.downloads, e)
-            if os.path.isdir(path) and _is_category(path):
+            if os.path.isdir(path) and e.lower() in IN_PROGRESS_DIRS:
+                continue  # still downloading: the client moves it out when it's done
+            if os.path.isdir(path) and (e.lower() in FINISHED_DIRS or _is_category(path)):
                 children = sorted(c for c in os.listdir(path) if not c.startswith((".", "@", "#")))
                 stems = [os.path.splitext(c)[0] for c in children if is_video(c)]
                 # A loose subtitle belongs to the video it is named after; it moves with that video.

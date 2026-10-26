@@ -209,3 +209,22 @@ input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-
 /* 'How to set this up': folded instructions in Settings (DESIGN.md §1.11). */
 .howto summary { cursor: pointer; color: var(--accent-text); width: fit-content; padding: 4px 0; }
 .howto p { margin: 6px 0 0; }
+
+/* ---- Waiting (DESIGN.md §7.6) ------------------------------------------------------------------- */
+.spinner { display: inline-block; width: 14px; height: 14px; flex: none; border-radius: 50%; border: 2px solid currentColor;
+  border-right-color: transparent; vertical-align: -2px; animation: spin 0.8s linear infinite; }
+.btn .spinner { margin-right: 4px; }
+.fill.indeterminate { width: 35%; animation: slide 1.2s ease-in-out infinite; }
+.skeleton { display: block; height: 14px; border-radius: var(--radius-sm);
+  background: linear-gradient(90deg, var(--surface-muted) 25%, var(--border) 37%, var(--surface-muted) 63%); background-size: 400% 100%;
+  animation: shimmer 1.2s ease infinite; }
+.rail-job { display: flex; flex-direction: column; gap: 6px; }
+.rail-job .status { gap: 8px; }
+.topbar-status .spinner { width: 12px; height: 12px; color: var(--accent-text); }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slide { from { transform: translateX(-100%); } to { transform: translateX(290%); } }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+.btn[aria-busy='true']::before { content: ''; display: inline-block; width: 13px; height: 13px; margin-right: 6px; flex: none;
+  border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; vertical-align: -2px; animation: spin 0.8s linear infinite; }
+.btn[aria-busy='true'] { cursor: progress; }

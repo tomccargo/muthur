@@ -32,7 +32,7 @@ export function PasswordSettings() {
         </label>
       </div>
       <div className="actions">
-        <button className="btn btn-secondary btn-sm" type="button" disabled={busy || !current || next.length < 8} onClick={change}>Change the password</button>
+        <button className="btn btn-secondary btn-sm" type="button" disabled={busy || !current || next.length < 8} aria-busy={busy} onClick={change}>Change the password</button>
         <button className="btn btn-secondary btn-sm" type="button" onClick={signOut}>Sign out</button>
         {state && <span className="status small"><Dot kind={state.ok ? 'dot-success' : 'dot-danger'} />{state.text}</span>}
       </div>

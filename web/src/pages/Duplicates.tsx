@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type DupGroup, type DupPlan, type DupResult } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { libraryPath, middle, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -86,9 +86,16 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
   const apply = () => {
     setAsking(false);
     setError(null);
-    api.applyDuplicates(chosen.map((g) => ({ id: g.id, keep: keepOf(g) }))).then(refresh).catch((e: Error) => setError(e.message));
+    begin('apply', () => api.applyDuplicates(chosen.map((g) => ({ id: g.id, keep: keepOf(g) }))));
   };
-  const check = () => { setError(null); api.scanDuplicates().then(refresh).catch((e: Error) => setError(e.message)); };
+  // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
+  const [starting, setStarting] = useState<string | null>(null);
+  const begin = (key: string, request: () => Promise<unknown>) => {
+    setStarting(key);
+    setError(null);
+    request().then(refresh).catch((e: Error) => setError(e.message)).finally(() => setStarting(null));
+  };
+  const check = () => begin('check', api.scanDuplicates);
 
   return (
     <div className="page">
@@ -104,9 +111,9 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
         <div className="actions">
           {/* The main button is the next step: looking, until there is something to resolve (DESIGN.md §1.2). */}
           {!asking && !data?.groups.length && (
-            <button className="btn btn-primary" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Look for duplicates'}</button>
+            <button className="btn btn-primary" type="button" aria-busy={starting === 'check'} onClick={check}>{data?.at ? 'Check again' : 'Look for duplicates'}</button>
           )}
-          {!asking && Boolean(data?.groups.length) && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>Check again</button>}
+          {!asking && Boolean(data?.groups.length) && <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'check'} onClick={check}>Check again</button>}
           {!asking && Boolean(data?.groups.length) && (chosen.length > 0
             ? <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>Resolve {chosen.length} selected</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Select groups first">Resolve selected</button>)}
@@ -131,6 +138,7 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
       )}
 
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!data && !error && <Loading label="Loading the duplicates" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {last && !running && status?.job?.name === 'duplicates-apply' && (
         <div className={`banner ${last.stopped ? 'banner-warn' : 'banner-note'}`} role="status" style={{ flexDirection: 'column', alignItems: 'stretch' }}>

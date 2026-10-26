@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { SIGNALS, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
@@ -107,7 +107,7 @@ function IdentityQuestion({ item, busy, onChosen }: { item: Item; busy: boolean;
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       <div className="actions" style={{ justifyContent: 'flex-end' }}>
         {picked ? (
-          <button className="btn btn-primary" type="button" disabled={busy} onClick={choose}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>
+          <button className="btn btn-primary" type="button" disabled={busy} aria-busy={busy} onClick={choose}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>
         ) : (
           <button className="btn btn-primary" type="button" aria-disabled="true" title="Choose one of the titles first">Choose a title above</button>
         )}
@@ -240,7 +240,7 @@ function EpisodeQuestion({ item, busy, onChosen, onWrongShow }: { item: Item; bu
             {!preview ? 'Checking…' : duplicate ? 'Already in your library' : 'Pick an episode that fits'}
           </button>
         ) : (
-          <button className="btn btn-primary" type="button" disabled={busy} onClick={choose}>{label}</button>
+          <button className="btn btn-primary" type="button" disabled={busy} aria-busy={busy} onClick={choose}>{label}</button>
         )}
       </div>
     </section>
@@ -343,6 +343,7 @@ export function ReviewPage({ status, refresh }: StatusHook) {
         )}
       </header>
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!items && !error && <Loading label="Loading what needs you" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {done && (
         <div className="banner banner-note" role="status">

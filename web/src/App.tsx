@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AUTH_EVENT, api, type AuthMode, type Status } from './api';
 import { Icon } from './icons';
+import { JobLine, Spinner } from './components';
 import { when } from './labels';
 import { Link, useLocation } from './nav';
 import { useTheme, type ThemeChoice } from './theme';
@@ -64,15 +65,18 @@ function ThemeSwitch() {
 
 function RailFoot({ status, onChange }: { status: Status | null; onChange: () => void }) {
   const k = status?.kodi;
+  const [waking, setWaking] = useState(false);
   return (
     <div className="rail-foot">
+      <JobLine job={status?.job} />
       {k === undefined ? null : k === null ? (
         <span className="status"><span className="dot" />Kodi not set up</span>
       ) : k.connected ? (
         <span className="status"><span className="dot dot-success" />{status?.names.device} · Kodi {k.version}</span>
       ) : (
         <span className="status"><span className="dot dot-danger" />Kodi unreachable
-          {k.canWake && <button type="button" className="btn-link small" onClick={() => { api.wakeShield().catch(() => undefined).finally(onChange); }}>Wake</button>}
+          {k.canWake && (waking ? <span className="small"><Spinner /> Waking…</span>
+            : <button type="button" className="btn-link small" onClick={() => { setWaking(true); api.wakeShield().catch(() => undefined).finally(() => { setWaking(false); onChange(); }); }}>Wake</button>)}
         </span>
       )}
       {status && !status.applying && <span className="status"><span className="dot dot-warning" />Dry run on</span>}
@@ -103,6 +107,10 @@ function StatusDot({ status }: { status: Status | null }) {
   const text = !k ? 'Kodi not set up' : !k.connected ? 'Kodi unreachable' : status?.watched.paused ? 'Watched backup paused'
     : `${status?.names.device} · Kodi ${k.version}`;
   const kind = !k ? '' : k.connected && !status?.watched.paused ? 'dot-success' : 'dot-danger';
+  if (status?.job?.running) {
+    const what = status.job.step ?? status.job.name;
+    return <Link to="/" className="topbar-status" aria-label={`Working: ${what}`} title={`Working: ${what}`}><Spinner /></Link>;
+  }
   return <Link to="/settings" className="topbar-status" aria-label={text} title={text}><span className={`dot ${kind}`} /></Link>;
 }
 

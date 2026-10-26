@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type KodiState, type Settings } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, HowTo } from '../components';
+import { Dot, Footer, HowTo, Loading } from '../components';
 import { PasswordSettings } from './PasswordSettings';
 import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
 import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLanguage } from '../labels';
@@ -35,7 +35,7 @@ export function SettingsPage({ refresh }: StatusHook) {
   }, []);
 
   if (!draft || !saved) {
-    return <div className="page">{message && <div className="banner banner-error" role="alert">{message.text}</div>}</div>;
+    return <div className="page">{message ? <div className="banner banner-error" role="alert">{message.text}</div> : <Loading rows={5} label="Loading the settings" />}</div>;
   }
 
   const edit = (patch: Partial<Draft>) => { setDraft({ ...draft, ...patch }); setDirty(true); setMessage(null); };
@@ -98,11 +98,11 @@ export function SettingsPage({ refresh }: StatusHook) {
         <h2 id="changes-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Changes to the library</h2>
         <label className="choice">
           <input type="checkbox" checked={draft.dryRun} onChange={(e) => edit({ dryRun: e.target.checked })} />
-          <span><strong>Dry run: plan only.</strong> Everything is checked and shown, but nothing is moved, written or quarantined, and the weekly score refresh waits.</span>
+          <span>Dry run <span className="muted">· plans only, changes nothing</span></span>
         </label>
         <label className="choice">
           <input type="checkbox" checked={draft.preferHdr} onChange={(e) => edit({ preferHdr: e.target.checked })} />
-          <span><strong>Duplicates: HDR counts as better.</strong> Off while the TV is SDR; then an HDR copy never wins only for being HDR.</span>
+          <span>Prefer HDR copies when resolving duplicates</span>
         </label>
       </section>
 
@@ -147,7 +147,7 @@ export function SettingsPage({ refresh }: StatusHook) {
           <span className="hint">9090 unless you changed it in Kodi. muthur hears through it when something was watched.</span>
         </label>
         <div className="actions">
-          <button className="btn btn-secondary btn-sm" type="button" onClick={test} disabled={testing || !draft.host}>{testing ? 'Testing…' : 'Test the connection'}</button>
+          <button className="btn btn-secondary btn-sm" type="button" onClick={test} disabled={testing || !draft.host} aria-busy={testing}>{testing ? 'Testing…' : 'Test the connection'}</button>
           {kodi && (kodi.connected
             ? <span className="status small"><Dot kind="dot-success" />Connected · Kodi {kodi.version}</span>
             : <span className="status small"><Dot kind="dot-danger" />{kodi.problem}</span>)}

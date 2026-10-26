@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -54,7 +54,7 @@ function Detail({ item, onChanged }: { item: Item; onChanged: (note: string | nu
       )}
       {item.status === 'review' && <Link to="/review" className="btn btn-secondary btn-sm" style={{ alignSelf: 'flex-start' }}>Choose in Review</Link>}
       {(item.status === 'suspicious' || item.status === 'packed') && (
-        <button className="btn btn-secondary btn-sm" type="button" disabled={busy} style={{ alignSelf: 'flex-start' }} onClick={toQuarantine}>Move to quarantine</button>
+        <button className="btn btn-secondary btn-sm" type="button" disabled={busy} aria-busy={busy} style={{ alignSelf: 'flex-start' }} onClick={toQuarantine}>Move to quarantine</button>
       )}
       <span className="small muted">{size(item.size)}</span>
     </aside>
@@ -78,10 +78,13 @@ export function InboxPage({ status, refresh }: StatusHook) {
   const current = items.find((i) => i.id === selected) ?? items[0] ?? null;
   const count = (k: ItemStatus | 'all') => (k === 'all' ? data?.items.length : data?.items.filter((i) => i.status === k).length) ?? 0;
 
-  const scan = () => {
+  const [starting, setStarting] = useState<string | null>(null);
+  const begin = (key: string, request: () => Promise<unknown>) => {
+    setStarting(key);
     setMessage(null);
-    api.scan().then(refresh).catch((e: Error) => setMessage(e.message));
+    request().then(refresh).catch((e: Error) => setMessage(e.message)).finally(() => setStarting(null));
   };
+  const scan = () => begin('scan', api.scan);
 
   const ready = (data?.items ?? []).filter((i) => i.status === 'ready');
   const [asking, setAsking] = useState(false);
@@ -90,8 +93,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
   const newShows = new Set(ready.filter((i) => i.kind === 'tv' && !i.known).map((i) => i.files[0]?.target?.split('/')[0])).size;
   const apply = () => {
     setAsking(false);
-    setMessage(null);
-    api.apply().then(refresh).catch((e: Error) => setMessage(e.message));
+    begin('apply', () => api.apply());
   };
 
   return (
@@ -107,13 +109,13 @@ export function InboxPage({ status, refresh }: StatusHook) {
         <div className="actions">
           {asking ? null : ready.length > 0 ? (
             <>
-              <button className="btn btn-secondary btn-sm" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check again</button>
-              <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>
+              <button className="btn btn-secondary btn-sm" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Check again</button>
+              <button className="btn btn-primary" type="button" aria-busy={starting === 'apply'} onClick={() => setAsking(true)}>
                 Apply {ready.length} ready {ready.length === 1 ? 'item' : 'items'}
               </button>
             </>
           ) : (
-            <button className="btn btn-primary" type="button" disabled={running || !status?.tmdb.configured} onClick={scan}>Check downloads</button>
+            <button className="btn btn-primary" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Check downloads</button>
           )}
         </div>
       </header>
@@ -140,6 +142,7 @@ export function InboxPage({ status, refresh }: StatusHook) {
       {message && <div className="banner banner-error" role="alert">{message}</div>}
       {note && <div className="banner banner-note" role="status">{note}</div>}
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!data && !message && <Loading label="Loading the downloads" />}
       {status?.job && !status.job.running && status.job.name === 'apply' && !status.job.error && (
         <div className="banner banner-note" role="status">
           <span className="status"><Dot kind="dot-success" />Done. What moved, and the way to put it back, is in History.</span>

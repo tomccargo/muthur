@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { api, type Status } from '../api';
-import { Dot } from '../components';
+import { Dot, Spinner } from '../components';
 import { when } from '../labels';
 
 type Preview = { count: number; check: string; watched: number; resume: number; sample: string[] };
@@ -8,22 +8,22 @@ type Preview = { count: number; check: string; watched: number; resume: number; 
 // The watched-status backup on the Dashboard: Kodi is the master, muthur keeps the history (§11).
 export function WatchedPanel({ status, refresh }: { status: Status | null; refresh: () => void }) {
   const [message, setMessage] = useState<{ kind: 'error' | 'note'; text: string } | null>(null);
-  const [working, setWorking] = useState(false);
+  const [working, setWorking] = useState<string | false>(false);  // which button's request runs
   const [accepting, setAccepting] = useState(false);
   const [preview, setPreview] = useState<Preview | null>(null);
   const w = status?.watched;
   const kodiSet = Boolean(status?.kodi);
 
-  const run = (fn: () => Promise<unknown>, done: (r: never) => string) => {
+  const run = (fn: () => Promise<unknown>, done: (r: never) => string, key = 'run') => {
     setMessage(null);
-    setWorking(true);
+    setWorking(key);
     fn().then((r) => { setMessage({ kind: 'note', text: done(r as never) }); refresh(); })
       .catch((e: Error) => setMessage({ kind: 'error', text: e.message }))
       .finally(() => setWorking(false));
   };
   const look = () => {
     setMessage(null);
-    setWorking(true);
+    setWorking('look');
     api.restorePreview().then(setPreview).catch((e: Error) => setMessage({ kind: 'error', text: e.message })).finally(() => setWorking(false));
   };
 
@@ -39,8 +39,8 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
               <span>Accept Kodi’s state as it is now? The backup then follows it again, and the items that turned unwatched are recorded as unwatched. The older history stays, so a restore to an earlier moment stays possible.</span>
               <div className="actions" style={{ justifyContent: 'flex-end' }}>
                 <button className="btn btn-secondary btn-sm" type="button" autoFocus onClick={() => setAccepting(false)}>Cancel</button>
-                <button className="btn btn-danger btn-sm" type="button" disabled={working}
-                  onClick={() => { setAccepting(false); run(api.acceptWatched, () => 'The backup follows Kodi again.'); }}>Accept Kodi’s state</button>
+                <button className="btn btn-danger btn-sm" type="button" disabled={Boolean(working)}
+                  aria-busy={working === 'accept'} onClick={() => { setAccepting(false); run(api.acceptWatched, () => 'The backup follows Kodi again.', 'accept'); }}>Accept Kodi’s state</button>
               </div>
             </>
           ) : (
@@ -75,10 +75,10 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
               <span className="small">{preview.sample.slice(0, 12).join(' · ')}{preview.count > 12 ? ` · and ${preview.count - 12} more` : ''}</span>
               <div className="actions" style={{ justifyContent: 'flex-end' }}>
                 <button className="btn btn-secondary btn-sm" type="button" autoFocus onClick={() => setPreview(null)}>Cancel</button>
-                <button className="btn btn-danger btn-sm" type="button" disabled={working} onClick={() => {
+                <button className="btn btn-danger btn-sm" type="button" disabled={Boolean(working)} aria-busy={working === 'restore'} onClick={() => {
                   const check = preview.check;
                   setPreview(null);
-                  run(() => api.restore(check), (r: { done: number; failed: number }) => `Restored ${r.done} in Kodi${r.failed ? `; ${r.failed} didn’t take, try again` : ''}.`);
+                  run(() => api.restore(check), (r: { done: number; failed: number }) => `Restored ${r.done} in Kodi${r.failed ? `; ${r.failed} didn’t take, try again` : ''}.`, 'restore');
                 }}>Restore {preview.count}</button>
               </div>
             </>
@@ -87,9 +87,10 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
       )}
       {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
       <div className="actions">
-        <button className="btn btn-secondary btn-sm" type="button" disabled={!kodiSet || working}
-          onClick={() => run(api.backupWatched, () => 'Backed up just now.')}>Back up now</button>
-        <button className="btn btn-danger-outline btn-sm" type="button" disabled={!kodiSet || working || !w?.last} onClick={look}>Restore to Kodi…</button>
+        <button className="btn btn-secondary btn-sm" type="button" disabled={!kodiSet || Boolean(working)} aria-busy={working === 'backup'}
+          onClick={() => run(api.backupWatched, () => 'Backed up just now.', 'backup')}>Back up now</button>
+        <button className="btn btn-danger-outline btn-sm" type="button" disabled={!kodiSet || Boolean(working) || !w?.last} aria-busy={working === 'look'} onClick={look}>Restore to Kodi…</button>
+        {working === 'restore' && <span className="small"><Spinner /> Restoring in Kodi…</span>}
       </div>
     </section>
   );

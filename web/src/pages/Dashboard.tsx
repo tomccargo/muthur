@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { WatchedPanel } from './Watched';
 import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, useElapsed } from '../components';
 import { when } from '../labels';
 import { Link } from '../nav';
 
@@ -23,10 +23,13 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
   const tmdb = Boolean(status?.tmdb.configured);
 
   // A job started while another runs waits its turn (the queue), so nothing here is disabled for being busy.
-  const start = (fn: () => Promise<unknown>) => {
+  const [starting, setStarting] = useState<string | null>(null);
+  const start = (key: string, fn: () => Promise<unknown>) => {
     setMessage(null);
-    fn().then(refresh).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+    setStarting(key);
+    fn().then(refresh).catch((e: Error) => setMessage({ kind: 'error', text: e.message })).finally(() => setStarting(null));
   };
+  const wakeFor = useElapsed(waking);
 
   const scanned = status?.inbox.scannedAt;
   const waiting = (counts.ready ?? 0) + (counts.review ?? 0);
@@ -47,7 +50,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         </div>
         <div className="actions">
           {tmdb
-            ? <button className="btn btn-primary" type="button" onClick={() => start(api.scan)}>Check downloads</button>
+            ? <button className="btn btn-primary" type="button" aria-busy={starting === 'scan'} onClick={() => start('scan', api.scan)}>Check downloads</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Check downloads</button>}
         </div>
       </header>
@@ -85,14 +88,14 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
               : k.connected ? <span className="status"><Dot kind="dot-success" />Connected · Kodi {k.version}</span>
                 : <span className="status"><Dot kind="dot-danger" />{k.off ? 'Off (asleep, or Kodi closed)' : k.problem}</span>}
             {k && !k.connected && k.canWake && (
-              <button className="btn btn-secondary btn-sm" type="button" disabled={waking} onClick={() => {
+              <button className="btn btn-secondary btn-sm" type="button" disabled={waking} aria-busy={waking} onClick={() => {
                 setKodiNote(null);
                 setWaking(true);
                 api.wakeShield()
                   .then(() => { setKodiNote({ kind: 'note', text: `The ${device} is awake and Kodi answers.` }); refresh(); })
                   .catch((e: Error) => setKodiNote({ kind: 'error', text: e.message }))
                   .finally(() => setWaking(false));
-              }}>{waking ? `Waking the ${device}…` : `Wake the ${device}`}</button>
+              }}>{waking ? `Waking the ${device}…${wakeFor}` : `Wake the ${device}`}</button>
             )}
             {k?.connected && (
               <button className="btn btn-secondary btn-sm" type="button" onClick={() => {
@@ -112,7 +115,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           <div className="actions" style={{ justifyContent: 'space-between' }}>
             <span><strong className="num" style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>{status?.memory.shows ?? 0}</strong> remembered</span>
             {tmdb
-              ? <button className="btn btn-secondary btn-sm" type="button" onClick={() => start(api.learnShows)}>Learn from the library</button>
+              ? <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'learn'} onClick={() => start('learn', api.learnShows)}>Learn from the library</button>
               : <button className="btn btn-secondary btn-sm" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Learn from the library</button>}
           </div>
         </section>
@@ -136,7 +139,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
               ? `Updated ${when(sc.refreshed)} · ${sc.ratings.toLocaleString('en-GB')} scores · next ${when(sc.next)}`
               : 'Not downloaded yet · weekly'}</span>
             {tmdb
-              ? <button className="btn btn-secondary btn-sm" type="button" onClick={() => start(api.refreshScores)}>Refresh now</button>
+              ? <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'scores'} onClick={() => start('scores', api.refreshScores)}>Refresh now</button>
               : <button className="btn btn-secondary btn-sm" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Refresh now</button>}
           </div>
         </section>

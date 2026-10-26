@@ -50,7 +50,7 @@ export function LibraryEditor({ kind, path, nfo, posterTarget, tmdbId, title, on
             : <p className="hint">Nothing found; try another spelling.</p>)}
           {picked && (
             <button className="btn btn-secondary btn-sm" type="button" disabled={busy} style={{ alignSelf: 'flex-start' }}
-              onClick={() => run(api.libraryMatch(kind, path, picked.tmdbId))}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>
+              aria-busy={busy} onClick={() => run(api.libraryMatch(kind, path, picked.tmdbId))}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>
           )}
         </section>
       )}
@@ -58,7 +58,7 @@ export function LibraryEditor({ kind, path, nfo, posterTarget, tmdbId, title, on
         <section className="panel question" aria-label="Change the title">
           <form className="inline" onSubmit={(e) => { e.preventDefault(); run(api.libraryTitle(nfo, newTitle)); }}>
             <input className="field" aria-label="Title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
-            <button className="btn btn-secondary btn-sm" type="submit" disabled={busy || !newTitle.trim() || newTitle === title}>Save the title</button>
+            <button className="btn btn-secondary btn-sm" type="submit" disabled={busy || !newTitle.trim() || newTitle === title} aria-busy={busy}>Save the title</button>
           </form>
           <p className="hint">Only the title in the NFO changes; Kodi shows it after re-reading the item.</p>
         </section>

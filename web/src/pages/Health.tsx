@@ -4,7 +4,7 @@ import { TitleCard } from './Review';
 import type { Card, Kind } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress } from '../components';
+import { Dot, Footer, JobProgress, Loading } from '../components';
 import { libraryPath, middle, when } from '../labels';
 
 // What each fix does to the reader's files (DESIGN.md §1.7: name what happens, not the record).
@@ -53,7 +53,7 @@ function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy:
         <div className="cards">{cards.slice(0, 6).map((c) => <TitleCard key={c.tmdbId} card={c} pressed={picked?.tmdbId === c.tmdbId} onPick={() => setPicked(c)} />)}</div>
       ) : <p className="hint">Nothing found; try another spelling.</p>)}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
-      {picked && <button className="btn btn-secondary btn-sm" type="button" disabled={busy} style={{ alignSelf: 'flex-start' }} onClick={choose}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>}
+      {picked && <button className="btn btn-secondary btn-sm" type="button" disabled={busy} aria-busy={busy} style={{ alignSelf: 'flex-start' }} onClick={choose}>It’s {picked.title}{picked.year ? ` (${picked.year})` : ''}</button>}
     </div>
   );
 }
@@ -79,8 +79,15 @@ export function HealthPage({ status, refresh }: StatusHook) {
   const available = ORDER.filter((k) => (data?.fixes[k]?.count ?? 0) > 0);
   const total = [...chosen].reduce((n, k) => n + (data?.fixes[k]?.count ?? 0), 0);
   const toggle = (k: FixKind, on: boolean) => setChosen((s) => { const n = new Set(s); if (on) n.add(k); else n.delete(k); return n; });
-  const check = () => { setError(null); api.checkFixes().then(refresh).catch((e: Error) => setError(e.message)); };
-  const apply = () => { setAsking(false); setError(null); api.applyFixes([...chosen]).then(refresh).catch((e: Error) => setError(e.message)); };
+  // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
+  const [starting, setStarting] = useState<string | null>(null);
+  const begin = (key: string, request: () => Promise<unknown>) => {
+    setStarting(key);
+    setError(null);
+    request().then(refresh).catch((e: Error) => setError(e.message)).finally(() => setStarting(null));
+  };
+  const check = () => begin('check', api.checkFixes);
+  const apply = () => { setAsking(false); begin('apply', () => api.applyFixes([...chosen])); };
 
   return (
     <div className="page">
@@ -91,7 +98,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           <p className="lede">{data?.at ? `Checked ${when(data.at)} · daily` : 'Not checked yet'}</p>
         </div>
         <div className="actions">
-          {!asking && <button className="btn btn-secondary btn-sm" type="button" disabled={running} onClick={check}>{data?.at ? 'Check again' : 'Check the library'}</button>}
+          {!asking && <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'check'} onClick={check}>{data?.at ? 'Check again' : 'Check the library'}</button>}
           {!asking && (chosen.size > 0
             ? <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>Apply {total.toLocaleString('en-GB')} fixes</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Choose fixes first">Apply fixes</button>)}
@@ -110,6 +117,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
         </section>
       )}
       <JobProgress job={status?.job} queue={status?.queue} />
+      {!data && !error && <Loading label="Loading the library check" />}
       {error && <div className="banner banner-error" role="alert">{error}</div>}
       {note && <div className="banner banner-note" role="status">{note}</div>}
       {last && !running && status?.job?.name === 'fixes-apply' && (

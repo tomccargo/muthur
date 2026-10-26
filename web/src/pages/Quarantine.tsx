@@ -74,7 +74,7 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
       )}
       {message && <div className={`banner banner-${message.kind}`} role="status">{message.text}</div>}
       {!asking && picked.length > 0 && (
-        <div className="actions"><button className="btn btn-danger-outline btn-sm" type="button" disabled={busy} onClick={() => setAsking(true)}>Empty {picked.length} {picked.length === 1 ? 'day' : 'days'}…</button></div>
+        <div className="actions"><button className="btn btn-danger-outline btn-sm" type="button" disabled={busy} aria-busy={busy} onClick={() => setAsking(true)}>Empty {picked.length} {picked.length === 1 ? 'day' : 'days'}…</button></div>
       )}
     </section>
   );

@@ -49,7 +49,7 @@ export function SignIn({ mode, onDone }: { mode: AuthMode; onDone: () => void })
           )}
           {error && <div className="banner banner-error" role="alert">{error}</div>}
           <div className="actions">
-            <button className="btn btn-primary" type="submit" disabled={busy || !password || (setup && !again)}>
+            <button className="btn btn-primary" type="submit" disabled={busy || !password || (setup && !again)} aria-busy={busy}>
               {setup ? 'Save the password' : 'Sign in'}
             </button>
           </div>
