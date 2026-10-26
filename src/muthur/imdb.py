@@ -36,6 +36,20 @@ def _rows(stream):
             yield line.rstrip("\n").split("\t")
 
 
+class _Counted:
+    """A stream that reports how many bytes were read from it, for the job's bar."""
+
+    def __init__(self, stream, report=None, size: int = 0):
+        self.stream, self.report, self.size, self.read_bytes = stream, report, size, 0
+
+    def read(self, n: int = -1) -> bytes:
+        data = self.stream.read(n)
+        self.read_bytes += len(data)
+        if self.report:
+            self.report(self.read_bytes)
+        return data
+
+
 class Imdb:
     def __init__(self, store, base: str = BASE, opener=None):
         """opener(url) -> a binary file object; tests pass local files instead of the network."""
@@ -50,20 +64,27 @@ class Imdb:
         r = requests.get(url, stream=True, timeout=60)
         r.raise_for_status()
         r.raw.decode_content = False  # the body is the .gz file itself; gzip reads it
-        return r.raw
+        return _Counted(r.raw, size=int(r.headers.get("Content-Length") or 0))  # the size: for the progress in MB
+
+    def _fetch(self, name: str, label: str, job):
+        """One of IMDb's files as a stream; on the job, the megabytes that came in so far (a file is 10-50 MB, which
+        takes a while: the bar moves with it instead of sitting at zero)."""
+        stream = self.opener(self.base + name)
+        if not job:
+            return stream
+        mb = (getattr(stream, "size", 0) or 0) // 1_000_000
+        job.begin(f"{label} ({mb} MB)" if mb else label, mb)
+        return _Counted(stream, lambda n: setattr(job, "done", min(n // 1_000_000, mb)), size=getattr(stream, "size", 0))
 
     # -- refresh ----------------------------------------------------------------------
     def refresh(self, shows: set[str], titles: set[str], job=None) -> dict:
         """Keep episode rows of `shows` and ratings of `shows`, `titles` and those episodes."""
-        if job:
-            job.total, job.done = 2, 0
         episodes = [(f[0], f[1], _int(f[2]), _int(f[3]))
-                    for f in _rows(self.opener(self.base + "title.episode.tsv.gz")) if len(f) == 4 and f[1] in shows]
-        if job:
-            job.done = 1
+                    for f in _rows(self._fetch("title.episode.tsv.gz", "Downloading IMDb’s list of episodes", job))
+                    if len(f) == 4 and f[1] in shows]
         wanted = shows | titles | {e[0] for e in episodes}
         ratings = []
-        for f in _rows(self.opener(self.base + "title.ratings.tsv.gz")):
+        for f in _rows(self._fetch("title.ratings.tsv.gz", "Downloading IMDb’s scores", job)):
             if len(f) == 3 and f[0] in wanted:
                 try:
                     ratings.append((f[0], float(f[1]), int(f[2])))
@@ -78,8 +99,6 @@ class Imdb:
             db.commit()
         info = {"at": time.time(), "shows": len(shows), "titles": len(titles), "episodes": len(episodes), "ratings": len(ratings)}
         self.store.put("imdb.refreshed", info)
-        if job:
-            job.done = 2
         return info
 
     def refreshed(self) -> dict | None:

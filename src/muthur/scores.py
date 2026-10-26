@@ -103,28 +103,40 @@ class ScoreRefresh:
             self._shows[folder] = (imdb_id, tmdb_id)
         return self._shows[folder]
 
-    def library_ids(self) -> tuple[set[str], set[str]]:
-        """IMDb IDs of the shows and films in the library."""
+    def library_ids(self, job=None) -> tuple[set[str], set[str]]:
+        """IMDb IDs of the shows and films in the library, read from their NFOs (a count on the job: on a NAS this
+        takes a while, and the reader sees it move)."""
         shows, films = set(), set()
         if os.path.isdir(self.tv_root):
-            for name in os.listdir(self.tv_root):
-                if os.path.isdir(os.path.join(self.tv_root, name)) and not name.startswith((".", "@", "#")):
-                    if i := self.show_ids(name)[0]:
-                        shows.add(i)
+            names = [n for n in os.listdir(self.tv_root) if os.path.isdir(os.path.join(self.tv_root, n)) and not n.startswith((".", "@", "#"))]
+            if job:
+                job.begin("Reading the shows’ IMDb IDs", len(names))
+            for name in names:
+                if i := self.show_ids(name)[0]:
+                    shows.add(i)
+                if job:
+                    job.done += 1
         if os.path.isdir(self.film_root):
-            for unit in scan_film(self.film_root):
+            if job:
+                job.begin("Finding the films", 0)
+            units = scan_film(self.film_root)
+            if job:
+                job.begin("Reading the films’ IMDb IDs", len(units))
+            for unit in units:
                 if unit.nfo and (i := read_nfo(unit.nfo).ids.get("imdb")):
                     films.add(i)
+                if job:
+                    job.done += 1
         return shows, films
 
     def run(self, job=None) -> dict:
-        shows, films = self.library_ids()
+        shows, films = self.library_ids(job)
         info = self.imdb.refresh(shows, films, job)
         # NFOs muthur wrote, and other tools' NFOs that Health gave an IMDb score.
         added = set(self.journal.updated("nfo"))
         paths = list(dict.fromkeys(self.journal.written("nfo") + sorted(added)))
         if job:
-            job.total, job.done = len(paths) + 2, 2
+            job.begin("Putting the new scores in the NFOs", len(paths))
         run, updated = None, []
         for path in paths:
             if job:
