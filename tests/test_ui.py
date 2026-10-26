@@ -177,3 +177,22 @@ def test_clicking_from_the_list_into_a_show_and_back(server, browser):
     assert all(over <= 0 for _, over in tabs), tabs  # six tabs fit on a phone
     page.close()
     assert not errors, errors
+
+
+def test_duplicates_have_their_own_panel_and_tile(server, browser):
+    """Duplicates were one word inside Tidy up (0.40): now a Dashboard tile that opens them, and a Health panel by name."""
+    page = browser.new_page()
+    page.route("**/*", lambda r: r.continue_() if r.request.url.startswith(server) else r.abort())
+    page.goto(server + "/health")
+    page.wait_for_selector("#duplicates")
+    assert "The Office S04E14" in page.inner_text("#duplicates")
+    assert "#duplicates" not in page.inner_text("#tidy") if page.query_selector("#tidy") else True
+    page.goto(server + "/")
+    page.click(".tile:has-text('Duplicates')")
+    page.wait_for_selector("h1:has-text('Duplicates')")
+    page.goto(server + "/")
+    target = page.get_attribute(".tile[href^='/health#']", "href")  # every other tile opens its own panel
+    page.click(f".tile[href='{target}']")
+    page.wait_for_selector(target.replace("/health", ""))
+    assert page.evaluate("location.pathname + location.hash") == target
+    page.close()

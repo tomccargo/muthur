@@ -273,7 +273,8 @@ input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-
 
 /* ---- Livelier motion (0.28): lift on hover, more spring, counters pop, a sheen on working bars ------ */
 .tiles.inset .tile { background: var(--surface-muted); border-color: transparent; }
-.tiles.groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }  /* Health's four groups: room for their line */
+.tiles.groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); }  /* Health's groups and Duplicates: room for their line */
+.page > .panel[id] { scroll-margin-top: 16px; }  /* a Dashboard tile opens its panel in Health */
 @media (prefers-reduced-motion: no-preference) {
   a.tile, .poster-tile { transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.18s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.18s; }
   a.tile:hover, .poster-tile:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgb(0 0 0 / 0.28); }

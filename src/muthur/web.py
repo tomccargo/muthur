@@ -401,6 +401,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "scores": scores_state(),
             "watched": {**watched.state(), "live": listener.connected},
             "duplicates": store.snapshot_count("duplicates", "$.groups"),
+            "duplicateFilms": store.snapshot_count_kind("duplicates", "$.groups", "film"),  # the rest are episodes
             "duplicatesAt": store.snapshot_saved("duplicates"),  # None: never checked, so not 'none found'
             "fixes": store.snapshot_count("health", "$.fixes", each=True),
             "library": store.get("health.counts") or {},

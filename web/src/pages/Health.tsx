@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { QuarantinePanel } from './Quarantine';
 import { TitleCard } from './Review';
-import type { Card, Kind, Season } from '../api';
+import type { Card, DupGroup, Kind, Season } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
@@ -157,6 +157,40 @@ function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy:
   );
 }
 
+// Videos on disk more than once, by name: its own panel, because only the reader can choose the copy to keep
+// (DESIGN.md §1.11). The choosing happens in Duplicates.
+function DuplicatesPanel({ groups }: { groups: DupGroup[] }) {
+  if (!groups.length) return null;
+  const films = groups.filter((g) => g.kind === 'film');
+  const shows = new Map<string, string[]>();
+  for (const g of groups.filter((x) => x.kind === 'episode')) {
+    shows.set(g.title, [...(shows.get(g.title) ?? []), g.label.slice(g.title.length).trim()]);
+  }
+  const episodes = groups.length - films.length;
+  return (
+    <section id="duplicates" className="panel" aria-labelledby="dups-h" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="dups-h">Duplicates</h2>
+        <span className="num">{groups.length.toLocaleString('en-GB')}</span></div>
+      <span className="small muted">On disk more than once. You choose the copy that stays; the others go to quarantine, and Kodi keeps the watched status.</span>
+      <ul className="rows">
+        {films.length > 0 && (
+          <li style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+            <strong>{count(films.length, 'film')}</strong>
+            <span className="small">{films.map((g) => g.label).join(' · ')}</span>
+          </li>
+        )}
+        {episodes > 0 && (
+          <li style={{ flexDirection: 'column', alignItems: 'stretch', gap: 2 }}>
+            <strong>{count(episodes, 'episode')}</strong>
+            <span className="small">{[...shows].map(([show, eps]) => `${show} ${eps.join(', ')}`).join(' · ')}</span>
+          </li>
+        )}
+      </ul>
+      <span className="actions"><Link to="/duplicates" className="btn">Choose which copy to keep</Link></span>
+    </section>
+  );
+}
+
 export function HealthPage({ status, refresh }: StatusHook) {
   const [data, setData] = useState<Fixes | null>(null);
   const [chosen, setChosen] = useState<Set<FixKind>>(new Set());
@@ -170,10 +204,20 @@ export function HealthPage({ status, refresh }: StatusHook) {
     api.leaveQuestions(body).then(() => api.fixes(showLeft)).then(setData).catch((e: Error) => setError(e.message));
   };
 
+  const [dupGroups, setDupGroups] = useState<DupGroup[]>([]);
   useEffect(() => {
     api.fixes(showLeft).then((d) => { setData(d); setChosen(new Set()); }).catch((e: Error) => setError(e.message));
     api.fixesLast().then((r) => setLast('done' in r ? (r as FixResult) : null)).catch(() => undefined);
+    api.duplicates().then((d) => setDupGroups(d.groups)).catch(() => undefined);
   }, [running, status?.job?.finished, showLeft]);
+  // A Dashboard tile opens its own panel here ('/health#tidy'), once the panels are drawn.
+  const jumped = useRef(false);
+  useEffect(() => {
+    const id = location.hash.slice(1);
+    if (!data || jumped.current || !id) return;
+    jumped.current = true;
+    document.getElementById(id)?.scrollIntoView({ block: 'start' });
+  }, [data]);
 
   const available = ORDER.filter((k) => (data?.fixes[k]?.count ?? 0) > 0);
   const total = [...chosen].reduce((n, k) => n + (data?.fixes[k]?.count ?? 0), 0);
@@ -193,12 +237,11 @@ export function HealthPage({ status, refresh }: StatusHook) {
   // One group of fixes, as a panel (DESIGN.md §1.11).
   const group = (g: (typeof GROUPS)[number]) => {
     const kinds = g.kinds.filter((k) => available.includes(k));
-    const dups = g.id === 'tidy' && status?.duplicatesAt ? status.duplicates : 0;
-    if (!kinds.length && !dups) return null;
+    if (!kinds.length) return null;
     return (
-      <section key={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <section key={g.id} id={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="panel-head" style={{ marginBottom: 4 }}><h2 id={`${g.id}-h`}>{g.title}</h2>
-          <span className="num">{(kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0) + dups).toLocaleString('en-GB')}</span>
+          <span className="num">{kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0).toLocaleString('en-GB')}</span>
         </div>
         <ul className="rows">
           {kinds.map((k) => {
@@ -228,10 +271,6 @@ export function HealthPage({ status, refresh }: StatusHook) {
               </li>
             );
           })}
-          {dups > 0 && (
-            <li><strong>{count(dups, 'episode or film has', 'episodes and films have')} more than one copy</strong>
-              <Link to="/duplicates" className="small">Choose in Duplicates</Link></li>
-          )}
         </ul>
       </section>
     );
@@ -285,7 +324,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
       {group(GROUPS[0])}
       {group(GROUPS[1])}
       {data?.at && (Object.entries(data.manual).some(([, v]) => (v?.count ?? 0) > 0) || data.left > 0) && (
-        <section className="panel" aria-labelledby="manual-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <section id="questions" className="panel" aria-labelledby="manual-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Questions for you'}</h2>
             {data.left > 0 || showLeft
               ? <button type="button" className="btn-link small" onClick={() => setShowLeft(!showLeft)}>{showLeft ? 'Show the open questions' : `Show the ${data.left} left as is`}</button>
@@ -327,6 +366,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           ))}
         </section>
       )}
+      <DuplicatesPanel groups={dupGroups} />
       {group(GROUPS[2])}
       <QuarantinePanel busy={running} />
     </div>

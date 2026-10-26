@@ -26,6 +26,7 @@ export type Status = {
     live: boolean;  // listening to Kodi's notifications right now
   };
   duplicates: number;
+  duplicateFilms?: number;  // of `duplicates`; the rest are episodes
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one

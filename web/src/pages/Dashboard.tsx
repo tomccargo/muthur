@@ -177,19 +177,21 @@ function SetupChecklist({ status }: { status: Status }) {
   );
 }
 
-// What's wrong in the library, in Health's four groups (DESIGN.md §1.11): a number per group and a line naming
-// what is in it. Only groups with something in them.
+// What's wrong in the library, in Health's groups (DESIGN.md §1.11): a number per group and a line naming what is
+// in it, each opening its own panel in Health (Duplicates its own page). Only groups with something in them.
 function LibraryProblems({ status }: { status: Status | null }) {
   const l = status?.library ?? {};
   const dups = status?.duplicatesAt ? status.duplicates : 0;
+  const dupFilms = status?.duplicatesAt ? status.duplicateFilms ?? 0 : 0;
   const parts = (...p: [number | undefined, string, string?][]) =>
     p.filter(([n]) => (n ?? 0) > 0).map(([n, one, many]) => count(n ?? 0, one, many)).join(' · ');
-  const tiles: [string, number, string][] = [
-    ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to'])],
-    ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles'])],
-    ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer'],
-    ['Tidy up', (l.renames ?? 0) + dups + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),
-      parts([l.renames, 'name'], [dups, 'duplicate'], [l.kodiEntries, 'old Kodi entry', 'old Kodi entries'], [l.leftovers, 'leftover'])],
+  const tiles: [string, number, string, string][] = [
+    ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to']), '/health#scores'],
+    ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles']), '/health#kodi'],
+    ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer', '/health#questions'],
+    ['Duplicates', dups, `${parts([dupFilms, 'film'], [dups - dupFilms, 'episode'])}: choose which copy to keep`, '/duplicates'],
+    ['Tidy up', (l.renames ?? 0) + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),
+      parts([l.renames, 'name'], [l.kodiEntries, 'old Kodi entry', 'old Kodi entries'], [l.leftovers, 'leftover']), '/health#tidy'],
   ];
   const shown = tiles.filter(([, n]) => n > 0);
   if (!shown.length && !l.at) {
@@ -201,8 +203,8 @@ function LibraryProblems({ status }: { status: Status | null }) {
   }
   return (
     <div className="tiles inset groups">
-      {shown.map(([label, n, what]) => (
-        <Link key={label} className="tile" to="/health">
+      {shown.map(([label, n, what, to]) => (
+        <Link key={label} className="tile" to={to}>
           <span className="label">{label}</span><strong>{n.toLocaleString('en-GB')}</strong><span className="sub">{what}</span>
         </Link>
       ))}

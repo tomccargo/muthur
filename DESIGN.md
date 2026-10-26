@@ -93,6 +93,7 @@ muthur examples:
 - A **problem keeps its sentence and its way out** (§1.5): a paused backup, a folder that can't be read, Kodi that doesn't answer (*Off (asleep, or Kodi closed)* with *Wake the Shield*).
 - A panel with **nothing to say is left out**: the Folders panel appears only when a folder has a problem.
 - **The Dashboard's order (0.35):** the download tiles; **Health** at the full width (a tile per kind of fix, *Open Health*); then *Kodi*, *Watched status* and *IMDb scores*. *Known shows* (the show folders muthur files new episodes into directly) and *Read the TV folder* live on the Library page, where shows are.
+- **Health's groups (0.41):** *IMDb scores*, *Missing in Kodi*, *Questions for you*, **Duplicates** (on disk more than once, by name, with *Choose which copy to keep*), *Tidy up*. Something only the reader can decide gets its own panel and its own Dashboard tile, never a line inside another group. Each Dashboard tile opens its own panel (`/health#tidy`); the Duplicates tile opens Duplicates.
 - Tiles are a label and a number; a status line joins its facts with ` · ` (*Backed up 20:38 · 783 of 5,335 watched · hourly*).
 
 ---

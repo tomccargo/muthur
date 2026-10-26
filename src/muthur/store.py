@@ -185,6 +185,13 @@ class Store:
             row = self.db.execute(q, (path, name)).fetchone()
         return int(row[0]) if row and row[0] is not None else 0
 
+    def snapshot_count_kind(self, name: str, path: str, kind: str) -> int:
+        """How many items of a list inside a snapshot have this 'kind', counted by SQLite like snapshot_count."""
+        q = "SELECT COUNT(*) FROM snapshots, json_each(snapshots.body, ?) j WHERE name = ? AND json_extract(j.value, '$.kind') = ?"
+        with self.lock:
+            row = self.db.execute(q, (path, name, kind)).fetchone()
+        return int(row[0]) if row else 0
+
     def snapshot_saved(self, name: str) -> float | None:
         """When a snapshot was last saved, without loading it."""
         with self.lock:
