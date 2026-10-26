@@ -1,7 +1,7 @@
 // The player (docs/PLAYER.md): muthur's Watch section at /player, with TV and Films as tabs (TV first), each a row of
 // what was added last and a visual grid with filters; a show's seasons and episodes; and the watch view, which fits
 // the tab and goes full screen. Read-only: the files are played as they are, and nothing about watching is written.
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
 import { Loading } from '../components';
 import { hue } from '../labels';
@@ -29,8 +29,9 @@ const code = (s: number | null, e: number[]) => (s == null ? '' : `S${String(s).
 const watchUrl = (id: string, title: string) => `/player/watch?${new URLSearchParams({ id, t: title })}`;
 
 // A poster or thumbnail from the library, or the title's initials on a coloured card when there is none.
-function Art({ path, title, wide = false }: { path: string | null; title: string; wide?: boolean }) {
+function Art({ path, title, wide = false, fallback }: { path: string | null; title: string; wide?: boolean; fallback?: ReactNode }) {
   const [failed, setFailed] = useState(false);
+  if ((!path || failed) && fallback) return <>{fallback}</>;
   if (!path || failed) {
     const initials = title.split(/\s+/).filter((w) => /\w/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
     return <span className={`pl-art pl-art-empty${wide ? ' wide' : ''}`} style={{ '--hue': hue(title) } as CSSProperties} aria-hidden="true">{initials || '?'}</span>;
@@ -203,7 +204,13 @@ function ShowView({ folder }: { folder: string }) {
           const name = `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
           const inner = (
             <>
-              <span className="pl-thumb"><Art path={e.thumb} title={e.title ?? show.title} wide />{way(e.play) !== 'kodi' && <PlayMark />}</span>
+              <span className="pl-thumb">
+                {/* No thumbnail on the share, or one that doesn't load (26 Oct: big coloured blocks with initials looked
+                    broken): the show's backdrop, dimmed, with the episode's number on it. */}
+                <Art path={e.thumb} title={e.title ?? show.title} wide fallback={
+                  <span className="pl-art wide pl-art-show" style={show.fanart ? { backgroundImage: `url("${art(show.fanart)}")` } : undefined}>
+                    <span>{code(e.season, e.episodes)}</span></span>} />
+                {way(e.play) !== 'kodi' && <PlayMark />}</span>
               <span className="pl-ep-text"><span className="pl-name">{name}</span>
                 <span className="pl-sub">{[way(e.play) === 'kodi' ? 'Kodi only' : null, e.watched ? 'Watched' : null].filter(Boolean).join(' · ')}</span></span>
             </>

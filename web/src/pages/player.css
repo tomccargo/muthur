@@ -3,7 +3,9 @@
 .pl-recent h2, .pl-all h2 { margin: 0 0 14px; font-size: 1.15rem; }
 
 /* Recently added: one row of covers that scrolls sideways. */
-.pl-row { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 16px; overflow-x: auto; padding: 4px 2px 10px; scroll-snap-type: x proximity; }
+/* A scrolling row clips what sticks out: room around the covers for the lift and the ring on hover (26 Oct: the ring
+   was cut off at the top), taken back with a negative margin so the row still lines up with the heading. */
+.pl-row { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 16px; overflow-x: auto; padding: 10px 8px 14px; margin: -10px -8px 0; scroll-snap-type: x proximity; scroll-padding-inline: 8px; }
 .pl-row > * { scroll-snap-align: start; }
 
 .pl-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
@@ -17,6 +19,9 @@
 .pl-cover { position: relative; display: block; border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow); transition: transform 0.2s, box-shadow 0.2s; }
 .pl-art { display: grid; place-items: center; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--poster-bg); }
 .pl-art.wide { aspect-ratio: 16 / 9; }
+.pl-art-show { position: relative; background: var(--surface-muted) center / cover no-repeat; }
+.pl-art-show::before { content: ''; position: absolute; inset: 0; background: rgb(0 0 0 / 0.55); }
+.pl-art-show > span { position: relative; color: rgb(255 255 255 / 0.85); font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
 .pl-art-empty { background: hsl(var(--hue) var(--tint-s) var(--tint-l)); color: rgb(255 255 255 / 0.8); font-family: var(--font-display); font-size: 28px; font-weight: 700; }
 .pl-play {
   position: absolute; inset: 0; display: grid; place-items: center; color: #fff; opacity: 0; transition: opacity 0.2s;
