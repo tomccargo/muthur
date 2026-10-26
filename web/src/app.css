@@ -92,12 +92,15 @@ a.tile:hover { background: var(--surface-muted); }
 }
 
 /* An episode row: number, title and file, score and watched, its menu (⋯). On a phone the score and watched
-   status move under the title, so the file name keeps the width (§8, §9). */
-.ep-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto auto; gap: 2px 12px; align-items: baseline; }
-.ep-main { min-width: 0; }
-.ep-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; }
+   status move under the title, so the file name keeps the width (§8, §9). '.rows > li.ep-row': the plain list row
+   (.rows > li, a flex row spreading its items) outranked '.ep-row', so the grid never applied and every row placed
+   its title and score at its own position (26 Oct, "why so ugly"). */
+.rows > li.ep-row { display: grid; grid-template-columns: 84px minmax(0, 1fr) auto auto; gap: 2px 16px; align-items: baseline; }
+.ep-main { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ep-main .mono { font-size: 12px; }
+.ep-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; white-space: nowrap; }
 @media (max-width: 600px) {
-  .ep-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
+  .rows > li.ep-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
   .ep-meta { grid-column: 2; grid-row: 2; flex-direction: row; align-items: center; gap: 12px; }
   .ep-menu { grid-column: 3; grid-row: 1; }
   .ep-row .btn { white-space: normal; text-align: left; }  /* a long "Rename to …" wraps instead of running out of the row */
