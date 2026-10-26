@@ -75,6 +75,8 @@ def server(tmp_path_factory):
     c.post("/api/apply", json={"ids": ["Solaris.720p.BluRay.x264.mkv"]}), wait_job(get)
     c.post("/api/duplicates/scan"), wait_job(get)
     c.post("/api/fixes/check"), wait_job(get)
+    # A Health run in History too: its summary counts fixes instead of listing items (History once crashed on it).
+    c.post("/api/fixes/apply", json={"kinds": ["leftovers"]}), wait_job(get)
 
     with socket.socket() as s:
         s.bind(("127.0.0.1", 0))

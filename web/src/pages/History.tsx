@@ -35,7 +35,8 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
   const [open, setOpen] = useState(false);
   const [asking, setAsking] = useState(false);
   const s = run.summary;
-  const stopped = s?.items.filter((i) => !i.ok) ?? [];
+  const stopped = [...(s?.items ?? []).filter((i) => !i.ok), ...(s?.failed ?? []).map((f) => ({ id: f.path, ok: false, why: f.why }))];
+  const fixed = Object.values(s?.done ?? {}).reduce((n, v) => n + v, 0);
   return (
     <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className="panel-head" style={{ marginBottom: 0 }}>
@@ -44,12 +45,13 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
           {run.undone ? <><Dot />Put back {when(run.undone)}</>
             : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
               : run.kind === 'library' ? <><Dot kind="dot-success" />Library edit</>
+              : run.kind === 'health' ? <><Dot kind="dot-success" />{fixed.toLocaleString('en-GB')} fixes{stopped.length ? `, ${stopped.length} not done` : ''}</>
               : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
         </span>
       </div>
       <p className="hint" style={{ margin: 0 }}>
         {run.kind === 'library'
-          ? `${(run.summary as unknown as { label?: string } | null)?.label ?? 'A library edit'} · ${run.counts.update + run.counts.write} file${run.counts.update + run.counts.write === 1 ? '' : 's'} written; the old ones are kept for putting back`
+          ? `${s?.label ?? 'A library edit'} · ${run.counts.update + run.counts.write} file${run.counts.update + run.counts.write === 1 ? '' : 's'} written; the old ones are kept for putting back`
           : run.kind === 'scores'
           ? `${run.counts.update} NFO${run.counts.update === 1 ? '' : 's'} got new IMDb scores; the old files are kept for putting back`
           : `${run.counts.move} file${run.counts.move === 1 ? '' : 's'} moved · ${run.counts.write} written · ${run.counts.quarantine} to quarantine`}
