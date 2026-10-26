@@ -114,7 +114,7 @@ class FakeKodi:
     def source_prefix(self, name):
         return self.prefix + name + "/"
 
-    def scan_and_wait(self, directory=None, limit=300):
+    def scan_and_wait(self, directory=None, limit=300, waited=None):
         folder = self.root / directory[len(self.prefix):]
         for f in folder.iterdir():
             path = directory + f.name

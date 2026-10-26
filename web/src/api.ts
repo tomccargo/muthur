@@ -272,6 +272,8 @@ export type PlayerInfo = {
   original: string | null;  // the film's or show's original language (TMDB, 'ja')
   extractable: string[];  // subtitle files muthur can copy out of the video (English, or Dutch without English)
   dryRun: boolean;
+  pictureSubs: number;  // subtitle tracks inside the file that are pictures (DVD, Blu-ray): no browser shows them
+  forcedLines: Record<string, { lines: number; first: number | null }>;  // per forced .srt: how many lines, the first's second
   audio: number | null;  // the audio track to play: the first in the original language, else the default
   facts: { container: string; video: { codec: string; width: number; height: number; tenBit: boolean; hdr: boolean }[];
     audio: { codec: string; channels: number; lang: string | null; title: string | null; default: boolean }[]; embeddedSubs: number; duration: number } | null;

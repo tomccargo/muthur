@@ -375,6 +375,21 @@ def share_paths(prefix: str | None, rel: str) -> dict | None:
     return {"smb": smb, "unc": "\\\\" + f"{host_path}/{rel}".replace("/", "\\")}
 
 
+def cue_summary(path: str) -> dict:
+    """{'lines': how many, 'first': seconds of the first} of an .srt, for the player to say what a forced file holds."""
+    try:
+        with open(path, "rb") as fh:
+            text = fh.read().decode("utf-8", "replace")
+    except OSError:
+        return {"lines": 0, "first": None}
+    starts = [m.group(1) for m in TIME.finditer(text)]
+    first = None
+    if starts:
+        h, m, s = (int(x) for x in starts[0].split(":"))
+        first = h * 3600 + m * 60 + s
+    return {"lines": text.count("-->"), "first": first}  # a line has two times, one arrow
+
+
 TIME = re.compile(r"(\d{1,2}:\d{2}:\d{2})[,.](\d{1,3})")
 
 

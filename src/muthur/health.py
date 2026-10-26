@@ -271,11 +271,21 @@ class Health:
                 job.done += 1
         summary = {"done": done, "failed": failed}
         if kodi and self._renamed and self._before is not None:
+            label = f"Kodi takes {len(self._renamed):,} new names"
             if job:
-                job.begin(f"Kodi takes {len(self._renamed):,} new names", 0)
+                job.begin(label, len(self._renamed))  # counted as Kodi takes each
+
+            def took(old):
+                renaming.forget(self.store, old)
+                if job:
+                    job.step, job.done = label, job.done + 1
+
+            def scanning(what, seconds):
+                if job:
+                    job.step = renaming.scan_line(what, seconds)
+
             renaming.remember(self.store, self._renamed)  # until Kodi took each one, even across a restart
-            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before,
-                                                             done=lambda old: renaming.forget(self.store, old))
+            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before, done=took, scanning=scanning)
         if entries := plan["fixes"].get("kodi-entries", []) if "kodi-entries" in kinds else []:
             # After the renames: Kodi has their new entries by now.
             if job:

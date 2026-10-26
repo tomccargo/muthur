@@ -61,11 +61,18 @@ def rename(journal, run: int, root: str, lib: str, rel: str, new_rel: str) -> st
     return f"{lib}/{todo[0][1]}"
 
 
-def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict, done=None) -> dict:
+def scan_line(what: str, seconds: float) -> str:
+    """The job's line while Kodi scans for renamed files: the time is all Kodi lets us show."""
+    s = int(seconds)
+    return f"Kodi is reading {what} for the new names: {s // 60}:{s % 60:02d} so far (Kodi doesn’t say how far; usually a few minutes)"
+
+
+def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict, done=None, scanning=None) -> dict:
     """Kodi takes the renamed files: each folder is scanned once, then every new entry gets the old one's play count
     and resume point and the old entry goes. renamed: (old, new) library paths ('TV/…' an episode, 'Film/…' a film);
     before: Kodi's items by library path, read before the renames (read_before). done(old) after each one Kodi took
-    or answered about; when Kodi goes away the rest is left for later ('kodiAway')."""
+    or answered about; when Kodi goes away the rest is left for later ('kodiAway'). scanning(what, seconds): while
+    Kodi scans, for the job's line ('the Film folder', 61.0)."""
     import requests
 
     from .duplicates import _carry
@@ -92,10 +99,12 @@ def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], 
         source = prefixes.get(new.partition("/")[0])
         try:
             if folder and source in whole and source not in scanned:
-                kodi.scan_and_wait(source, limit=3600)
+                what = f"the {new.partition('/')[0]} folder"
+                kodi.scan_and_wait(source, limit=3600, waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
                 scanned.add(source)
             elif folder and source not in whole and folder not in scanned:
-                kodi.scan_and_wait(folder)
+                what = folder.rstrip("/").rsplit("/", 1)[-1]
+                kodi.scan_and_wait(folder, waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
                 scanned.add(folder)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}

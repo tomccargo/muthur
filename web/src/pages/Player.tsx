@@ -311,6 +311,22 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
   const [subProgress, setSubProgress] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);  // what an Open-with entry just did
   const flashTimer = useRef(0);
+  // Said once when the film starts, when there are no full subtitles to show: a film without them otherwise just
+  // looks broken (Valerian, Casino Royale, 26 Oct).
+  useEffect(() => {
+    if (!info || info.extractable.length || info.subtitles.some((s) => !s.forced)) return;
+    const forced = info.subtitles.find((s) => s.forced);
+    const f = forced ? info.forcedLines[forced.name] : null;
+    const at = (s: number | null) => (s == null ? '' : `, the first at ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
+    const text = f && f.lines
+      ? `Only forced subtitles: ${f.lines} ${f.lines === 1 ? 'line' : 'lines'} for the parts in another language${at(f.first)}.`
+      : info.pictureSubs
+        ? `Subtitles only as pictures inside the file (${info.pictureSubs} ${info.pictureSubs === 1 ? 'track' : 'tracks'}): a browser can’t show those. Kodi can (⋯, Play on the TV).`
+        : 'No subtitles for this video.';
+    setFlash(text);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), 12000);
+  }, [info]);
   useEffect(() => { if (info) setSubList(info.subtitles); }, [info]);
   useEffect(() => {
     if (!info || !info.extractable.length) return;

@@ -489,13 +489,15 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         roots = {"TV": cfg.tv, "Film": cfg.film}
         job.begin("Reading what Kodi knows", 0)
         before = renaming.read_before(k, roots, follow_watched)  # Kodi kept the old entries, with their status
-        job.begin(f"Kodi takes {count(len(waiting), 'new name')}", len(waiting))
+        label = f"Kodi takes {count(len(waiting), 'new name')}"
+        job.begin(label, len(waiting))
 
         def took(old):
             renaming.forget(store, old)
-            job.done += 1
+            job.step, job.done = label, job.done + 1
 
-        r = renaming.follow_in_kodi(k, waiting, roots, before, done=took)
+        r = renaming.follow_in_kodi(k, waiting, roots, before, done=took,
+                                    scanning=lambda what, s: setattr(job, "step", renaming.scan_line(what, s)))
         job.result = f"Kodi took {count(r['followed'], 'renamed file')} with {'its' if r['followed'] == 1 else 'their'} watched status" + (
             f"; {r['kodiAway']:,} wait for Kodi again." if r.get("kodiAway") else ".") + (
             f" {count(len(r['problems']), 'file')} Kodi didn’t list: their status is safe in muthur’s backup." if r["problems"] else "")
@@ -1092,10 +1094,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         path, full = player_video(vid)
         f = play_facts.get(full)
         original = original_language(path)
-        inside = [name for _, name in player.to_extract(full, player.embedded(full))] if f and f.get("embeddedSubs") else []
+        text_tracks = player.embedded(full) if f and f.get("embeddedSubs") else []
+        inside = [name for _, name in player.to_extract(full, text_tracks)]
+        beside = player.sidecars(full)
         return {"id": vid, "path": path, "name": os.path.basename(full), "play": player.playback(f), "facts": f,
-                "subtitles": player.sidecars(full), "original": original, "audio": player.audio_pick(f, original),
-                "extractable": inside, "dryRun": bool(store.get("dryRun", False))}
+                "subtitles": beside, "original": original, "audio": player.audio_pick(f, original),
+                "extractable": inside, "dryRun": bool(store.get("dryRun", False)),
+                # What the player says about subtitles, so a film without them doesn't just look broken (26 Oct):
+                # subtitles only as pictures inside (no browser shows those), and the forced files' line counts.
+                "pictureSubs": max(0, int((f or {}).get("embeddedSubs") or 0) - len(text_tracks)),
+                "forcedLines": {s["name"]: player.cue_summary(os.path.join(os.path.dirname(full), s["name"])) for s in beside if s["forced"]}}
 
     @app.post("/api/player/video/{vid}/subtitles/extract", status_code=202)
     def player_extract(vid: str):

@@ -40,17 +40,21 @@ class Kodi:
                 return path if path.endswith("/") else path + "/"
         return None
 
-    def scan_and_wait(self, directory: str | None = None, limit: float = 300) -> bool:
-        """Scan (one folder, or everything) and wait until Kodi is done. False when it took too long."""
+    def scan_and_wait(self, directory: str | None = None, limit: float = 300, waited: Callable[[float], None] | None = None) -> bool:
+        """Scan (one folder, or everything) and wait until Kodi is done. False when it took too long. waited(seconds):
+        every couple of seconds while Kodi scans. Kodi only says whether it scans, not how far, so the time is all there
+        is to show (the reader had no information for minutes, 26 Oct)."""
         import time
 
         self.call("VideoLibrary.Scan", {"directory": directory} if directory else {})
         time.sleep(2)
-        end = time.time() + limit
-        while time.time() < end:
+        start = time.time() - 2
+        while time.time() < start + limit:
             state = self.call("XBMC.GetInfoBooleans", {"booleans": ["Library.IsScanningVideo"]}) or {}
             if not state.get("Library.IsScanningVideo"):
                 return True
+            if waited:
+                waited(time.time() - start)
             time.sleep(2)
         return False
 

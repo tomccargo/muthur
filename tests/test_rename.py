@@ -57,7 +57,7 @@ class FakeKodi:
     def check(self):
         return {"connected": True}
 
-    def scan_and_wait(self, folder, limit=300):
+    def scan_and_wait(self, folder, limit=300, waited=None):
         self.scans.append(folder)
         return True
 
@@ -141,7 +141,7 @@ def test_films_get_title_and_year_and_a_folder_of_their_own(env, monkeypatch):  
             return {"connected": True}
 
     monkeypatch.setattr("muthur.rename.read_before", lambda kodi, roots, backup=None: {})
-    monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before, done=None: {"followed": len(renamed), "problems": []})
+    monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before, done=None, scanning=None: {"followed": len(renamed), "problems": []})
     before = sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file())
     result = health.apply(plan, ["film-renames"], On())
     assert result["failed"] == [] and result["done"]["film-renames"] == 2
