@@ -130,7 +130,10 @@ export type DupResult = { applied: number; stopped: number; items: { id: string;
 export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit' | 'extras' | 'show-rematch';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 // A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
-export type Question = { path: string; why: string; season?: number; tmdb?: number; show?: string; noNumber?: boolean };
+export type Question = {
+  path: string; why: string; season?: number; tmdb?: number; show?: string; noNumber?: boolean;
+  suggest?: { season: number; episode: number; title: string | null };  // a broken name's likely number, for the reader to confirm
+};
 export type Fixes = {
   at: number | null;
   fixes: Partial<Record<FixKind, { count: number; sample: FixItem[] }>>;
@@ -229,6 +232,7 @@ export const api = {
   libraryOrders: (folder: string) => call<{ orders: { id: string; name: string; kind: string; seasons: number; episodes: number; fits: number }[]; files: number; current: string | null }>(`/api/library/orders?${new URLSearchParams({ folder })}`),
   setOrder: (folder: string, groupId: string | null) => call<{ fixes: Record<string, number>; questions: number }>('/api/library/order', { method: 'POST', body: JSON.stringify({ folder, groupId }) }),
   trustNumber: (path: string) => call<{ fixes: Record<string, number>; questions: number }>('/api/fixes/trust', { method: 'POST', body: JSON.stringify({ path }) }),
+  markExtras: (paths: string[]) => call<{ extras: number }>('/api/fixes/extras', { method: 'POST', body: JSON.stringify({ paths }) }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
   chooseForLibrary: (kind: Kind, path: string, tmdbId: number) =>
     call<{ fixes: Partial<Record<FixKind, number>>; questions: number }>('/api/fixes/choose', { method: 'POST', body: JSON.stringify({ kind, path, tmdbId }) }),

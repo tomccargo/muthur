@@ -1702,6 +1702,20 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             store.put("health.trusted", sorted(set(store.get("health.trusted") or []) | {path}))
             return replan_show(client, path.split("/")[1])
 
+    @app.post("/api/fixes/extras")
+    def fixes_extras(body: dict):
+        """'It's an extra' (decided 27 Oct, for Jiskefet's DVD compilations): files in a show folder that aren't episodes.
+        They stop being questions; Health offers to move them to the show's Extras folder. The show is checked again."""
+        client = need_tmdb()
+        paths = [str(p) for p in body.get("paths") or [] if str(p).startswith("TV/") and str(p).count("/") >= 2]
+        if not paths:
+            raise HTTPException(422, "Choose at least one file in a show's folder.")
+        with alone("edit"):
+            store.put("health.extras", sorted(set(store.get("health.extras") or []) | set(paths)))
+            for folder in sorted({p.split("/")[1] for p in paths}):
+                replan_show(client, folder)
+        return {"extras": len(paths)}
+
     @app.get("/api/fixes/last")
     def fixes_last():
         data, _ = store.snapshot("last-fixes")
@@ -2075,7 +2089,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             f = dist / path
             if path and f.is_file() and dist in f.resolve().parents:
                 return FileResponse(f)
-            return FileResponse(dist / "index.html")
+            # Asked again every time (its ETag makes that cheap): after an update the browser would otherwise keep the
+            # old page, which loads the old scripts, for a while (27 Oct). The scripts' names change with each build.
+            return FileResponse(dist / "index.html", headers={"Cache-Control": "no-cache"})
 
     store.migrate()  # every module has created its tables by now
     app.state.store, app.state.jobs, app.state.started = store, jobs, time.time()

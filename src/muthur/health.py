@@ -35,7 +35,26 @@ FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "sub
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 OLD_ART = re.compile(r"(?i)^(season(\d+|-all|-specials)-(poster|banner|fanart|landscape)|banner|landscape|clearart|logo|characterart)\.(jpg|png)$")
 SPECIAL_NAME = re.compile(r"(?i)\bspecial\b")
+# 'Fun Run (2)', 'The Office S04E02 - Fun Run (2) - (2007) - SD', 'London Part 1', 'pt.2'; one digit, never a year
+PART = re.compile(r"(?i)\((\d)\)|\bpart\s*(\d)\b|\bpt\.?\s*(\d)\b")
+FILLER = {"the", "a", "an", "and", "of", "to", "in"}  # words a title may leave out ('Manager and Salesman')
 GENERIC_TITLE = re.compile(r"(?i)^(episode|ep|part|chapter|aflevering|deel|afl)\.?\s*\d+$")  # says nothing about the show
+
+
+def part_title(title: str, part: int) -> str:
+    """A part's title: 'Fun Run (Part 2)'. When TMDB's title names the parts itself ('Career Day (1) - Career Day (2)',
+    Abbott Elementary), that part's own: 'Career Day (Part 2)'."""
+    pieces = re.split(r"\s+[-–/&]\s+|;\s*", title)
+    if len(pieces) >= part and (m := PART.search(pieces[part - 1])) and int(next(g for g in m.groups() if g)) == part:
+        title = _bare(PART.sub("", pieces[part - 1]))
+    return f"{title} (Part {part})"
+
+
+def _within(words: list[str], title: list[str]) -> bool:
+    """These words, in this order, as whole words in the title: 'election' in 'election day', never 'episode 2' in
+    'episode 24'."""
+    n = len(words)
+    return bool(n) and any(title[i:i + n] == words for i in range(len(title) - n + 1))
 
 
 class Health:
@@ -83,8 +102,12 @@ class Health:
             fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": why})
         self._subtitles_of("TV", folder, fixes)
         imdb_id, tmdb_id = self.scores.show_ids(folder)
-        eps = [e for e in show["episodes"] if not e.get("extra")]  # interviews, openings...: not episodes, not questions
-        for e in show["episodes"]:  # extras outside an extras folder go to the show's Extras folder (decided 26 Oct)
+        # Interviews, openings...: not episodes, not questions; and what the reader called an extra (27 Oct: Jiskefet's DVD
+        # compilations).
+        named = set(self.store.get("health.extras") or [])
+        episodes = [{**e, "extra": True} if f"TV/{folder}/{e['file']}" in named else e for e in show["episodes"]]
+        eps = [e for e in episodes if not e.get("extra")]
+        for e in episodes:  # extras outside an extras folder go to the show's Extras folder (decided 26 Oct)
             if e.get("extra") and not any(EXTRAS_DIR.match(d) for d in e["file"].split("/")[:-1]):
                 name = e["file"].rsplit("/", 1)[-1]
                 fixes["extras"].append({"path": f"TV/{folder}/{e['file']}", "to": f"Extras/{name}", "label": f"{folder}: {name}"})
@@ -130,32 +153,40 @@ class Health:
         ask = {"tmdb": tmdb_id, "show": title}  # a question about an episode names its show, so it can be answered there
         trusted = set(self.store.get("health.trusted") or [])  # "the number is right": the reader's word over muthur's doubt
         titles: dict[int, dict[int, str | None]] = {}
-        mapped = self.show_order(folder)  # another TMDB order the reader chose: the library is read by it
+        # Another TMDB order the reader chose: the library is read by it, in the seasons it fits (26 Oct: a chosen order
+        # made seasons that match TMDB's own numbering title by title into questions, and its specials, which the order
+        # doesn't have, too). Its other seasons are read like any show's.
+        mapped = self._order_seasons(folder, numbered, self.show_order(folder), tmdb_id)
+        ordered = {s for s, _ in mapped} if mapped else set()
 
         def season(s: int) -> dict[int, str | None]:
             if s not in titles:
-                titles[s] = ({e: x.get("name") for (ss, e), x in mapped.items() if ss == s} if mapped is not None else
+                titles[s] = ({e: x.get("name") for (ss, e), x in mapped.items() if ss == s} if mapped and s in ordered else
                              {x["episode_number"]: x.get("name") for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])})
             return titles[s]
 
-        # Episodes muthur places itself, where certain (26 Oct): file -> (TMDB season, episode, title). Not when the reader
-        # chose another order (that order decides).
+        # Episodes muthur places itself, where certain (26 Oct): file -> (TMDB season, episode, title). Not in the seasons
+        # a chosen order rules (that order decides).
         self._sized: set[int] = set()  # library seasons the seasons' sizes explain (_place)
-        placed = {} if mapped is not None else self._place(folder, eps, numbered, counts, season)
+        placed = self._place(folder, [e for e in eps if not (e in numbered and e["season"] in ordered)],
+                             [e for e in numbered if e["season"] not in ordered], counts, season)
+        guesses = self._guesses(folder, [e for e in eps if e not in numbered and e["file"] not in placed], numbered, placed, season)
         for e in eps:
             if e in numbered or e["file"] in placed:
                 continue
-            manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask, "noNumber": True,
-                                      "why": "The episode number in the name is damaged or missing."})
+            hint = guesses.get(e["file"])
+            manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask, "noNumber": True, **({"suggest": hint} if hint else {}),
+                                      "why": "The episode number in the name is damaged or missing." + (f" {hint['why']}" if hint else "")})
         for e in eps:  # unnumbered, but its title is one TMDB episode's: an NFO, then the library's name
             if e in numbered or e["file"] not in placed:
                 continue
             s, n, t = placed[e["file"]]
+            t = part_title(t, self._parts[e["file"]]) if e["file"] in self._parts else t
             stem = f"TV/{folder}/{e['file'].rsplit('.', 1)[0]}"
             if not e["nfo"]:
                 fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id, "season": s,
                                               "episode": n, "show": title, "imdbShow": imdb_id, "thumb": None if e["thumb"] else stem + "-thumb.jpg",
-                                              "label": f"{title} S{s:02d}E{n:02d}"})
+                                              "label": f"{title} S{s:02d}E{n:02d}", **({"title": t} if e["file"] in self._parts else {})})
             new = renaming.new_name(folder, e["file"], s, [n], t)
             fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": f"{title} S{s:02d}E{n:02d}",
                                      "why": f"{new} (its title is TMDB's S{s:02d}E{n:02d})"})
@@ -169,7 +200,7 @@ class Health:
         for e in numbered:
             highest[e["season"]] = max(highest.get(e["season"], 0), max(e["episodes"]))
         # The season's own list is fresher than the show's episode counts, which TMDB caches longer.
-        differs = {s for s, top in highest.items() if top > (len(season(s)) if mapped is not None else max(counts.get(s, 0), len(season(s))))}
+        differs = {s for s, top in highest.items() if top > (len(season(s)) if s in ordered else max(counts.get(s, 0), len(season(s))))}
         for s in sorted(differs):
             if s in self._sized or all(e["file"] in placed for e in numbered if e["season"] == s and max(e["episodes"]) > len(season(s))):
                 continue  # muthur placed every episode beyond TMDB's count itself, or the specials beyond it are asked alone
@@ -179,16 +210,19 @@ class Health:
         for e in numbered:
             if e["file"] in placed:  # another number at TMDB, certain by its title or by the seasons' sizes
                 ps, pn, pt = placed[e["file"]]
+                part = self._parts.get(e["file"])
+                pt = part_title(pt, part) if part else pt  # one episode in two files: both TMDB's number, as its parts
                 stem = f"TV/{folder}/{e['file'].rsplit('.', 1)[0]}"
-                label = f"{title} S{ps:02d}E{pn:02d}"
+                label = f"{title} S{ps:02d}E{pn:02d}{f' part {part}' if part else ''}"
                 # Its NFO, when there is one, still says the old number: it is written again (the old one kept), so Kodi
-                # doesn't show it under the number it had. Once it says TMDB's number, only the rename is left.
+                # doesn't show it under the number it had. Once it says TMDB's number (and part), only the rename is left.
                 info = self.index.nfo(self._full(stem + ".nfo")) if e["nfo"] else None
-                if not (info and (info.season, info.episode) == (ps, pn)):
+                if not (info and (info.season, info.episode) == (ps, pn) and len(e["episodes"]) == 1
+                        and (not part or f"(Part {part})" in (info.title or ""))):  # a double-episode NFO becomes one episode's
                     fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
                                                   "season": ps, "episode": pn, "show": title, "imdbShow": imdb_id,
                                                   "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label,
-                                                  **({"replace": True} if e["nfo"] else {})})
+                                                  **({"replace": True} if e["nfo"] else {}), **({"title": pt} if part else {})})
                 new = renaming.new_name(folder, e["file"], ps, [pn], pt)
                 if new != e["file"].rsplit("/", 1)[-1]:
                     fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": label,
@@ -228,65 +262,188 @@ class Health:
                     continue
                 fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
                                               "season": s, "episode": n, "show": title, "imdbShow": imdb_id,
-                                              **({"aired": list(aired(s, n))} if mapped is not None else {}),
+                                              **({"aired": list(aired(s, n))} if s in ordered else {}),
                                               "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label})
             elif score := self.imdb.episode(imdb_id, *aired(s, n), counts.get(aired(s, n)[0])):
                 fixes["imdb-scores"].append({"path": stem + ".nfo", "score": list(score), "label": label})
+
+    def _guesses(self, folder: str, broken: list[dict], numbered: list[dict], placed: dict, season) -> dict[str, dict]:
+        """Suggested numbers for files whose number is broken (decided 27 Oct: the reader confirms each, after playing one;
+        nothing is renamed by a guess). 'Part3' in a name is episode 3 (The Kennedys' 'Part3 S-1E-1'). Otherwise, per
+        season, when its broken files are exactly as many as the episodes no file holds, they fill those in name order
+        (Doc Martin's 'S04E204'..'S04E210' are E02..E08). Not when their own NFOs claim one number twice (Big Bang's six
+        'S10E-1', all 'S10E03' inside): then nothing about them is certain."""
+        held = {(e["season"], n) for e in numbered if e["file"] not in placed for n in e["episodes"]} | {v[:2] for v in placed.values()}
+        out: dict[str, dict] = {}
+        by_season: dict[int, list[dict]] = {}
+        for e in broken:
+            s = e["season"] if e["season"] is not None else next((int(m.group(1)) for d in e["file"].split("/")[:-1]
+                                                                   if (m := re.match(r"(?i)season\s*(\d+)$", d))), None)
+            if s is None or not season(s):
+                continue
+            if (m := re.search(r"(?i)\bpart\s*(\d+)", e["file"].rsplit("/", 1)[-1])) and int(m.group(1)) in season(s) and (s, int(m.group(1))) not in held:
+                n = int(m.group(1))
+                out[e["file"]] = {"season": s, "episode": n, "title": season(s)[n], "why": f"Its name says part {n}: suggested S{s:02d}E{n:02d}."}
+                continue
+            by_season.setdefault(s, []).append(e)
+        def says(e: dict) -> tuple[int, int] | None:
+            """The number in another tool's NFO beside it (the index keeps the name's numbers when it has any)."""
+            info = self.index.nfo(self._full(f"TV/{folder}/{e['file'].rsplit('.', 1)[0]}.nfo")) if e.get("nfo") and not e.get("muthur") else None
+            return (info.season, info.episode) if info and info.season is not None and info.episode is not None else None
+
+        for s, files in by_season.items():
+            gaps = sorted(n for n in season(s) if n > 0 and (s, n) not in held)
+            claims = [c for x in files if (c := says(x))]
+            if len(files) != len(gaps) or len(claims) != len(set(claims)):
+                continue
+            # The number in another tool's NFO first, where it is one of the gaps (27 Oct: Art of Japanese Life's
+            # 'S01E-1' has Nature's NFO, S01E01); the rest fill the gaps left, in name order.
+            rest = []
+            for e in files:
+                n = c[1] if (c := says(e)) and c[0] == s else 0
+                if n in gaps:
+                    gaps.remove(n)
+                    out[e["file"]] = {"season": s, "episode": n, "title": season(s)[n], "why": f"Its NFO says S{s:02d}E{n:02d}, which no file has."}
+                else:
+                    rest.append(e)
+            rest.sort(key=lambda x: [int(d) if d.isdigit() else d.lower() for d in re.split(r"(\d+)", x["file"])])
+            for e, n in zip(rest, gaps, strict=True):
+                out[e["file"]] = {"season": s, "episode": n, "title": season(s)[n],
+                                  "why": f"Season {s} lacks {len(gaps)} episodes and has {len(rest)} broken names; in name order this is "
+                                         f"S{s:02d}E{n:02d}. Play it to check."}
+        return out
 
     def _place(self, folder: str, eps: list[dict], numbered: list[dict], counts: dict[int, int], season) -> dict[str, tuple[int, int, str]]:
         """Episodes whose TMDB number muthur can be certain of although the library's differs or is missing (26 Oct):
         file -> (season, episode, TMDB's title). Only what needs another number than the library's is returned.
 
         1. By title: the title in its name is one TMDB episode's title only, anywhere in the show, specials too ("Blackadder
-           Rides Again" is S00E17; Fate Zero's "1x14 False Start" is S02E01). Per library season all or nothing: when two
-           files claim one TMDB episode (The Office's "Fun Run (1)" and "(2)"), none of that season is placed, or Kodi
-           would get two files with one number.
+           Rides Again" is S00E17; Fate Zero's "1x14 False Start" is S02E01). Without a title in the name, the title in an
+           NFO another tool wrote (Sonarr's, for Parks and Recreation). Per library season all or nothing: when two files
+           claim one TMDB episode, none of that season is placed, or Kodi would get two files with one number; unless
+           they are its parts, "Fun Run (1)" and "(2)" (decided 26 Oct: both get TMDB's number, as Part 1 and Part 2).
+           A special kept in a season (Alone's "S03E00 - Making the Cut") is TMDB's special with that season's number in
+           its title ("Making the Cut: Season 3").
         2. By the seasons' sizes: a library season numbered 1..N where N is exactly its TMDB season plus the next ones,
-           which the library doesn't have (Fate Zero: 25 = 13 + 12), and no title in a name says otherwise."""
+           which the library doesn't have (Fate Zero: 25 = 13 + 12), and no title in a name says otherwise.
+
+        self._parts: file -> its part number, for the files placed as parts of one episode."""
         everything: list[tuple[int, int, str]] = [(s, n, t or "") for s in sorted(counts) for n, t in season(s).items() if t]
         out: dict[str, tuple[int, int, str]] = {}
         held = {(e["season"], n): e["file"] for e in numbered for n in e["episodes"]}  # numbers files have already
+        self._parts = {}
+        show_name = parse_show_folder(folder).title or folder
 
-        def by_title(named: str | None) -> tuple[int, int, str] | None:
-            if not named or len(_bare(named)) < 4:
-                return None
+        def by_title(named: str | None, here: int | None = None) -> tuple[int, int, str] | None:
+            """here: the file's library season; among titles found in several seasons, the one in its own wins."""
+            if not named or len(_bare(named)) < 4 or GENERIC_TITLE.match(_bare(named)):
+                return None  # 'Episode 2' says nothing (27 Oct: it was found in Versailles' special 'Episode 24')
             hits = [x for x in everything if similarity(_bare(named), _bare(x[2])) >= SAME_EPISODE]
+            if len(hits) > 1:  # the very title wins over near ones (27 Oct: Parks' 'Flu Season 2' isn't 'Flu Season')
+                hits = [x for x in hits if normalize(named) == normalize(x[2])] or hits
+            mine = normalize(_bare(named)).split()
+            if not hits:  # a shorter name for one TMDB title only, in whole words and at least half of them (26 Oct:
+                # 'Election' is 'Election Day'; 27 Oct: Avatar's 'Aang' isn't 'Sozin's Comet - Avatar Aang (4)')
+                hits = [x for x in everything if _within(mine, t := normalize(_bare(x[2])).split()) and 2 * len(mine) >= len(t)]
+            if not hits and len(words := set(mine) - FILLER) >= 2:
+                # its words, all in one TMDB title (27 Oct: The Office's 'Manager and Salesman' is 'The Manager and the
+                # Salesman')
+                hits = [x for x in everything if words <= set(normalize(x[2]).split())]
+            if len(hits) > 1 and here is not None and len(same := [x for x in hits if x[0] == here]) == 1:
+                hits = same  # 27 Oct: Parks has a 'Galentine's Day' in several seasons
+            return hits[0] if len(hits) == 1 else None
+
+        def title_of(e: dict) -> str | None:
+            p = self.store.parsed("episode", [folder, *e["file"].split("/")])
+            named = p.episode_title if e in numbered else (p.episode_title or p.title or os.path.splitext(e["file"].rsplit("/", 1)[-1])[0])
+            return named or (e.get("title") if e.get("nfo") and not e.get("muthur") else None)
+
+        def part_of(e: dict, hit: tuple[int, int, str] | None = None) -> int | None:
+            # The title, or the name: the parser drops '(2)' from 'Fun Run (2)'.
+            if m := PART.search(title_of(e) or "") or PART.search(os.path.splitext(e["file"].rsplit("/", 1)[-1])[0]):
+                return int(next(g for g in m.groups() if g))
+            # 'Galentine's Day 2' (Sonarr's NFO, 27 Oct) of TMDB's one 'Galentine's Day'; never 'Flu Season 2', TMDB's own title
+            t = title_of(e) or ""
+            if hit and (m := re.match(r"^(.*\S)\s+(\d)$", t)) and normalize(t) != normalize(hit[2]) \
+                    and normalize(m.group(1)) == normalize(hit[2]) and not GENERIC_TITLE.match(t):
+                return int(m.group(2))
+            return None
+
+        def parts_of(files: list[dict], hit: tuple[int, int, str]) -> dict[str, int] | None:
+            """The files' part numbers when they are the parts of one TMDB episode, each its own; one without a number
+            beside numbered ones (2, 3…) is part 1. None when they aren't parts."""
+            ks = [part_of(e, hit) for e in files]
+            if ks.count(None) == 1 and all(k >= 2 for k in ks if k is not None):
+                ks = [1 if k is None else k for k in ks]
+            return {e["file"]: k for e, k in zip(files, ks, strict=True) if k} if None not in ks and len(set(ks)) == len(ks) else None
+
+        def special_of(e: dict) -> tuple[int, int, str] | None:
+            s, n = e["season"], e["episodes"][0]
+            if not s or not (n == 0 or n > len(season(s))) or 0 not in counts:
+                return None
+            core = re.sub(rf"(?i)^{re.escape(show_name)}\W*", "", title_of(e) or "")
+            here = re.compile(rf"(?i)\W*\bseason\s*{s}\b\W*")
+            hits = [(0, k, t or "") for k, t in season(0).items() if t and here.search(t) and same_title(core, here.sub(" ", t).strip())]
             return hits[0] if len(hits) == 1 else None
 
         # 1. by title, per library season (unnumbered files form one group of their own)
         groups: dict[int | None, list[dict]] = {}
+        right: dict[tuple[int, int], dict] = {}  # files already where TMDB has them: (season, episode) -> the file
         for e in eps:
-            if e["damaged"] or (e in numbered and e["season"] in counts and e["episodes"][0] in season(e["season"])
-                                and same_title(self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title or "",
-                                               season(e["season"])[e["episodes"][0]] or "")):
-                continue  # a damaged name, or already right where TMDB has it
+            if e in numbered and len(e["episodes"]) == 1 and e["season"] in counts and e["episodes"][0] in season(e["season"]) \
+                    and not part_of(e) and same_title(title_of(e) or "", season(e["season"])[e["episodes"][0]] or ""):
+                right[(e["season"], e["episodes"][0])] = e
+                continue  # already right where TMDB has it
+            # A damaged number goes with the unnumbered files: its title can still say which episode it is.
             groups.setdefault(e["season"] if e in numbered else None, []).append(e)
+        keep: dict[str, tuple[int, int, str]] = {}
+        split: set[tuple[int, int]] = set()  # TMDB episodes whose parts are in two or more files
+        partno: dict[str, int] = {}  # file -> its part of such an episode
         for s, group in groups.items():
             found = {}
             for e in group:
-                p = self.store.parsed("episode", [folder, *e["file"].split("/")])
-                hit = by_title(p.episode_title if e in numbered else (p.episode_title or p.title or os.path.splitext(e["file"].rsplit("/", 1)[-1])[0]))
-                if hit:
+                if hit := by_title(title_of(e), s) or (special_of(e) if e in numbered else None):
                     found[e["file"]] = hit
-            claimed = [h[:2] for h in found.values()]
-            if s is not None and len(set(claimed)) < len(claimed):
-                continue  # two files, one TMDB episode: not certain for this season
-            keep = {f: hit for f, hit in found.items() if not (s is None and claimed.count(hit[:2]) > 1)}
-            # A number another file holds is free only when that file moves too, in the same run: a season shifted by one
-            # (The Office) is renumbered as a whole, never leaving two files with one number. Repeated until nothing changes.
-            changed = True
-            while changed:
-                changed = False
-                for f, hit in list(keep.items()):
-                    owner = held.get(hit[:2])
-                    if owner and owner != f and owner not in keep:
-                        del keep[f]
-                        changed = True
-            for f, hit in keep.items():
-                e = next(x for x in group if x["file"] == f)
-                if e in numbered and (e["season"], e["episodes"][0]) == hit[:2]:
-                    continue
-                out[f] = hit
+            by_hit: dict[tuple[int, int], list[str]] = {}
+            for f, h in found.items():
+                by_hit.setdefault(h[:2], []).append(f)
+            parts: dict[tuple[int, int], dict[str, int]] = {}
+            for number, fs in by_hit.items():
+                # The file already at that number may be the first part (27 Oct: 'Galentine's Day' beside '... Day 2').
+                mates = [next(x for x in group if x["file"] == f) for f in fs] + ([right[number]] if number in right else [])
+                if len(mates) > 1 and (p := parts_of(mates, found[fs[0]])):
+                    parts[number] = p
+                    if number in right:
+                        found[right[number]["file"]] = found[fs[0]]
+                        group.append(right[number])
+            if s is not None and any(len(fs) > 1 and number not in parts for number, fs in by_hit.items()):
+                continue  # two files, one TMDB episode, and not as its parts: not certain for this season
+            split |= set(parts)
+            for p in parts.values():
+                partno.update(p)
+            keep.update({f: hit for f, hit in found.items() if not (s is None and len(by_hit[hit[:2]]) > 1 and hit[:2] not in parts)})
+        # Two files of different library seasons claiming one TMDB episode: neither is certain.
+        twice = {h[:2] for h in keep.values() if [x[:2] for x in keep.values()].count(h[:2]) > 1 and h[:2] not in split}
+        keep = {f: hit for f, hit in keep.items() if hit[:2] not in twice}
+        # A number another file holds is free only when that file moves too, in the same run, from any library season
+        # (26 Oct: Superstore's special 'Olympics' is TMDB's S02E01, which 'Strike' leaves for S02E02): a season shifted by
+        # one (The Office) is renumbered as a whole, never leaving two files with one number. Repeated until nothing changes.
+        changed = True
+        while changed:
+            changed = False
+            for f, hit in list(keep.items()):
+                owner = held.get(hit[:2])
+                if owner and owner != f and owner not in keep:
+                    del keep[f]
+                    changed = True
+        for f, hit in keep.items():
+            e = next(x for x in eps if x["file"] == f)
+            if hit[:2] in split:
+                self._parts[f] = partno[f]  # placed even at its own number: its name and NFO say which part it is
+            elif e in numbered and (e["season"], e["episodes"][0]) == hit[:2] and len(e["episodes"]) == 1:
+                continue  # already there; a double-episode file of TMDB's one episode still gets its single number
+                # (27 Oct: Parks' 'S06E01E02' is TMDB's one 'London', S06E01, and S06E03 moves to S06E02)
+            out[f] = hit
         # 2. by the seasons' sizes
         for s in sorted({e["season"] for e in numbered}):
             mine = sorted(n for e in numbered if e["season"] == s for n in e["episodes"])
@@ -377,7 +534,7 @@ class Health:
             return sum(self._fits(f, listing, anywhere) for f in titled) / len(titled)
 
         if len(titled) < 6:
-            return self._rematch_by_name(folder, files, tmdb_id, old_details, old_name)
+            return self._rematch_by_name(folder, files, tmdb_id, old_details, old_name, len(eps))
         seasons = sorted({f[0]["season"] for f in files})
         if share(self._listing(tmdb_id, seasons), False) >= 0.3:
             return None  # the usual case, decided on the seasons Health reads anyway
@@ -431,14 +588,24 @@ class Health:
                        f"{round(share(old, True) * len(titled))} are {old_name}'s",
                 "episodes": mine, "strays": strays}
 
-    def _rematch_by_name(self, folder: str, files: list[tuple], tmdb_id: int, old_details: dict, old_name: str) -> dict | None:
+    def _rematch_by_name(self, folder: str, files: list[tuple], tmdb_id: int, old_details: dict, old_name: str, videos: int) -> dict | None:
+        """Without episode titles: the match contradicts the folder, and TMDB places the folder's name with certainty on
+        another show, as for a download. A contradiction is a name nothing like the match's (Magi / 'MaXi'), a year in
+        the folder's name that isn't the match's (26 Oct: 'Shogun (2024)' matched to the 1980 mini-series, 'The Kennedys
+        (2011)' to a 2015 sitcom), or more episodes than the match has at all ('Yellowstone', 9 files of the 2018 drama,
+        matched to a 2009 documentary of 3)."""
         p = parse_show_folder(folder)
-        if not p.title or not files:
+        if not p.title or not videos:
             return None
         names = [old_details.get("name") or "", old_details.get("original_name") or "",
                  *[a.get("title") or "" for a in (old_details.get("alternative_titles") or {}).get("results", [])]]
-        if best_similarity(p.title, [n for n in names if n]) >= 0.6:
-            return None  # the folder is called (nearly) what it is matched to
+        first = (old_details.get("first_air_date") or "")[:4]
+        regular = sum(s.get("episode_count") or 0 for s in old_details.get("seasons", []) if s.get("season_number"))
+        unlike = best_similarity(p.title, [n for n in names if n]) < 0.6
+        other_year = bool(p.year and first.isdigit() and abs(p.year - int(first)) > 1)
+        too_many = bool(regular and videos > regular)  # every video, broken names too (The Kennedys' "S-1E-1")
+        if not (unlike or other_year or too_many):
+            return None  # nothing says the match is wrong
         wanted = {(f[0]["season"], n) for f in files for n in f[0]["episodes"]}
         m = identify_show(self.tmdb, p.title, p.year, p.country, wanted)
         if m.status != "auto" or not m.best or m.best.tmdb_id == tmdb_id:
@@ -448,7 +615,10 @@ class Health:
         mine = [[f[0]["file"], f[0]["season"], f[0]["episodes"][0]] for f in files if (f[0]["season"], f[0]["episodes"][0]) in listing]
         return {"path": f"TV/{folder}", "from": tmdb_id, "to": new_id, "show": m.best.title,
                 "label": f"{folder}: {m.best.title}{f' ({m.best.year})' if m.best.year else ''}, not {old_name}",
-                "why": f"the folder's name is {m.best.title}'s, by its name, year and episodes; nothing like {old_name}",
+                "why": ("the folder's name is nothing like " + old_name if unlike else
+                        f"the folder says {p.year}; {old_name} began in {first}" if other_year else
+                        f"the folder holds {videos} episodes; {old_name} has {regular}")
+                       + f". TMDB places it on {m.best.title} with certainty, by its name, year and episodes",
                 "episodes": mine, "strays": []}
 
     def order_map(self, group_id: str) -> dict[tuple[int, int], dict]:
@@ -457,11 +627,46 @@ class Health:
         data = self.tmdb.get(f"/tv/episode_group/{group_id}", max_age=30 * 86400) or {}
         out: dict[tuple[int, int], dict] = {}
         for g in data.get("groups", []):
-            m = re.search(r"(?i)season\s*(\d+)", g.get("name") or "")
-            s = int(m.group(1)) if m else 0 if re.search(r"(?i)special", g.get("name") or "") else int(g.get("order") or 0)
+            name = g.get("name") or ""
+            if re.search(r"(?i)featurette|extra|bonus|behind the scenes|deleted", name):
+                continue  # not a season (26 Oct: The Thick of It's DVD order has 'Featurettes', which landed on the specials)
+            m = re.search(r"(?i)(?:season|series|seizoen|staffel|saison)\s*(\d+)", name)  # 'Series 3' as the British say
+            s = int(m.group(1)) if m else 0 if re.search(r"(?i)special", name) else int(g.get("order") or 0)
+            if s == 0 and not re.search(r"(?i)special", name):
+                continue  # a group placed first without a season or 'specials' in its name: not the specials
             for ep in g.get("episodes", []):
                 out[(s, int(ep.get("order") or 0) + 1)] = ep
         return out
+
+    def _order_seasons(self, folder: str, numbered: list[dict], order: dict | None, tmdb_id: int) -> dict | None:
+        """The part of a chosen order that rules: the library seasons it fits better than TMDB's own numbering. Per
+        season, the files count whose title is the order's episode at their number, or anywhere in TMDB's own season
+        (muthur places those itself); without titles, the numbering
+        that holds the season's highest number wins, TMDB's own on a tie. A season the order doesn't have (specials,
+        often) is never the order's."""
+        if not order:
+            return None
+        keep: set[int] = set()
+        for s in sorted({e["season"] for e in numbered}):
+            mine = {e: x.get("name") or "" for (ss, e), x in order.items() if ss == s}
+            if not mine:
+                continue
+            own = {x["episode_number"]: x.get("name") or "" for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])}
+            files = [e for e in numbered if e["season"] == s]
+            fit = [0, 0]
+            for e in files:
+                named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
+                if named and len(_bare(named)) >= 4:
+                    fit[0] += same_title(named, mine.get(e["episodes"][0], ""))
+                    # TMDB's own: anywhere in the season, since muthur places a title at its number itself (26 Oct: The
+                    # Office's BluRay order seemed to fit season 4 only through its two-parters' first halves)
+                    fit[1] += any(same_title(named, t) for t in own.values())
+            if fit[0] == fit[1]:  # no titles, or as many either way: which numbering holds the season
+                top = max(n for e in files for n in e["episodes"])
+                fit = [int(top <= len(mine)), int(top <= len(own))]
+            if fit[0] > fit[1]:
+                keep.add(s)
+        return {k: v for k, v in order.items() if k[0] in keep} or None
 
     def show_order(self, folder: str) -> dict[tuple[int, int], dict] | None:
         """The order the reader chose for this show, if any (Health's 'Use another order')."""
@@ -730,7 +935,7 @@ class Health:
         if not ep:
             raise ValueError("TMDB didn't return the episode")
         score = self.imdb.episode(x["imdbShow"], ts, te, len(listed))
-        data = nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], number=x["episode"], imdb=score)
+        data = nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], number=x["episode"], title=x.get("title"), imdb=score)
         if x.get("replace") and os.path.isfile(self._full(x["path"])):
             # A renumbered episode: its NFO still says the old number. Replaced, with a copy of the old one kept.
             self.journal.replace(run, x["path"], self._full(x["path"]), data, self.backups)

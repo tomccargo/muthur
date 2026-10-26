@@ -69,7 +69,20 @@ function EpisodeAnswers({ q, kind, onDone, leave }: { q: Question; kind: string;
           <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'orders'} onClick={loadOrders}
             title="TMDB keeps other orders for many shows (DVD, production): one may match your files">Use another order</button>
         )}
-        {kind === 'numbers' && q.tmdb && !picker && <button type="button" className="btn btn-secondary btn-sm" onClick={() => load(season)}>Which episode is it?</button>}
+        {kind === 'numbers' && q.suggest && !picker && (
+          <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'suggest'}
+            title="muthur's suggestion from the name (see above); play the file first if you're not sure"
+            onClick={() => run('suggest', () => api.episodeRename(q.path, { season: q.suggest!.season, episode: q.suggest!.episode }),
+              `Renaming to S${String(q.suggest!.season).padStart(2, '0')}E${String(q.suggest!.episode).padStart(2, '0')}: the bar at the top shows it.`)}>
+            It’s S{String(q.suggest.season).padStart(2, '0')}E{String(q.suggest.episode).padStart(2, '0')}{q.suggest.title ? ` “${q.suggest.title}”` : ''}
+          </button>
+        )}
+        {kind === 'numbers' && q.tmdb && !picker && <button type="button" className="btn btn-secondary btn-sm" onClick={() => load(season)}>{q.suggest ? 'Another episode' : 'Which episode is it?'}</button>}
+        {kind === 'numbers' && unnumbered(q) && (
+          <button type="button" className="btn btn-ghost btn-sm" aria-busy={busy === 'extra'}
+            title="Not an episode (a compilation, a bonus): it stops being a question, and Health offers to move it to the show's Extras folder"
+            onClick={() => run('extra', () => api.markExtras([q.path]), `${q.path.split('/').pop()} is an extra now.`)}>It’s an extra</button>
+        )}
         {kind === 'numbers' && !q.noNumber && (
           <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'trust'}
             title="Its NFO and score are written by this number at the next fix; nothing is renamed by this"
@@ -122,6 +135,9 @@ function EpisodeAnswers({ q, kind, onDone, leave }: { q: Question; kind: string;
 }
 // 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
 const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
+// A file without any episode number in its name ('Jiskefet - Een Pak.m4v'): it may be an extra. A broken number
+// ('S10E-1') is an episode whose number is lost, never offered as an extra (27 Oct).
+const unnumbered = (q: Question) => !!q.noNumber && !/s\d+\s*e-?\d|\d+x\d+/i.test(q.path.split('/').pop() ?? '');
 
 const QUESTIONS: Record<string, string> = {
   seasons: 'Seasons numbered differently from TMDB',
@@ -347,7 +363,17 @@ export function HealthPage({ status, refresh }: StatusHook) {
                     {!showLeft && showOf(q) && showOf(q) !== showOf(v!.items[i - 1]) && v!.items.filter((x) => showOf(x) === showOf(q)).length > 1 && (
                       <span className="actions" style={{ justifyContent: 'space-between' }}>
                         <strong>{showOf(q)!.slice(3)}</strong>
-                        <button type="button" className="btn-link small" onClick={() => leave({ under: showOf(q)! })}>Leave all of {showOf(q)!.slice(3)} as is</button>
+                        <span className="actions">
+                          {k === 'numbers' && (() => {
+                            const loose = v!.items.filter((x) => showOf(x) === showOf(q) && unnumbered(x));
+                            return loose.length > 1 && (
+                              <button type="button" className="btn-link small" title="Not episodes (compilations, bonus material): they move to the show's Extras folder"
+                                onClick={() => api.markExtras(loose.map((x) => x.path)).then(() => answered(`${loose.length} files of ${showOf(q)!.slice(3)} are extras now.`))
+                                  .catch((e: Error) => answered(e.message))}>All {loose.length} without a number are extras</button>
+                            );
+                          })()}
+                          <button type="button" className="btn-link small" onClick={() => leave({ under: showOf(q)! })}>Leave all of {showOf(q)!.slice(3)} as is</button>
+                        </span>
                       </span>
                     )}
                     <span className="mono small" style={{ wordBreak: 'break-all' }}>{libraryPath(q.path)}{q.season != null ? ` · season ${q.season}` : ''}</span>

@@ -121,6 +121,44 @@ def test_a_spin_off_inside_the_folder_is_no_reason(env):  # noqa: F811
     assert not plan["fixes"]["show-rematch"]  # 'Spin Off' isn't called 'Twin'; 'Twin' (US) explains 6 of 16
 
 
+def test_a_folder_of_another_year_is_rematched(env):  # noqa: F811
+    """26 Oct: 'Shogun (2024)' was matched to the 1980 mini-series: the folder's year isn't the match's."""
+    tmp, health, _ = env
+    health.tmdb = health.scores.tmdb = TwinTmdb()
+    show = tmp / "TV" / "Twin (2011)"
+    write(show / "tvshow.nfo", '<tvshow><title>Twin</title><uniqueid type="tmdb">20</uniqueid></tvshow>')  # the 2008 one
+    for k in range(1, 9):
+        write(show / "Season 1" / f"twin.s01e{k:02d}.1080p.web.mkv")  # no titles
+    plan = health.check(health.index.build())
+    fix = next(x for x in plan["fixes"]["show-rematch"] if x["path"] == "TV/Twin (2011)")
+    assert (fix["from"], fix["to"]) == (20, 21) and "2011" in fix["why"] and len(fix["episodes"]) == 8
+
+
+class SmallTmdb(TwinTmdb):
+    """The UK 'Twin' (20) is a documentary of three."""
+
+    def tv(self, i):
+        d = super().tv(i)
+        return {**d, "seasons": [{"season_number": 1, "episode_count": 3}]} if i == 20 else d
+
+    def tv_season(self, i, n):
+        d = super().tv_season(i, n)
+        return {"episodes": d["episodes"][:3]} if i == 20 else d
+
+
+def test_a_folder_with_more_episodes_than_its_match_is_rematched(env):  # noqa: F811
+    """26 Oct: 'Yellowstone' (9 files of the 2018 drama) was matched to a 2009 documentary of 3 episodes."""
+    tmp, health, _ = env
+    health.tmdb = health.scores.tmdb = SmallTmdb()
+    show = tmp / "TV" / "Twin"
+    write(show / "tvshow.nfo", '<tvshow><title>Twin</title><uniqueid type="tmdb">20</uniqueid></tvshow>')
+    for k in range(1, 9):
+        write(show / "Season 1" / f"twin.us.s01e{k:02d}.1080p.bluray.mkv")
+    plan = health.check(health.index.build())
+    fix = next(x for x in plan["fixes"]["show-rematch"] if x["path"] == "TV/Twin")
+    assert (fix["from"], fix["to"]) == (20, 21) and "8 episodes" in fix["why"]
+
+
 def test_a_show_in_another_order_is_not_rematched(env):  # noqa: F811
     """Titles of the matched show at other numbers: its own episodes, numbered differently."""
     tmp, health, _ = env

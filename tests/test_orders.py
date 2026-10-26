@@ -30,3 +30,27 @@ def test_a_show_read_by_its_dvd_order(env):  # noqa: F811
     assert result["failed"] == []
     nfo = ET.parse(tmp / "TV" / "Some Show" / "Season 02" / "Some Show - S02E05 - Extra.nfo").getroot()
     assert (nfo.findtext("season"), nfo.findtext("episode"), nfo.findtext("title")) == ("2", "5", "Three")  # TMDB's S01E03
+
+
+def test_british_series_and_featurettes_in_an_order(env):  # noqa: F811
+    """26 Oct (The Thick of It's DVD order): 'Series 3' is season 3; 'Featurettes' (placed first) are no season."""
+    _, health, _ = env
+    group = {"groups": [
+        {"name": "Featurettes", "order": 0, "episodes": [{"season_number": 0, "episode_number": 9, "order": 0, "name": "Making of"}]},
+        {"name": "The Specials", "order": 2, "episodes": [{"season_number": 0, "episode_number": 1, "order": 0, "name": "Spinners"}]},
+        {"name": "Series 3", "order": 3, "episodes": [{"season_number": 3, "episode_number": 1, "order": 0, "name": "Ep"}]}]}
+    health.tmdb.get = lambda path, max_age=None, **p: group
+    assert {k: v["name"] for k, v in health.order_map("G2").items()} == {(0, 1): "Spinners", (3, 1): "Ep"}
+
+
+def test_an_order_rules_only_the_seasons_it_fits(env):  # noqa: F811
+    """26 Oct (Elfen Lied, Big Bang's specials): season 1's titles are TMDB's own at their numbers, and the order has no
+    specials, so both are read by TMDB's own numbering; only season 2 is the order's."""
+    tmp, health, _ = env
+    (tmp / "TV" / "Some Show" / "Specials").mkdir()
+    (tmp / "TV" / "Some Show" / "Specials" / "Some Show - S00E01 - Pilot.mkv").write_text("x")
+    health.tmdb.get = lambda path, max_age=None, **p: DVD if path == "/tv/episode_group/G1" else {}
+    lib = health.index.build()
+    numbered = [e for s in lib["shows"] if s["folder"] == "Some Show" for e in s["episodes"] if e["season"] is not None and e["episodes"] and not e["damaged"]]
+    ruled = health._order_seasons("Some Show", numbered, health.order_map("G1"), 7)
+    assert {s for s, _ in ruled} == {2}
