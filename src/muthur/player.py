@@ -297,7 +297,9 @@ def to_extract(full: str, tracks: list[dict]) -> list[tuple[dict, str]]:
 
 def extract(full: str, chosen: list[tuple[dict, str]], tmp: str, progress=None) -> dict[str, bytes]:
     """Copy the chosen tracks out as .srt in one read of the file (ffmpeg converts the subtitle text only; the video is
-    untouched). progress(seconds read): as ffmpeg goes through the film. name -> contents."""
+    untouched). progress(share read, 0..1): how much of the file ffmpeg has read. Not the time of the last subtitle
+    written: a track with few lines (forced subtitles) lags far behind it (stuck at 9% on 26 Oct). name -> contents."""
+    size = os.path.getsize(full) or 1
     os.makedirs(tmp, exist_ok=True)
     args = ["ffmpeg", "-v", "error", "-nostdin", "-y", "-progress", "pipe:1", "-i", full]
     temps = []
@@ -305,9 +307,16 @@ def extract(full: str, chosen: list[tuple[dict, str]], tmp: str, progress=None) 
         temps.append(os.path.join(tmp, f"part{i}.srt"))
         args += ["-map", f"0:{t['index']}", "-c:s", "srt", "-f", "srt", temps[-1]]
     with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
-        for line in proc.stdout or []:  # 'out_time_us=123456789' about twice a second
-            if line.startswith("out_time_us=") and progress and line[12:].strip().isdigit():
-                progress(int(line[12:]) / 1e6)
+        io_file = f"/proc/{proc.pid}/io"  # Linux (the NAS): the bytes ffmpeg has read so far
+        for line in proc.stdout or []:  # a progress block about twice a second
+            if not progress or not line.startswith("progress="):
+                continue
+            try:
+                with open(io_file) as fh:
+                    read = next(int(x.split()[1]) for x in fh if x.startswith("rchar:"))
+                progress(min(read / size, 1.0))
+            except (OSError, StopIteration, ValueError):
+                pass  # no /proc here (a local copy on Windows): the bar keeps its busy stripe
         err = (proc.stderr.read() if proc.stderr else "").strip()
     if proc.returncode:
         raise ValueError(f"ffmpeg couldn't copy the subtitles out: {err[-200:] or proc.returncode}")

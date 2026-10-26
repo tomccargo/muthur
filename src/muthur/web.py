@@ -1102,11 +1102,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if not chosen:
                 job.result = "No subtitles to copy out."
                 return
-            length = int((play_facts.get(full) or {}).get("duration") or 0)
-            # done/total: seconds of the film read so far, so the player shows how far the copy is
-            job.begin(f"Copying {count(len(chosen), 'subtitle')} out of {os.path.basename(full)}", length)
+            # done/total: thousandths of the file read so far, so the player shows how far the copy is
+            job.begin(f"Copying {count(len(chosen), 'subtitle')} out of {os.path.basename(full)}", 1000)
             data = player.extract(full, chosen, os.path.join(cfg.config_dir, "tmp", "subtitles"),
-                                  progress=(lambda s: setattr(job, "done", min(int(s), length))) if length else None)
+                                  progress=lambda share: setattr(job, "done", int(share * 1000)))
             run = journal.start("subtitles")
             written = [name for name, body in data.items()
                        if journal.create(run, f"{folder}/{name}", os.path.join(os.path.dirname(full), name), body)]

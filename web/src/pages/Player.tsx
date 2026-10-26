@@ -385,9 +385,11 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
     return () => { gone = true; engine?.destroy(); };
   }, [repack, info, src]);
   const note = info && how ? (how === 'kodi' && info.play.endsWith('-hi10') ? 'Firefox doesn’t play this video (H.264 in 10-bit): Chrome, Edge and Kodi do.' : PLAY_NOTE[how]) : null;
-  // On by default: English, else a subtitle file whose name gives no language (in this library nearly always English).
   const subs = subList;
-  const firstEnglish = [subs.findIndex((s) => s.lang === 'en' && !s.forced), subs.findIndex((s) => s.lang === 'und' && !s.forced)].find((i) => i >= 0) ?? -1;
+  // On by default: full English; else a file whose name gives no language (in this library nearly always English); else
+  // English forced subtitles, which only translate the lines in another language (Valerian's aliens) and belong on.
+  const firstEnglish = [subs.findIndex((s) => s.lang === 'en' && !s.forced), subs.findIndex((s) => s.lang === 'und' && !s.forced),
+    subs.findIndex((s) => (s.lang === 'en' || s.lang === 'und') && s.forced)].find((i) => i >= 0) ?? -1;
   // A track added after the video loaded isn't switched on by its default attribute: switch it on here.
   useEffect(() => {
     const v = video.current;
