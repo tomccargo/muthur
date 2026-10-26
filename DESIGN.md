@@ -3,7 +3,7 @@
 The look and the rules of muthur's web UI. The **look** follows *Playlist Parser*: a dark-first media app with a side rail, an amber accent, Figtree and Bricolage Grotesque, posters as the main visual. The **rules** are adapted from the *PXL CloudLabs* dashboard design system: one primary action per view, status dots, honest status, readable labels.
 
 What muthur does not take from either:
-- Playlist Parser's Zen and disco modes (confetti, disco ball, beats, cursor trail, smoky or shader backdrops). Its normal-mode motion, count-up numbers and flying covers included, is muthur's (§6).
+- Playlist Parser's Zen and disco modes (confetti, disco ball, beats, cursor trail). Its normal-mode motion, count-up numbers, flying covers and slow smoke backdrop included, is muthur's (§6).
 - CloudLabs' flat GitHub look (3px corners, no pill buttons). Where the two clash, Playlist Parser's look wins.
 
 The UI is built in **React + TypeScript** (Vite). Playlist Parser is GPL-3.0 and muthur is MIT, so only its *design values* (colours, sizes, fonts, layout) are reused here. Its code is not copied: every muthur component is written for muthur.
@@ -213,7 +213,9 @@ Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not 
 - **Bars and job progress** move with real progress; a skeleton shimmers while a list loads.
 - **Livelier (0.28):** tiles and posters lift on hover (3 px, with a shadow) and spring back; panels and tiles arrive with a little overshoot; a counter that changes pops; a working bar has a light passing over it. Only while something works: the job bar is still when it is hidden.
 
-**Not allowed:** confetti, disco, cursor trails, shader or animated backdrops, intro sequences, parallax, and anything that loops while the page is idle.
+- **The backdrop (0.37):** slow amber smoke behind the panels (`Backdrop.tsx`, WebGL, written for muthur), strongest at the top of the window and gone by the bottom. Drawn at a third of the window's size, about 30 frames a second, on the low-power GPU; it stops while the page is hidden (another tab, a minimised window) and doesn't run with reduced motion. Panels stay solid, so text never sits on smoke.
+
+**Not allowed:** confetti, disco, beats, cursor trails, intro sequences, parallax, and anything else that loops while the page is idle (the backdrop is the one exception, and it stops when nobody sees it).
 
 **Reduced motion:** when the system asks for it (`prefers-reduced-motion: reduce`), every transition and animation is off, the page change and the count-up included.
 ---

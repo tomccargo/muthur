@@ -185,9 +185,9 @@ function LibraryProblems({ status }: { status: Status | null }) {
   const parts = (...p: [number | undefined, string, string?][]) =>
     p.filter(([n]) => (n ?? 0) > 0).map(([n, one, many]) => count(n ?? 0, one, many)).join(' · ');
   const tiles: [string, number, string][] = [
-    ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer'],
     ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to'])],
-    ['What Kodi shows', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles'])],
+    ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles'])],
+    ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer'],
     ['Tidy up', (l.renames ?? 0) + dups + (l.leftovers ?? 0), parts([l.renames, 'name'], [dups, 'duplicate'], [l.leftovers, 'leftover'])],
   ];
   const shown = tiles.filter(([, n]) => n > 0);

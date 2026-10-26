@@ -23,10 +23,10 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
 const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'renames', 'film-renames', 'leftovers', 'empty-films'];
-// The fixes in three groups, after "Questions for you" (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
+// The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
-  { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },
-  { id: 'kodi', title: 'What Kodi shows', kinds: ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
+  { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },  // shown first, then Missing in Kodi, the questions, Tidy up
+  { id: 'kodi', title: 'Missing in Kodi', kinds: ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
   { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'leftovers', 'empty-films'] },
 ];
 
@@ -160,6 +160,53 @@ export function HealthPage({ status, refresh }: StatusHook) {
   const check = () => begin('check', api.checkFixes);
   const apply = () => { setAsking(false); begin('apply', () => api.applyFixes([...chosen])); };
 
+  // One group of fixes, as a panel (DESIGN.md §1.11).
+  const group = (g: (typeof GROUPS)[number]) => {
+    const kinds = g.kinds.filter((k) => available.includes(k));
+    const dups = g.id === 'tidy' && status?.duplicatesAt ? status.duplicates : 0;
+    if (!kinds.length && !dups) return null;
+    return (
+      <section key={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="panel-head" style={{ marginBottom: 4 }}><h2 id={`${g.id}-h`}>{g.title}</h2>
+          <span className="num">{(kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0) + dups).toLocaleString('en-GB')}</span>
+        </div>
+        <ul className="rows">
+          {kinds.map((k) => {
+            const f = data!.fixes[k]!;
+            return (
+              <li key={k} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                <span className="actions" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                  <label className="choice" style={{ alignItems: 'center' }}>
+                    <input type="checkbox" checked={chosen.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
+                    <strong>{FIX[k].title}</strong>
+                  </label>
+                  <span className="num">{f.count.toLocaleString('en-GB')}</span>
+                </span>
+                <span className="small muted">{FIX[k].what}</span>
+                <details>
+                  <summary className="small" style={{ cursor: 'pointer' }}>Which</summary>
+                  <ul className="rows" style={{ marginTop: 4 }}>
+                    {f.sample.map((x) => (
+                      <li key={x.path}>
+                        <span className={x.label ? 'small' : 'mono small'} title={libraryPath(x.path)} style={{ minWidth: 0, wordBreak: 'break-all' }}>{x.label ?? middle(libraryPath(x.path), 90)}</span>
+                        <span className="small muted">{x.score ? `IMDb ${x.score[0].toFixed(1)}` : x.why ?? ''}</span>
+                      </li>
+                    ))}
+                    {f.count > f.sample.length && <li><span className="small muted">and {(f.count - f.sample.length).toLocaleString('en-GB')} more</span></li>}
+                  </ul>
+                </details>
+              </li>
+            );
+          })}
+          {dups > 0 && (
+            <li><strong>{count(dups, 'episode or film has', 'episodes and films have')} more than one copy</strong>
+              <Link to="/duplicates" className="small">Choose in Duplicates</Link></li>
+          )}
+        </ul>
+      </section>
+    );
+  };
+
   return (
     <div className="page">
       <header className="page-head">
@@ -199,6 +246,14 @@ export function HealthPage({ status, refresh }: StatusHook) {
         </div>
       )}
 
+      {data?.at && available.length === 0 && (
+        <section className="panel" style={{ textAlign: 'center', padding: '32px 16px' }}>
+          <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing muthur can fix on its own</h2>
+          <p className="hint">Anything left needs you; it’s under Questions for you.</p>
+        </section>
+      )}
+      {group(GROUPS[0])}
+      {group(GROUPS[1])}
       {data?.at && (Object.entries(data.manual).some(([, v]) => (v?.count ?? 0) > 0) || data.left > 0) && (
         <section className="panel" aria-labelledby="manual-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Questions for you'}</h2>
@@ -242,58 +297,7 @@ export function HealthPage({ status, refresh }: StatusHook) {
           ))}
         </section>
       )}
-
-      {data?.at && available.length === 0 && (
-        <section className="panel" style={{ textAlign: 'center', padding: '32px 16px' }}>
-          <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing muthur can fix on its own</h2>
-          <p className="hint">Anything left needs you; it’s listed above.</p>
-        </section>
-      )}
-      {GROUPS.map((g) => {
-        const kinds = g.kinds.filter((k) => available.includes(k));
-        const dups = g.id === 'tidy' && status?.duplicatesAt ? status.duplicates : 0;
-        if (!kinds.length && !dups) return null;
-        return (
-          <section key={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div className="panel-head" style={{ marginBottom: 4 }}><h2 id={`${g.id}-h`}>{g.title}</h2>
-              <span className="num">{(kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0) + dups).toLocaleString('en-GB')}</span>
-            </div>
-            <ul className="rows">
-              {kinds.map((k) => {
-                const f = data!.fixes[k]!;
-                return (
-                  <li key={k} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
-                    <span className="actions" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
-                      <label className="choice" style={{ alignItems: 'center' }}>
-                        <input type="checkbox" checked={chosen.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
-                        <strong>{FIX[k].title}</strong>
-                      </label>
-                      <span className="num">{f.count.toLocaleString('en-GB')}</span>
-                    </span>
-                    <span className="small muted">{FIX[k].what}</span>
-                    <details>
-                      <summary className="small" style={{ cursor: 'pointer' }}>Which</summary>
-                      <ul className="rows" style={{ marginTop: 4 }}>
-                        {f.sample.map((x) => (
-                          <li key={x.path}>
-                            <span className={x.label ? 'small' : 'mono small'} title={libraryPath(x.path)} style={{ minWidth: 0, wordBreak: 'break-all' }}>{x.label ?? middle(libraryPath(x.path), 90)}</span>
-                            <span className="small muted">{x.score ? `IMDb ${x.score[0].toFixed(1)}` : x.why ?? ''}</span>
-                          </li>
-                        ))}
-                        {f.count > f.sample.length && <li><span className="small muted">and {(f.count - f.sample.length).toLocaleString('en-GB')} more</span></li>}
-                      </ul>
-                    </details>
-                  </li>
-                );
-              })}
-              {dups > 0 && (
-                <li><strong>{count(dups, 'episode or film has', 'episodes and films have')} more than one copy</strong>
-                  <Link to="/duplicates" className="small">Choose in Duplicates</Link></li>
-              )}
-            </ul>
-          </section>
-        );
-      })}
+      {group(GROUPS[2])}
       <QuarantinePanel busy={running} />
     </div>
   );

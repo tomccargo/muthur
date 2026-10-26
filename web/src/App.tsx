@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { AUTH_EVENT, api, type AuthMode, type Status } from './api';
 import { Icon } from './icons';
+import { Backdrop } from './Backdrop';
 import { JobBar, JobLine, Spinner } from './components';
 import { when } from './labels';
 import { Link, useLocation } from './nav';
@@ -131,6 +132,7 @@ function Shell() {
 
   return (
     <div className="shell">
+      <Backdrop />
       <JobBar job={hook.status?.job} />
       <a className="skip-link" href="#main">Skip to the page</a>
       <nav className="rail" aria-label="Main">
