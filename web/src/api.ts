@@ -30,7 +30,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
-  library: { at?: number; imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; kodiEntries?: number; questions?: number };  // from the last library check
+  library: { at?: number; imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; kodiEntries?: number; subTiming?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -127,7 +127,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 // A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
 export type Question = { path: string; why: string; season?: number; tmdb?: number; show?: string; noNumber?: boolean };

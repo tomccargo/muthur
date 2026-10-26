@@ -15,7 +15,7 @@ import os
 import re
 import time
 
-from . import kodi_entries, nfo_write, quarantine, subtitles
+from . import kodi_entries, nfo_write, quarantine, subfit, subtitles
 from . import rename as renaming
 from .art import poster_problem
 from .identify import identify_movie, identify_show
@@ -29,7 +29,7 @@ from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
-FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
+FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
          "renames", "film-renames", "kodi-entries")
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 
@@ -327,6 +327,21 @@ class Health:
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
                          else "Release notes named like the video’s NFO but for capitals; Kodi could read them instead of the NFO."
                          if x.get("why") == TWIN else "A leftover in the library: it belonged to a video that is gone.")
+
+    def _subtitle_timing(self, run, x, nfos):
+        """A subtitle file at another speed or shifted (another release): stretched to fit the video, measured against
+        the subtitles inside it (subfit). The original goes to quarantine, so History can put it back."""
+        full = self._full(x["path"])
+        if not os.path.isfile(full):
+            raise ValueError("it isn't there any more")
+        with open(full, "rb") as fh:
+            fixed = subfit.retime(fh.read(), x["shift"], x["speed"])
+        self._quarantine(run, x["path"], f"Subtitles out of sync with the video ({x['why']}); a stretched copy took their place.")
+        if not self.journal.create(run, x["path"], full, fixed):
+            raise ValueError("the stretched copy couldn't be written")
+
+    def _subtitle_misfit(self, run, x, nfos):
+        self._quarantine(run, x["path"], "Subtitles that don't fit this video (another cut of the film): stretching can't fix them.")
 
     def _subtitles(self, run, x, nfos):
         """Subtitles beside their video under its name, where Kodi finds them; other languages to quarantine."""

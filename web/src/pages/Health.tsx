@@ -22,13 +22,15 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db, and NFOs, thumbnails or subtitles of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
   'kodi-entries': { title: 'Remove old entries from Kodi', what: 'Films and episodes Kodi lists twice: once where the video was before a rename, or twice for the same file. The entry that stays gets the watched status first. Only while Kodi is on; no files change.' },
+  'subtitle-timing': { title: 'Stretch subtitles that are out of sync', what: 'Subtitle files from another release: too fast, too slow or shifted, measured against the subtitles inside the video. A stretched copy takes their place; the original goes to quarantine.' },
+  'subtitle-misfit': { title: 'Move subtitles that don’t fit to quarantine', what: 'Subtitle files that match the video nowhere, even stretched (another cut of the film).' },
 };
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'renames', 'film-renames', 'kodi-entries', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'leftovers', 'empty-films'];
 // The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
   { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },  // shown first, then Missing in Kodi, the questions, Tidy up
   { id: 'kodi', title: 'Missing in Kodi', kinds: ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
-  { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'kodi-entries', 'leftovers', 'empty-films'] },
+  { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'subtitle-timing', 'subtitle-misfit', 'kodi-entries', 'leftovers', 'empty-films'] },
 ];
 
 // The answers to a question about an episode's number (or a season's): which episode it is, that its number is

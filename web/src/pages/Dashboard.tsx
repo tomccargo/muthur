@@ -191,8 +191,8 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles']), '/health#kodi'],
     ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer', '/health#questions'],
     ['Duplicates', dups, `${parts([dupFilms, 'film'], [dups - dupFilms, 'episode'])}: choose which copy to keep`, '/duplicates'],
-    ['Tidy up', (l.renames ?? 0) + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),
-      parts([l.renames, 'name'], [l.kodiEntries, 'old Kodi entry', 'old Kodi entries'], [l.leftovers, 'leftover']), '/health#tidy'],
+    ['Tidy up', (l.renames ?? 0) + (l.subTiming ?? 0) + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),
+      parts([l.renames, 'name'], [l.subTiming, 'subtitle file out of sync', 'subtitle files out of sync'], [l.kodiEntries, 'old Kodi entry', 'old Kodi entries'], [l.leftovers, 'leftover']), '/health#tidy'],
   ];
   const shown = tiles.filter(([, n]) => n > 0);
   if (!shown.length && !l.at) {

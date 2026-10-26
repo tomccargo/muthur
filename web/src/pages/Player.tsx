@@ -390,12 +390,29 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
   // English forced subtitles, which only translate the lines in another language (Valerian's aliens) and belong on.
   const firstEnglish = [subs.findIndex((s) => s.lang === 'en' && !s.forced), subs.findIndex((s) => s.lang === 'und' && !s.forced),
     subs.findIndex((s) => (s.lang === 'en' || s.lang === 'und') && s.forced)].find((i) => i >= 0) ?? -1;
-  // A track added after the video loaded isn't switched on by its default attribute: switch it on here.
+  // Which subtitles show. Subtitles the browser recognises inside the file itself come first (English first): they
+  // belong to this video (none do in Chrome or Firefox today, measured 26 Oct). Else the file beside it chosen above;
+  // a track added after the video loaded isn't switched on by its default attribute, so it is switched on here. Once
+  // per set of subtitles: what the reader picks in the CC menu afterwards stays.
   useEffect(() => {
     const v = video.current;
-    if (!v || firstEnglish < 0) return;
-    const t = setTimeout(() => { const tt = v.textTracks[firstEnglish]; if (tt && ![...v.textTracks].some((x) => x.mode === 'showing')) tt.mode = 'showing'; }, 300);
-    return () => clearTimeout(t);
+    if (!v) return;
+    let done = false;
+    const choose = () => {
+      if (done) return;
+      const ours = new Set([...v.querySelectorAll('track')].map((el) => el.track));
+      const inside = [...v.textTracks].filter((t) => !ours.has(t) && (t.kind === 'subtitles' || t.kind === 'captions'));
+      const pick = inside.find((t) => t.language.startsWith('en')) ?? inside[0]
+        ?? (firstEnglish >= 0 ? v.querySelectorAll('track')[firstEnglish]?.track : undefined);
+      if (!pick) return;
+      for (const t of v.textTracks) if (t !== pick && t.mode === 'showing') t.mode = 'disabled';
+      pick.mode = 'showing';
+      done = inside.length > 0 || v.readyState >= 1;
+    };
+    const t = setTimeout(choose, 300);
+    v.addEventListener('loadedmetadata', choose);
+    v.textTracks.addEventListener('addtrack', choose);
+    return () => { clearTimeout(t); v.removeEventListener('loadedmetadata', choose); v.textTracks.removeEventListener('addtrack', choose); };
   }, [subs, firstEnglish]);
   return (
     <div className={`pl-watch${full ? ' full' : ''}${cue === 'm' ? '' : ` cue-${cue}`}`} ref={box}>

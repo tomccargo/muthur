@@ -35,7 +35,7 @@ from .kodi import Kodi, folder_name
 from .memory import import_tv
 from .naming import LATIN_SCRIPT
 from .parse import parse_show_folder
-from . import nfo_write, player
+from . import nfo_write, player, subfit
 from . import quarantine as quarantine_notes
 from . import rename as renaming
 from .scores import ScoreRefresh
@@ -1030,6 +1030,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     # -- player (docs/PLAYER.md): read-only, the files are served as they are -------
     play_facts = player.Facts(store)
+    sub_fit = subfit.SubFit(store)
+    # Fix kinds only a whole Health check finds (Kodi's entries, subtitle files measured against their video): checking
+    # one show again keeps them as they are.
+    WHOLE_CHECK = {"kodi-entries", "subtitle-timing", "subtitle-misfit"}
     catalogue_cache: dict = {}
     VIDEO_TYPES = {".mkv": "video/x-matroska", ".webm": "video/webm", ".mp4": "video/mp4", ".m4v": "video/mp4", ".mov": "video/quicktime"}
 
@@ -1343,7 +1347,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
             "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("episode-nfos", "show-nfos", "film-nfos"),
             "leftovers": n("leftovers", "empty-films"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
-            "kodiEntries": n("kodi-entries"),
+            "kodiEntries": n("kodi-entries"), "subTiming": n("subtitle-timing", "subtitle-misfit"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def outdated_check() -> bool:
@@ -1380,6 +1384,25 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             job.begin("Reading how new videos play", len(new))
         for n, full in enumerate(new, 1):
             play_facts.get(full)
+            if job:
+                job.done = n
+        # Subtitle files beside a video that also has subtitles inside: do they fit it? (subfit; each measured once)
+        plan["fixes"]["subtitle-timing"], plan["fixes"]["subtitle-misfit"] = [], []
+        paths = [p for p in player.catalogue(lib).values() if (play_facts.cached(library_full(p)) or {}).get("embeddedSubs")]
+        if paths and job:
+            job.begin("Checking that subtitle files fit their video", len(paths))
+        for n, path in enumerate(paths, 1):
+            full = library_full(path)
+            beside = player.sidecars(full)
+            if beside:
+                facts = play_facts.cached(full) or {}
+                for r in sub_fit.check(full, facts.get("duration") or 0, beside, player.embedded(full)):
+                    srt = f"{path.rsplit('/', 1)[0]}/{r['name']}"
+                    if r["verdict"] == "stretch":
+                        plan["fixes"]["subtitle-timing"].append({"path": srt, "shift": r["fit"]["shift"], "speed": r["fit"]["speed"],
+                                                                 "why": subfit.describe(r["fit"])})
+                    elif r["verdict"] == "cut":
+                        plan["fixes"]["subtitle-misfit"].append({"path": srt, "why": "doesn't match the subtitles inside the video"})
             if job:
                 job.done = n
         plan["version"] = __version__
@@ -1515,7 +1538,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def merge_plan(plan: dict, mine, fixes_new: dict, manual_new: dict) -> dict:
         """One show or film checked again: its old fixes and questions make way for the new ones."""
-        for k in (set(plan["fixes"]) | set(fixes_new)) - {"kodi-entries"}:  # Kodi's entries come only from a whole check
+        for k in (set(plan["fixes"]) | set(fixes_new)) - WHOLE_CHECK:
             plan["fixes"][k] = [x for x in plan["fixes"].get(k, []) if not mine(x)] + fixes_new.get(k, [])
         for k in plan["manual"]:
             plan["manual"][k] = [x for x in plan["manual"][k] if not mine(x)] + manual_new.get(k, [])
