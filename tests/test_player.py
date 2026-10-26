@@ -22,6 +22,9 @@ def test_how_a_video_plays():
     assert player.playback(_facts(video="mpeg4")) == "kodi"
     assert player.playback(_facts(audio=("truehd",))) == "kodi"
     assert player.playback(_facts(audio=())) == "native"  # a silent film still plays
+    ten = _facts()
+    ten["video"][0]["tenBit"] = True
+    assert player.playback(ten) == "native-hi10"  # Chrome and Edge play it, Firefox does not: the page decides
     two = _facts(audio=("ac3", "aac"))
     two["audio"][0]["default"], two["audio"][1]["default"] = False, True
     assert player.playback(two) == "native"  # the browser plays the default track

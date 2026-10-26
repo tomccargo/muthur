@@ -5,6 +5,8 @@ A video plays one of three ways, from its container and codecs:
 - 'native': the browser plays picture and sound itself;
 - 'sound': the browser plays the picture, and the page decodes the sound itself (AC-3, E-AC-3, DTS: Mediabunny);
 - 'kodi': no browser plays it (AVI, XviD, MPEG-2...): it stays a Kodi thing.
+H.264 in 10-bit plays in Chrome and Edge but not in Firefox (measured 26 Oct): its class ends in '-hi10' and the page
+decides by the browser it runs in.
 """
 from __future__ import annotations
 
@@ -61,15 +63,16 @@ def facts(path: str) -> dict | None:
 
 
 def playback(f: dict | None) -> str:
-    """'native', 'sound', 'kodi', or 'unknown' when the file wasn't read yet."""
+    """'native', 'sound', 'kodi', or 'unknown' when the file wasn't read yet; 'native-hi10' or 'sound-hi10' for H.264
+    in 10-bit, which only some browsers play."""
     if not f:
         return "unknown"
     if f["container"] not in CONTAINERS or not f["video"] or f["video"][0]["codec"] not in VIDEO:
         return "kodi"
     audio = main_audio(f)
-    if audio is None or audio["codec"] in AUDIO:
-        return "native"
-    return "sound" if audio["codec"] in DECODED else "kodi"
+    way = "native" if audio is None or audio["codec"] in AUDIO else "sound" if audio["codec"] in DECODED else "kodi"
+    hi10 = f["video"][0]["codec"] == "h264" and f["video"][0]["tenBit"]
+    return f"{way}-hi10" if hi10 and way != "kodi" else way
 
 
 def main_audio(f: dict) -> dict | None:

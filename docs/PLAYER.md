@@ -48,7 +48,7 @@ Measured on this PC (built-in browser, Chrome 152 engine, NVIDIA GPU), with a te
 - **An MKV's embedded subtitle doesn't appear** (0 text tracks).
 - **There is no API to choose an audio track**, so only the default track plays.
 
-**Firefox: not measured yet** (open the test page in Firefox; its HEVC support decides about 1,400 files). Sourced:
+**Firefox, measured by the reader on this PC (26 Oct):** the same as Chrome, except that **H.264 in 10-bit doesn't play** ("the file is corrupt"; 110 files). HEVC 8- and 10-bit play with sound. AC3, E-AC3 and DTS are silent, and AVI doesn't open. The player decides H.264 10-bit by browser: Kodi only in Firefox, playable in Chrome and Edge. Sourced:
 
 - Firefox 145 plays MKV with H.264, HEVC, VP8, VP9 and AV1, with AAC, Opus or Vorbis [1].
 - HEVC needs hardware and the Windows HEVC extension [2].

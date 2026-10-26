@@ -248,7 +248,7 @@ export const api = {
 };
 
 // How a video plays in a browser: by itself, with the page decoding its sound, in Kodi only, or not read yet.
-export type Playback = 'native' | 'sound' | 'kodi' | 'unknown';
+export type Playback = 'native' | 'sound' | 'kodi' | 'unknown' | 'native-hi10' | 'sound-hi10';  // -hi10: H.264 in 10-bit, see Player.tsx
 export type PlayerFilm = {
   id: string; key: string; title: string; year: number | null; genres: string[]; rating: number | null; plot: string | null;
   watched: boolean; added: number; poster: string | null; fanart: string | null; play: Playback;

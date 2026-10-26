@@ -13,7 +13,11 @@ type View = 'films' | 'tv' | 'test';
 type Sort = 'added' | 'title' | 'year' | 'rating';
 type Seen = 'all' | 'unwatched' | 'watched';
 const SORTS: [Sort, string][] = [['added', 'Recently added'], ['title', 'Title'], ['year', 'Year'], ['rating', 'Rating']];
-const PLAY_NOTE: Record<Playback, string | null> = {
+type Way = 'native' | 'sound' | 'kodi' | 'unknown';
+// H.264 in 10-bit plays in Chrome and Edge but not in Firefox (measured 26 Oct, docs/PLAYER.md §3): decided here, by the browser.
+const HI10 = !/firefox/i.test(navigator.userAgent);
+const way = (p: Playback): Way => (p.endsWith('-hi10') ? (HI10 ? (p.slice(0, -5) as Way) : 'kodi') : (p as Way));
+const PLAY_NOTE: Record<Way, string | null> = {
   native: null,
   sound: 'Sound in a later step: the browser shows the picture, but this file’s sound (AC3, E-AC3 or DTS) needs the page to decode it.',
   kodi: 'Plays in Kodi only: no browser plays this kind of file.',
@@ -82,7 +86,7 @@ function useFilters(genres: string[]) {
 }
 
 function FilmTile({ f }: { f: PlayerFilm }) {
-  const kodi = f.play === 'kodi';
+  const kodi = way(f.play) === 'kodi';
   const label = `${f.title}${f.year ? ` (${f.year})` : ''}`;
   const body = (
     <>
@@ -180,14 +184,14 @@ function ShowView({ folder }: { folder: string }) {
           const name = `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
           const inner = (
             <>
-              <span className="pl-thumb"><Art path={e.thumb} title={e.title ?? show.title} wide />{e.play !== 'kodi' && <PlayMark />}</span>
+              <span className="pl-thumb"><Art path={e.thumb} title={e.title ?? show.title} wide />{way(e.play) !== 'kodi' && <PlayMark />}</span>
               <span className="pl-ep-text"><span className="pl-name">{name}</span>
-                <span className="pl-sub">{e.play === 'kodi' ? 'Kodi only' : e.play === 'sound' ? 'Sound in a later step' : ''}{e.watched ? (e.play === 'native' || e.play === 'unknown' ? 'Watched' : ' · Watched') : ''}</span></span>
+                <span className="pl-sub">{way(e.play) === 'kodi' ? 'Kodi only' : way(e.play) === 'sound' ? 'Sound in a later step' : ''}{e.watched ? (way(e.play) === 'native' || way(e.play) === 'unknown' ? 'Watched' : ' · Watched') : ''}</span></span>
             </>
           );
           return (
             <li key={e.id}>
-              {e.play === 'kodi' ? <div className="pl-ep dim">{inner}</div>
+              {way(e.play) === 'kodi' ? <div className="pl-ep dim">{inner}</div>
                 : <Link className="pl-ep" to={watchUrl(e.id, `${show.title} ${name}`)}>{inner}</Link>}
             </li>
           );
@@ -250,12 +254,13 @@ function Watch({ id, title }: { id: string; title: string }) {
     return () => window.removeEventListener('keydown', onKey);
   });
   useEffect(() => { document.title = `${title} · muthur`; }, [title]);
-  const note = info ? PLAY_NOTE[info.play] : null;
+  const how = info ? way(info.play) : null;
+  const note = info && how ? (how === 'kodi' && info.play.endsWith('-hi10') ? 'Firefox doesn’t play this video (H.264 in 10-bit): Chrome, Edge and Kodi do.' : PLAY_NOTE[how]) : null;
   const firstEnglish = info?.subtitles.findIndex((s) => s.lang === 'en' && !s.forced) ?? -1;
   return (
     <div className={`pl-watch${full ? ' full' : ''}`} ref={box}>
       {error && <p className="pl-watch-msg">{error}</p>}
-      {info && info.play !== 'kodi' && (
+      {info && how !== 'kodi' && (
         <video ref={video} src={`/api/player/video/${id}`} controls autoPlay playsInline preload="auto">
           {info.subtitles.map((s, i) => (
             <track key={s.name} kind="subtitles" src={`/api/player/video/${id}/subtitles/${encodeURIComponent(s.name)}`}
@@ -268,7 +273,7 @@ function Watch({ id, title }: { id: string; title: string }) {
         <span className="pl-watch-title" title={info?.path}>{title}</span>
         <button type="button" className="pl-btn" onClick={toggleFull} aria-label={full ? 'Leave full screen' : 'Full screen'}>{full ? '⤡' : '⤢'}</button>
       </div>
-      {note && <p className={`pl-watch-msg${info?.play === 'kodi' ? '' : ' corner'}`}>{note}</p>}
+      {note && <p className={`pl-watch-msg${how === 'kodi' ? '' : ' corner'}`}>{note}</p>}
       {!info && !error && <p className="pl-watch-msg">Loading…</p>}
     </div>
   );
