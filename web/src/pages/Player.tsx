@@ -322,7 +322,8 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
       ? `Only forced subtitles: ${f.lines} ${f.lines === 1 ? 'line' : 'lines'} for the parts in another language${at(f.first)}.`
       : info.pictureSubs
         ? `Subtitles only as pictures inside the file (${info.pictureSubs} ${info.pictureSubs === 1 ? 'track' : 'tracks'}): a browser can’t show those. Kodi can (⋯, Play on the TV).`
-        : 'No subtitles for this video.';
+        : info.adsOnly.length ? 'No subtitles for this video: the subtitle file beside it only holds the download site’s advertisements.'
+          : 'No subtitles for this video.';
     setFlash(text);
     window.clearTimeout(flashTimer.current);
     flashTimer.current = window.setTimeout(() => setFlash(null), 12000);

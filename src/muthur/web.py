@@ -1096,13 +1096,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         original = original_language(path)
         text_tracks = player.embedded(full) if f and f.get("embeddedSubs") else []
         inside = [name for _, name in player.to_extract(full, text_tracks)]
-        beside = player.sidecars(full)
+        here = os.path.dirname(full)
+        ads = [s["name"] for s in player.sidecars(full) if player.ads_only(os.path.join(here, s["name"]))]
+        beside = [s for s in player.sidecars(full) if s["name"] not in ads]  # a download site's notices aren't subtitles
         return {"id": vid, "path": path, "name": os.path.basename(full), "play": player.playback(f), "facts": f,
                 "subtitles": beside, "original": original, "audio": player.audio_pick(f, original),
                 "extractable": inside, "dryRun": bool(store.get("dryRun", False)),
                 # What the player says about subtitles, so a film without them doesn't just look broken (26 Oct):
-                # subtitles only as pictures inside (no browser shows those), and the forced files' line counts.
-                "pictureSubs": max(0, int((f or {}).get("embeddedSubs") or 0) - len(text_tracks)),
+                # subtitles only as pictures inside (no browser shows those), files of advertisements only, and the
+                # forced files' line counts.
+                "pictureSubs": max(0, int((f or {}).get("embeddedSubs") or 0) - len(text_tracks)), "adsOnly": ads,
                 "forcedLines": {s["name"]: player.cue_summary(os.path.join(os.path.dirname(full), s["name"])) for s in beside if s["forced"]}}
 
     @app.post("/api/player/video/{vid}/subtitles/extract", status_code=202)

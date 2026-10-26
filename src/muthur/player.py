@@ -375,6 +375,20 @@ def share_paths(prefix: str | None, rel: str) -> dict | None:
     return {"smb": smb, "unc": "\\\\" + f"{host_path}/{rel}".replace("/", "\\")}
 
 
+AD = re.compile(r"\b(yts|yify|opensubtitles|subscene|downloaded from|provided by|rarbg|eztv|www\.|https?://)", re.I)
+
+
+def ads_only(path: str) -> bool:
+    """An .srt whose every line is a download site's notice ('Provided by YTS.LT'): no subtitles at all (Ford v Ferrari)."""
+    try:
+        with open(path, "rb") as fh:
+            text = fh.read().decode("utf-8", "replace").replace("\r", "")
+    except OSError:
+        return False
+    blocks = [b for b in re.split(r"\n\s*\n", text.strip()) if "-->" in b]
+    return bool(blocks) and all(AD.search(b.split("-->", 1)[1]) for b in blocks)
+
+
 def cue_summary(path: str) -> dict:
     """{'lines': how many, 'first': seconds of the first} of an .srt, for the player to say what a forced file holds."""
     try:

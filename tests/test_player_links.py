@@ -76,3 +76,11 @@ def test_a_link_key_opens_one_video_without_the_sign_in(env, monkeypatch):  # no
     assert c.get(f"/api/player/items?key={key}").status_code == 401  # and nothing else
     old = Auth(store).link_key(vid, seconds=-5)
     assert c.get(f"/api/player/video/{vid}?key={old}").status_code == 401  # expired
+
+
+def test_a_file_of_advertisements_is_no_subtitles(tmp_path):
+    ads = tmp_path / "Ford v Ferrari (2019).srt"  # what was beside Ford v Ferrari: 267 bytes of notices
+    ads.write_text("1\n00:00:30,000 --> 00:00:36,000\nProvided by YTS.LT\n\n2\n00:00:36,500 --> 00:00:42,000\nFind the official YIFY movies site at\nhttps://YTS.LT\n")
+    real = tmp_path / "Film.en.srt"
+    real.write_text("1\n00:00:01,000 --> 00:00:02,000\nDownloaded from YTS.LT\n\n2\n00:00:05,000 --> 00:00:07,000\nWe have to go back.\n")
+    assert player.ads_only(str(ads)) and not player.ads_only(str(real))

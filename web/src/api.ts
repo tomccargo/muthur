@@ -273,6 +273,7 @@ export type PlayerInfo = {
   extractable: string[];  // subtitle files muthur can copy out of the video (English, or Dutch without English)
   dryRun: boolean;
   pictureSubs: number;  // subtitle tracks inside the file that are pictures (DVD, Blu-ray): no browser shows them
+  adsOnly: string[];  // .srt files beside the video holding only a download site's notices (left out of subtitles)
   forcedLines: Record<string, { lines: number; first: number | null }>;  // per forced .srt: how many lines, the first's second
   audio: number | null;  // the audio track to play: the first in the original language, else the default
   facts: { container: string; video: { codec: string; width: number; height: number; tenBit: boolean; hdr: boolean }[];
