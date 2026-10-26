@@ -29,6 +29,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
+  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -93,10 +94,10 @@ export type ShowSummary = {
 };
 export type LibEpisode = {
   file: string; size: number; season: number | null; episodes: number[]; nfo: boolean; muthur: boolean; title: string | null;
-  rating: Score; imdb: [number, number] | null; thumb: boolean; subs: number; damaged: boolean; sample: boolean; mismatch: boolean;
+  rating: Score; imdb: [number, number] | null; thumb: boolean; subs: number; subLangs?: string[]; damaged: boolean; sample: boolean; mismatch: boolean;
   watched: number | null; duplicate: boolean;
 };
-export type ShowDetail = Omit<ShowSummary, never> & { episodes: LibEpisode[]; loose: string[] };
+export type ShowDetail = Omit<ShowSummary, never> & { episodes: LibEpisode[]; loose: string[]; scoreNotes?: Record<string, string> };
 export type Film = {
   key: string; folder: boolean; file: string | null; size: number; others: string[]; title: string; year: number | null;
   ids: Record<string, string>; nfo: boolean; muthur: boolean; rating: Score; imdb: [number, number] | null; poster: boolean;
@@ -116,7 +117,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'leftovers' | 'empty-films' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'imdb-scores';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'imdb-scores';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 export type Question = { path: string; why: string; season?: number };
 export type Fixes = {

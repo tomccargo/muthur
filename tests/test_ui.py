@@ -144,7 +144,7 @@ def test_every_page(server, browser, width, theme):
             problems.append(f"{where}: {r['primaries']} primary buttons")
         if m := CODE_WORDS.search(r["text"]):
             problems.append(f"{where}: '{m.group(0)}' on screen")
-        if ATTRIBUTION not in r["text"]:
+        if path == "/settings" and ATTRIBUTION not in r["text"]:  # TMDB's credit lives in Settings
             problems.append(f"{where}: no TMDB attribution")
         if r["radius"]:
             problems.append(f"{where}: corners rounder than 12px: {r['radius']}")

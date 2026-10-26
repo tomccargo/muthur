@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type Op, type Run } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { libraryPath, middle, size, splitId, when } from '../labels';
 
 const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder', update: 'New scores in' };
@@ -130,7 +130,6 @@ export function HistoryPage({ status, refresh }: StatusHook) {
         </section>
       )}
       {runs?.map((r) => <RunCard key={r.id} run={r} busy={running} onUndo={() => undo(r.id)} />)}
-      <Footer />
     </div>
   );
 }

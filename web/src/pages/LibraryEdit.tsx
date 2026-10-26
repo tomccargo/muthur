@@ -60,7 +60,7 @@ export function LibraryEditor({ kind, path, nfo, posterTarget, tmdbId, title, on
             <input className="field" aria-label="Title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
             <button className="btn btn-secondary btn-sm" type="submit" disabled={busy || !newTitle.trim() || newTitle === title} aria-busy={busy}>Save the title</button>
           </form>
-          <p className="hint">Only the title in the NFO changes; Kodi shows it after re-reading the item.</p>
+          <p className="hint">Changes the title Kodi shows; muthur asks Kodi to re-read it. History can put it back.</p>
         </section>
       )}
       {mode === 'poster' && (

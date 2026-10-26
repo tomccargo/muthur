@@ -24,7 +24,7 @@ from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
-FIXES = ("leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
+FIXES = ("imdb-data", "leftovers", "empty-films", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
 
 
 class Health:
@@ -33,6 +33,7 @@ class Health:
         self.roots = {"TV": tv_root, "Film": film_root}
         self.quarantine = quarantine
         self.scores = ScoreRefresh(store, journal, imdb, tmdb, tv_root, film_root, backups)
+        self._have: set[str] | None = None  # shows whose IMDb episodes are in the kept data
 
     def _full(self, path: str) -> str:
         lib, _, rel = path.partition("/")
@@ -40,6 +41,7 @@ class Health:
 
     # -- finding problems --------------------------------------------------------------------
     def check(self, lib: dict, job=None) -> dict:
+        self._have = None
         fixes: dict[str, list] = {k: [] for k in FIXES}
         manual: dict[str, list] = {"shows": [], "seasons": [], "numbers": [], "films": []}
         if job:
@@ -75,6 +77,11 @@ class Health:
         details = self.tmdb.tv(tmdb_id) or {}
         counts = {s["season_number"]: s.get("episode_count") or 0 for s in details.get("seasons", [])}
         title = show["title"] if show["nfo"] else details.get("name") or folder
+        if self._have is None:
+            self._have = self.imdb.shows_with_data()
+        if imdb_id and imdb_id not in self._have:
+            # Its IMDb ID came after the last download (a new show, an NFO written since): its scores aren't there yet.
+            fixes["imdb-data"].append({"path": f"TV/{folder}", "label": title})
         if not show["nfo"]:
             fixes["show-nfos"].append({"path": f"TV/{folder}/tvshow.nfo", "tmdb": tmdb_id, "label": details.get("name") or folder})
         elif imdb_id and (info := self.index.nfo(self._full(f"TV/{folder}/tvshow.nfo"))) and "imdb" not in info.ratings:
@@ -189,6 +196,9 @@ class Health:
 
     def _write(self, run: int, path: str, data: bytes | None) -> bool:
         return self.journal.create(run, path, self._full(path), data)  # never over an existing file
+
+    def _imdb_data(self, run, x, nfos):
+        """Done for all shows at once, by the score refresh before the other fixes (web.py)."""
 
     def _leftovers(self, run, x, nfos):
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"

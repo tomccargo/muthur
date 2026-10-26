@@ -4,11 +4,12 @@ import { TitleCard } from './Review';
 import type { Card, Kind } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { libraryPath, middle, when } from '../labels';
 
 // What each fix does to the reader's files (DESIGN.md §1.7: name what happens, not the record).
 const FIX: Record<FixKind, { title: string; what: string }> = {
+  'imdb-data': { title: 'Download IMDb scores for shows that have none yet', what: 'Then muthur’s own NFOs get their scores; other NFOs follow as “Add IMDb scores”.' },
   'imdb-scores': { title: 'Add IMDb scores to NFOs', what: 'Adds IMDb’s score as the one Kodi shows. Other ratings in the NFO stay; a copy of each old NFO is kept. Kodi re-reads each item.' },
   'episode-nfos': { title: 'Write NFOs for episodes that have none', what: 'Writes an NFO (and a thumbnail where missing) from TMDB, with IMDb’s score. Only for seasons TMDB numbers the way your library does.' },
   'show-nfos': { title: 'Write tvshow.nfo for show folders that have none', what: 'Writes the show’s NFO, poster, fanart and logo from TMDB where they’re missing.' },
@@ -16,7 +17,7 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db and NFOs or thumbnails of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
-const ORDER: FixKind[] = ['imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'leftovers', 'empty-films'];
 // 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
 const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
 
@@ -199,7 +200,6 @@ export function HealthPage({ status, refresh }: StatusHook) {
         </section>
       )}
       <QuarantinePanel busy={running} />
-      <Footer />
     </div>
   );
 }

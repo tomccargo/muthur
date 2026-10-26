@@ -387,6 +387,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "duplicates": store.snapshot_count("duplicates", "$.groups"),
             "duplicatesAt": store.snapshot_saved("duplicates"),  # None: never checked, so not 'none found'
             "fixes": store.snapshot_count("health", "$.fixes", each=True),
+            "library": store.get("health.counts") or {},
             "job": jobs.current.as_dict() if jobs.current else None,
             "queue": [j.as_dict() for j in jobs.waiting()],
         }
@@ -680,7 +681,34 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if not show:
             raise HTTPException(404, "That show isn't in the index. Index the library again.")
         dup = _duplicates(show["episodes"])
-        return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup} for e in show["episodes"]], "loose": show["loose"]}
+        return {**_show_summary(show), "episodes": [{**e, "duplicate": _ep_key(e) in dup} for e in show["episodes"]], "loose": show["loose"],
+                "scoreNotes": score_notes(show)}
+
+    def score_notes(show: dict) -> dict[str, str]:
+        """For each season with episodes lacking an IMDb score: why (DESIGN.md §8: a score left out says so)."""
+        lacking = sorted({e["season"] for e in show["episodes"] if e["season"] is not None and not e["imdb"]})
+        if not lacking:
+            return {}
+        imdb_id = show["ids"].get("imdb")
+        if not imdb_id:
+            return {str(s): "No IMDb scores: the show has no IMDb ID." for s in lacking}
+        on_imdb = imdb.season_counts(imdb_id)
+        if not on_imdb:
+            return {str(s): "No IMDb scores yet: they aren’t downloaded for this show. Health can download them." for s in lacking}
+        on_tmdb: dict[int, int] = {}
+        client = tmdb()
+        if client and str(show["ids"].get("tmdb", "")).isdigit():
+            try:
+                on_tmdb = {x["season_number"]: x.get("episode_count") or 0 for x in (client.tv(int(show["ids"]["tmdb"])) or {}).get("seasons", [])}
+            except Exception:
+                pass
+        notes = {}
+        for s in lacking:
+            ic, tc = on_imdb.get(s, 0), on_tmdb.get(s)
+            notes[str(s)] = (f"IMDb has no episodes for season {s}." if not ic
+                             else f"IMDb numbers season {s} differently ({ic} episodes on IMDb, {tc} on TMDB): its scores are left out."
+                             if tc is not None and ic != tc else "IMDb has scores for this season: Health can add them to the NFOs.")
+        return notes
 
     # -- library edits: match, title, poster (each one journalled run) -------------
     def editor() -> LibraryEdit:
@@ -754,7 +782,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         full = os.path.realpath(os.path.join(root, *rest.split("/")))
         if not full.startswith(os.path.realpath(root) + os.sep) or not os.path.isfile(full):
             raise HTTPException(404, "Not an image in the library.")
-        return FileResponse(full, media_type=ART_TYPES[ext], headers={"Cache-Control": "max-age=3600"})
+        return FileResponse(full, media_type=ART_TYPES[ext], headers={"Cache-Control": "no-cache"})
 
     # -- duplicates ---------------------------------------------------------------
     def find_duplicates(job):
@@ -830,11 +858,22 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def health_tool(client) -> Health:
         return Health(store, journal, imdb, client, index, cfg.tv, cfg.film, cfg.quarantine, os.path.join(cfg.config_dir, "backups"))
 
+    def health_counts(plan: dict) -> None:
+        """What the Dashboard shows of the library's problems, kept small so the status poll stays cheap."""
+        gone = store.get("health.left") or {}
+        f = plan["fixes"]
+        store.put("health.counts", {
+            "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
+            "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
+            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])),
+            "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
+
     def check_health(client, job):
         lib = index.build(watched.latest(), job)
         store.save_snapshot("library", lib)
         plan = health_tool(client).check(lib, job)
         store.save_snapshot("health", plan)
+        health_counts(plan)
         if job:
             job.result = (f"Library checked: {sum(len(v) for v in plan['fixes'].values()):,} fix(es), "
                           f"{sum(len(v) for v in plan['manual'].values()):,} question(s).")
@@ -879,6 +918,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             else:
                 gone[key] = time.time()
         store.put("health.left", gone)
+        health_counts(plan)
         return {"changed": len(wanted)}
 
     @app.post("/api/fixes/apply", status_code=202)
@@ -897,7 +937,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     wake_kodi()  # the reader started this: Kodi should re-read what changed
                 except ShieldError:
                     pass  # the fixes still happen; Kodi re-reads the items later
-            result = health_tool(client).apply(plan, kinds, k, job)
+            extra = {}
+            if "imdb-data" in kinds:
+                # The download covers every show in the library; muthur's own NFOs get their scores right away.
+                job.begin(f"Downloading IMDb scores for {len(plan['fixes'].get('imdb-data', [])):,} shows", 0)
+                summary = ScoreRefresh(store, journal, imdb, client, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"), k).run(job)
+                store.save_snapshot("last-scores", summary)
+                extra["imdb-data"] = len(plan["fixes"].get("imdb-data", []))
+            rest = [x for x in kinds if x != "imdb-data"]
+            result = health_tool(client).apply(plan, rest, k, job) if rest else {"run": None, "done": {}, "failed": []}
+            result["done"].update(extra)
             store.save_snapshot("last-fixes", result)
             job.begin("Checking the library again", 0)
             check_health(client, job)
@@ -955,6 +1004,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         for k in plan["manual"]:
             plan["manual"][k] = [x for x in plan["manual"][k] if not mine(x)] + manual_new.get(k, [])
         store.save_snapshot("health", plan)
+        health_counts(plan)
         return {"fixes": {k: len(v) for k, v in fixes_new.items() if v}, "questions": sum(len(v) for v in manual_new.values())}
 
     @app.get("/api/fixes/last")

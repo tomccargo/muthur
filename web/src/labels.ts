@@ -12,7 +12,7 @@ export const STATUS: Record<ItemStatus, { label: string; dot: string }> = {
 };
 
 export const JOBS: Record<string, string> = {
-  inbox: 'Checking the downloads',
+  inbox: 'Looking for new downloads',
   memory: 'Learning the shows in your library',
   apply: 'Moving downloads into the library',
   undo: 'Putting a run back',

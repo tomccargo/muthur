@@ -26,6 +26,26 @@ KEEP = {"tvshow.nfo", "poster.jpg", "fanart.jpg", "clearlogo.png", "banner.jpg",
         "characterart.png", "logo.png", "theme.mp3", ".actors"}
 
 
+LANG_WORDS = {"english": "EN", "dutch": "NL", "nederlands": "NL", "flemish": "NL", "french": "FR", "german": "DE", "spanish": "ES",
+              "italian": "IT", "portuguese": "PT", "swedish": "SV", "danish": "DA", "norwegian": "NO", "finnish": "FI", "polish": "PL"}
+
+
+def _sub_langs(stem: str, files: list[str]) -> list[str]:
+    """Languages of the subtitles beside a video, from their names: 'x.en.srt' EN, 'x.English.srt' EN, 'x.srt' SUB."""
+    out: list[str] = []
+    for f in files:
+        if not (f.startswith(stem + ".") and f.lower().endswith(SUBTITLES)):
+            continue
+        bare = os.path.splitext(f)[0]  # 'x.en.srt' -> 'x.en'; 'x.srt' -> 'x' (no tags)
+        tags = bare[len(stem) + 1:].split(".") if len(bare) > len(stem) else []
+        lang = next((LANG_WORDS[t.lower()] for t in tags if t.lower() in LANG_WORDS), None) or next(
+            (t.upper()[:2] for t in tags if re.fullmatch(r"[A-Za-z]{2,3}", t) and t.lower() not in ("sdh", "cc", "hi", "for")), None)
+        label = lang or "SUB"
+        if label not in out:
+            out.append(label)
+    return out
+
+
 def _numbers(name: str) -> tuple[int | None, list[int]]:
     m = NUMBERS.search(name)
     if not m:
@@ -113,6 +133,7 @@ class Index:
                   "imdb": list(nfo.ratings["imdb"]) if nfo and "imdb" in nfo.ratings else None,
                   "thumb": any(stem + s in present for s in ("-thumb.jpg", ".tbn", "-thumb.png")),
                   "subs": sum(1 for x in files if x.startswith(stem + ".") and x.lower().endswith(SUBTITLES)),
+                  "subLangs": _sub_langs(stem, files),
                   "damaged": bool(BROKEN_EPISODE.search(name)), "sample": bool(SAMPLE.search(name)),
                   "mismatch": bool(nfo and nfo.season is not None and nfo.episode is not None and season is not None
                                    and (nfo.season, nfo.episode) != (season, numbers[0] if numbers else None)),

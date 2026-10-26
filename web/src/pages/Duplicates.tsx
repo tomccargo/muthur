@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type DupGroup, type DupPlan, type DupResult } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { libraryPath, middle, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -176,7 +176,6 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
       {groups.map((g) => (
         <Group key={g.id} g={g} keep={keepOf(g)} plan={planOf(g)} selected={selected.has(g.id)} onKeep={(p) => changeKeep(g, p)} onSelect={(on) => select(g.id, on)} />
       ))}
-      <Footer />
     </div>
   );
 }

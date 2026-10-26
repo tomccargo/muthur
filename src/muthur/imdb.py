@@ -114,6 +114,18 @@ class Imdb:
                         "WHERE e.parent = ? AND e.season = ? AND e.episode = ?", (show, season, episode))
         return (row[0], row[1]) if row else None
 
+    def shows_with_data(self) -> set[str]:
+        """IMDb IDs of the shows whose episodes are in the kept data."""
+        with self.store.lock:
+            return {r[0] for r in self.store.db.execute("SELECT DISTINCT parent FROM imdb_episodes").fetchall()}
+
+    def season_counts(self, show: str) -> dict[int, int]:
+        """Episodes per season on IMDb, for one show."""
+        with self.store.lock:
+            rows = self.store.db.execute("SELECT season, COUNT(*) FROM imdb_episodes WHERE parent = ? AND season IS NOT NULL "
+                                         "GROUP BY season", (show,)).fetchall()
+        return {int(s): n for s, n in rows}
+
     def counts(self) -> dict:
         with self.store.lock:
             db = self.store.db

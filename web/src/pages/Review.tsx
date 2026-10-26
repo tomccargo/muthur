@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { SIGNALS, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
@@ -371,7 +371,6 @@ export function ReviewPage({ status, refresh }: StatusHook) {
           <FromTheName item={current} onForget={() => forget(current.id)} />
         </div>
       )}
-      <Footer />
     </div>
   );
 }

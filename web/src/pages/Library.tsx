@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Film, type LibEpisode, type LibProblems, type Library, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
@@ -13,6 +13,13 @@ const isFlying = () => motionOn() && hero.to === location.pathname + location.se
 const filmDir = (f: Film) => (f.file && f.file.includes('/') ? f.file.split('/').slice(0, -1).join('/') : f.key);
 
 type Filter = 'all' | keyof LibProblems;
+// Each problem filter says where it's fixed.
+const FIX_HINT: Partial<Record<Filter, [string, string, string]>> = {
+  noNfo: ['Health writes the missing NFOs.', '/health', 'Open Health'],
+  noScore: ['Health adds IMDb scores, and downloads them for shows that have none yet.', '/health', 'Open Health'],
+  duplicates: ['Choose which copy to keep in Duplicates.', '/duplicates', 'Open Duplicates'],
+  damaged: ['Health lists these under Needs you, to say which episode each one is.', '/health', 'Open Health'],
+};
 const FILTERS: [Filter, string][] = [['all', 'All'], ['noNfo', 'Missing NFO'], ['noScore', 'No IMDb score'], ['duplicates', 'Duplicates'], ['damaged', 'Damaged names']];
 const art = (path: string) => `/api/library/art?${new URLSearchParams({ path })}`;
 const code = (s: number | null, e: number[]) => (s == null ? '—' : `S${String(s).padStart(2, '0')}${e.map((n) => `E${String(n).padStart(2, '0')}`).join('')}`);
@@ -58,6 +65,7 @@ function EpisodeRow({ e }: { e: LibEpisode }) {
         <span className="ellipsis" style={{ display: 'block' }}>{e.title ?? <span className="muted">—</span>}</span>
         <span className="mono small muted ellipsis" style={{ display: 'block' }} title={e.file}>{middle(name, 70)}</span>
         {flags.length > 0 && <span className="small" style={{ color: 'var(--warn-text)' }}>{flags.join(' · ')}</span>}
+        {(e.subLangs?.length ?? 0) > 0 && <span className="small muted" style={{ display: 'block' }}>Subtitles {e.subLangs!.join(' · ')}</span>}
       </span>
       <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
         <span className="small num">{score(e.rating) || <span className="muted">no score</span>}</span>
@@ -80,6 +88,8 @@ function ShowPage({ folder }: { folder: string }) {
     const byNumber = (a: LibEpisode, b: LibEpisode) => (a.episodes[0] ?? 9999) - (b.episodes[0] ?? 9999) || a.file.localeCompare(b.file);
     return [...m.entries()].sort((a, b) => (a[0] ?? 999) - (b[0] ?? 999)).map(([s, eps]) => [s, [...eps].sort(byNumber)] as const);
   }, [show]);
+  const [season, setSeason] = useState<number | null | undefined>(undefined);
+  const shown = seasons.find(([s]) => s === season) ?? seasons[0];
   return (
     <div className="page">
       <Link to="/library" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}>← Library</Link>
@@ -103,15 +113,34 @@ function ShowPage({ folder }: { folder: string }) {
           <LibraryEditor kind="tv" path={`TV/${show.folder}`} nfo={show.nfo ? `TV/${show.folder}/tvshow.nfo` : null}
             posterTarget={`TV/${show.folder}/poster.jpg`} tmdbId={show.ids.tmdb ? Number(show.ids.tmdb) : null} title={show.title}
             onDone={(text) => { setNote(text); api.libraryShow(folder).then(setShow).catch(() => undefined); }} />
-          {seasons.map(([s, eps]) => (
-            <section key={String(s)} className="panel" aria-label={s == null ? 'Without a number' : `Season ${s}`}>
-              <div className="panel-head">
-                <h2>{s == null ? 'Without a season number' : s === 0 ? 'Specials' : `Season ${s}`}</h2>
-                <span className="small muted">{eps.length} episodes · {eps.filter((e) => e.watched).length} watched</span>
-              </div>
-              <ul className="rows">{eps.map((e) => <EpisodeRow key={e.file} e={e} />)}</ul>
-            </section>
-          ))}
+          {seasons.length > 1 && (
+            <div className="seg filters" role="group" aria-label="Seasons">
+              {seasons.map(([s, eps]) => (
+                <button key={String(s)} type="button" aria-pressed={shown?.[0] === s} onClick={() => setSeason(s)}>
+                  {s == null ? 'No number' : s === 0 ? 'Specials' : `Season ${s}`}
+                  {eps.some((e) => !e.nfo || !e.imdb || e.damaged || e.duplicate) && <Dot kind="dot-warning" />}
+                </button>
+              ))}
+            </div>
+          )}
+          {shown && (() => {
+            const [s, eps] = shown;
+            const why = s != null ? show.scoreNotes?.[String(s)] : undefined;
+            return (
+              <section className="panel" aria-label={s == null ? 'Without a number' : `Season ${s}`}>
+                <div className="panel-head">
+                  <h2>{s == null ? 'Without a season number' : s === 0 ? 'Specials' : `Season ${s}`}</h2>
+                  <span className="small muted">{eps.length} episodes · {eps.filter((e) => e.watched).length} watched</span>
+                </div>
+                {why && (
+                  <p className="hint" style={{ margin: '0 0 8px', color: 'var(--warn-text)' }}>
+                    {why}{why.includes('Health') && <> <Link to="/health">Open Health</Link></>}
+                  </p>
+                )}
+                <ul className="rows">{eps.map((e) => <EpisodeRow key={e.file} e={e} />)}</ul>
+              </section>
+            );
+          })()}
           {show.loose.length > 0 && (
             <section className="panel" aria-labelledby="loose-h">
               <div className="panel-head"><h2 id="loose-h">Leftover files</h2><span className="small muted">belong to no video</span></div>
@@ -120,7 +149,6 @@ function ShowPage({ folder }: { folder: string }) {
           )}
         </>
       )}
-      <Footer />
     </div>
   );
 }
@@ -158,7 +186,6 @@ function FilmPage({ film }: { film: Film }) {
           {!film.file && <li><span className="small" style={{ color: 'var(--warn-text)' }}>No video in this folder.</span></li>}
         </ul>
       </section>
-      <Footer />
     </div>
   );
 }
@@ -229,6 +256,9 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           <button key={k} type="button" aria-pressed={filter === k} onClick={() => go(kind, k)}>{label} <span className="num muted">{count(k)}</span></button>
         ))}
       </div>
+      {FIX_HINT[filter] && (
+        <div className="banner banner-note"><span>{FIX_HINT[filter]![0]}</span><Link to={FIX_HINT[filter]![1]}>{FIX_HINT[filter]![2]}</Link></div>
+      )}
       {lib?.at && (kind === 'tv' ? shows : films).length === 0 && <p className="hint">Nothing here with this filter.</p>}
       <div className="posters">
         {kind === 'tv' ? shows.map((s) => (
@@ -247,7 +277,6 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           </Link>
         ))}
       </div>
-      <Footer />
     </div>
   );
 }

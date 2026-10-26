@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, Loading } from '../components';
+import { Dot, JobProgress, Loading } from '../components';
 import { SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
@@ -109,13 +109,13 @@ export function InboxPage({ status, refresh }: StatusHook) {
         <div className="actions">
           {asking ? null : ready.length > 0 ? (
             <>
-              <button className="btn btn-secondary btn-sm" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Check again</button>
+              <button className="btn btn-secondary btn-sm" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Look again</button>
               <button className="btn btn-primary" type="button" aria-busy={starting === 'apply'} onClick={() => setAsking(true)}>
                 Apply {ready.length} ready {ready.length === 1 ? 'item' : 'items'}
               </button>
             </>
           ) : (
-            <button className="btn btn-primary" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Check downloads</button>
+            <button className="btn btn-primary" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Look for new downloads</button>
           )}
         </div>
       </header>
@@ -195,7 +195,6 @@ export function InboxPage({ status, refresh }: StatusHook) {
           }} />}
         </div>
       )}
-      <Footer />
     </div>
   );
 }

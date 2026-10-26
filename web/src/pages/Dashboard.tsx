@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { WatchedPanel } from './Watched';
 import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, JobProgress, useElapsed } from '../components';
+import { Dot, JobProgress, useElapsed } from '../components';
 import { when } from '../labels';
 import { Link } from '../nav';
 
@@ -50,8 +50,8 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         </div>
         <div className="actions">
           {tmdb
-            ? <button className="btn btn-primary" type="button" aria-busy={starting === 'scan'} onClick={() => start('scan', api.scan)}>Check downloads</button>
-            : <button className="btn btn-primary" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Check downloads</button>}
+            ? <button className="btn btn-primary" type="button" aria-busy={starting === 'scan'} onClick={() => start('scan', api.scan)} title="Looks in the downloads folder and works out what each one is. Nothing moves.">Look for new downloads</button>
+            : <button className="btn btn-primary" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Look for new downloads</button>}
         </div>
       </header>
 
@@ -83,10 +83,12 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
       <div className="grid-2">
         <section className="panel" aria-labelledby="kodi-h">
           <div className="panel-head"><h2 id="kodi-h">Kodi on the {device}</h2><Link to="/settings" className="small">Settings</Link></div>
-          <div className="actions" style={{ justifyContent: 'space-between' }}>
+          <p style={{ margin: '0 0 12px' }}>
             {k == null ? <span className="status"><Dot />Not set up</span>
               : k.connected ? <span className="status"><Dot kind="dot-success" />Connected · Kodi {k.version}</span>
                 : <span className="status"><Dot kind="dot-danger" />{k.off ? 'Off (asleep, or Kodi closed)' : k.problem}</span>}
+          </p>
+          <div className="actions">
             {k && !k.connected && k.canWake && (
               <button className="btn btn-secondary btn-sm" type="button" disabled={waking} aria-busy={waking} onClick={() => {
                 setKodiNote(null);
@@ -111,25 +113,25 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
         </section>
 
         <section className="panel" aria-labelledby="mem-h">
-          <div className="panel-head"><h2 id="mem-h">Shows muthur knows</h2></div>
-          <div className="actions" style={{ justifyContent: 'space-between' }}>
-            <span><strong className="num" style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>{status?.memory.shows ?? 0}</strong> remembered</span>
+          <div className="panel-head"><h2 id="mem-h">Known shows</h2></div>
+          <p style={{ margin: '0 0 12px' }}>
+            <strong className="num" style={{ fontFamily: 'var(--font-display)', fontSize: '1.4rem' }}>{status?.memory.shows ?? 0}</strong>
+            <span className="muted"> · their new episodes go straight to their folder</span>
+          </p>
+          <div className="actions">
             {tmdb
-              ? <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'learn'} onClick={() => start('learn', api.learnShows)}>Learn from the library</button>
-              : <button className="btn btn-secondary btn-sm" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Learn from the library</button>}
+              ? <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'learn'} onClick={() => start('learn', api.learnShows)}
+                title="Reads the TV folder and matches each show to TMDB, so new episodes find their folder. Changes no files.">Read the TV folder</button>
+              : <button className="btn btn-secondary btn-sm" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Read the TV folder</button>}
+            <span className="small muted">changes nothing</span>
           </div>
         </section>
 
         <WatchedPanel status={status} refresh={refresh} />
 
         <section className="panel" aria-labelledby="lib-h">
-          <div className="panel-head"><h2 id="lib-h">Library</h2><Link to="/library" className="small">Open</Link></div>
-          <div className="actions">
-            <Link to="/duplicates" className="status">{(status?.duplicates ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.duplicates} duplicates</>
-              : status?.duplicatesAt ? <><Dot kind="dot-success" />No duplicates</> : <><Dot />Duplicates not checked yet</>}</Link>
-            <span className="muted" aria-hidden="true">·</span>
-            <Link to="/health" className="status">{(status?.fixes ?? 0) > 0 ? <><Dot kind="dot-warning" />{status?.fixes.toLocaleString('en-GB')} fixes</> : <><Dot kind="dot-success" />Nothing to fix</>}</Link>
-          </div>
+          <div className="panel-head"><h2 id="lib-h">Library</h2></div>
+          <LibraryProblems status={status} />
         </section>
 
         <section className="panel" aria-labelledby="scores-h">
@@ -151,7 +153,6 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           </section>
         )}
       </div>
-      <Footer />
     </div>
   );
 }
@@ -184,5 +185,29 @@ function SetupChecklist({ status }: { status: Status }) {
         ))}
       </ul>
     </section>
+  );
+}
+
+// What's wrong in the library, each kind a tile that opens where it's fixed. Only kinds with something in them.
+function LibraryProblems({ status }: { status: Status | null }) {
+  const l = status?.library ?? {};
+  const tiles: [string, number | undefined, string][] = [
+    ['Shows without IMDb scores', l.imdbData, '/health'],
+    ['Scores to add', l.scores, '/health'],
+    ['NFOs to write', l.nfos, '/health'],
+    ['Duplicates', status?.duplicatesAt ? status.duplicates : undefined, '/duplicates'],
+    ['Questions', l.questions, '/health'],
+    ['Leftovers', l.leftovers, '/health'],
+  ];
+  const shown = tiles.filter(([, n]) => (n ?? 0) > 0);
+  if (!shown.length) {
+    return <span className="status"><Dot kind="dot-success" />{status?.duplicatesAt ? 'In order' : 'In order · duplicates not checked yet'}</span>;
+  }
+  return (
+    <div className="tiles inset">
+      {shown.map(([label, n, to]) => (
+        <Link key={label} className="tile" to={to}><span className="label">{label}</span><strong>{(n ?? 0).toLocaleString('en-GB')}</strong></Link>
+      ))}
+    </div>
   );
 }
