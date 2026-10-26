@@ -1360,7 +1360,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             # 'at' only for a check that knew every kind of fix: one from before an update isn't 'in order'.
             **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
             "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("episode-nfos", "show-nfos", "film-nfos"),
-            "leftovers": n("leftovers", "empty-films"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
+            "leftovers": n("leftovers", "empty-films", "extras"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
             "kodiEntries": n("kodi-entries"), "subTiming": n("subtitle-timing", "subtitle-misfit"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 

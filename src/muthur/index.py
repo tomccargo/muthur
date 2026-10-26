@@ -131,9 +131,10 @@ class Index:
             extra = season is None and bool(EXTRA_NAME.search(name))  # "Trailer Park Boys S01E01" is an episode
             if season is None and not extra:
                 # No SxxEyy: what the inbox reads (season folders and guessit, cached): 'Season 1/Magi - 01', 'Season 1/101'
-                # (26 Oct: these were all questions). Only with a season: a bare number alone could be anything.
+                # (26 Oct: these were all questions). A number without a season stays without one: Health only takes it
+                # when TMDB has a single season ('Death note - EP 1').
                 p = self.store.parsed("episode", [folder, *f.split("/")])
-                if p.season is not None and p.episodes:
+                if p.episodes:
                     season, numbers = p.season, list(p.episodes)
             try:
                 st = os.stat(os.path.join(base, f))
