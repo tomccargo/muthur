@@ -199,7 +199,7 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['Duplicates', status?.duplicatesAt ? status.duplicates : undefined, '/duplicates'],
     ['Posters to replace', l.posters, '/health'],
     ['Subtitles Kodi misses', l.subtitles, '/health'],
-    ['Episodes to rename', l.renames, '/health'],
+    ['Names to fix', l.renames, '/health'],
     ['Questions', l.questions, '/health'],
     ['Leftovers', l.leftovers, '/health'],
   ];

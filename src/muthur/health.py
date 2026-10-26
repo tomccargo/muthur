@@ -21,13 +21,14 @@ from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
 from .media import probe_duration
-from .naming import LATIN_SCRIPT, display_title
+from .naming import LATIN_SCRIPT, display_title, movie_path
 from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
-FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores", "renames")
+FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
+         "renames", "film-renames")
 
 
 class Health:
@@ -163,6 +164,14 @@ class Health:
     def _film(self, f: dict, fixes: dict, manual: dict) -> None:
         if f["folder"] and f["file"]:
             self._subtitles_of("Film", f["key"], fixes)
+        if f["nfo"] and f["file"] and f.get("year") and f["title"] and not f["others"] and f["file"].count("/") == (1 if f["folder"] else 0):
+            # 'Title (Year)/Title (Year).mkv' from its NFO. A film with extra videos, or one a folder deeper, keeps its name.
+            want = movie_path(f["title"], f["year"], os.path.splitext(f["file"])[1])
+            new_folder = want.split("/")[0]
+            taken = new_folder != (f["key"] if f["folder"] else None) and os.path.lexists(self._full(f"Film/{new_folder}"))
+            if want != f["file"] and not taken:
+                fixes["film-renames"].append({"path": f"Film/{f['file']}", "to": want, "folder": f["key"] if f["folder"] else None,
+                                              "label": new_folder, "why": f"from {f['file'].split('/')[0]}"})
         if f["nfo"] and f["file"] and f.get("nfoFile") and str(f["ids"].get("tmdb", "")).isdigit():
             stem = f"Film/{f['file'].rsplit('.', 1)[0]}"  # beside the video, where Kodi looks: 'poster.jpg' in its folder, else '<name>-poster.jpg'
             folder = f"Film/{f['file'].rsplit('/', 1)[0]}"
@@ -199,10 +208,10 @@ class Health:
         items = [(k, x) for k in FIXES if k in kinds for x in plan["fixes"].get(k, [])]
         self._renamed: list[tuple[str, str]] = []
         self._before: dict | None = None  # Kodi's items before the renames; None: Kodi is off, so nothing is renamed
-        if "renames" in kinds and kodi and kodi.check().get("connected"):
+        if {"renames", "film-renames"} & set(kinds) and kodi and kodi.check().get("connected"):
             if job:
                 job.begin("Reading what Kodi knows", 0)
-            self._before = renaming.read_before(kodi, {"TV": self.roots["TV"]})
+            self._before = renaming.read_before(kodi, self.roots)
         if job:
             job.step, job.total, job.done = None, len(items), 0
         run = self.journal.start("health")
@@ -219,7 +228,7 @@ class Health:
         if kodi and self._renamed and self._before is not None:
             if job:
                 job.begin(f"Kodi takes {len(self._renamed):,} new names", 0)
-            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, {"TV": self.roots["TV"]}, self._before)
+            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before)
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
@@ -332,8 +341,29 @@ class Health:
         rel = x["path"].partition("/")[2]
         if not os.path.isfile(self._full(x["path"])):
             raise ValueError("the video isn't there any more")
-        new = renaming.rename(self.journal, run, self.roots["TV"], "TV", rel, x["to"])
+        new = renaming.rename(self.journal, run, self.roots["TV"], "TV", rel, f"{rel.rsplit('/', 1)[0]}/{x['to']}")
         self._renamed.append((x["path"], new))
+
+    def _film_renames(self, run, x, nfos):
+        """'Title (Year)/Title (Year).mkv': the video with its NFO, artwork and subtitles, then its folder (a loose film
+        gets one); a download site's notes in it go to quarantine. Only while Kodi answers, like episodes."""
+        if self._before is None:
+            raise ValueError("Kodi is off: renaming now would leave the watched status behind. Turn Kodi on and apply again")
+        if not os.path.isfile(self._full(x["path"])):
+            raise ValueError("the video isn't there any more")
+        root, rel = self.roots["Film"], x["path"].partition("/")[2]
+        new_folder, new_name = x["to"].split("/")
+        old = x.get("folder")
+        if old and old != new_folder and os.path.lexists(os.path.join(root, new_folder)):
+            raise ValueError(f"{new_folder} already exists")
+        renaming.rename(self.journal, run, root, "Film", rel, f"{old}/{new_name}" if old else x["to"])
+        if old:
+            for n in sorted(os.listdir(os.path.join(root, old))):
+                if JUNK.search(n) and os.path.isfile(os.path.join(root, old, n)):
+                    self._quarantine(run, f"Film/{old}/{n}", "A leftover in the library: a download site's note or other junk.")
+            if old != new_folder:
+                self.journal.move(run, x["path"], os.path.join(root, old), os.path.join(root, new_folder), "move")
+        self._renamed.append((x["path"], f"Film/{x['to']}"))
 
     def _imdb_scores(self, run, x, nfos):
         full = self._full(x["path"])

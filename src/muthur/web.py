@@ -831,7 +831,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             new = renaming.new_name(show["folder"], e["file"], s, [n] if other else e["episodes"], ep.get("name"))
             run = journal.start("library")
             try:
-                moved = renaming.rename(journal, run, cfg.tv, "TV", f"{show['folder']}/{e['file']}", new)
+                rel = f"{show['folder']}/{e['file']}"
+                moved = renaming.rename(journal, run, cfg.tv, "TV", rel, f"{rel.rsplit('/', 1)[0]}/{new}")
             except (OSError, ValueError) as err:
                 journal.undo(run)
                 journal.finish(run, {"label": f"Rename of {label} stopped"})
@@ -1042,7 +1043,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.put("health.counts", {
             "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
             "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
-            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])), "renames": len(f.get("renames", [])),
+            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])), "renames": len(f.get("renames", [])) + len(f.get("film-renames", [])),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def check_health(client, job):

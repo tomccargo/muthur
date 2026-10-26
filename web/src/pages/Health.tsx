@@ -15,12 +15,13 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'show-nfos': { title: 'Write tvshow.nfo for show folders that have none', what: 'Writes the show’s NFO, poster, fanart and logo from TMDB where they’re missing.' },
   'film-nfos': { title: 'Write NFOs for films that have none', what: 'Writes the NFO, poster, fanart and logo from TMDB where missing, for films muthur recognises with certainty by name, year and length.' },
   renames: { title: 'Rename episodes to the library’s naming', what: 'Show - S01E02 - TMDB’s title, with the NFO, thumbnail and subtitles. Only while Kodi is on: it keeps each episode’s watched status.' },
+  'film-renames': { title: 'Rename films to the library’s naming', what: 'Title (Year)/Title (Year), from the NFO, with the artwork and subtitles; download-site notes go to quarantine. Only while Kodi is on.' },
   posters: { title: 'Replace missing and poor posters', what: 'TMDB’s poster where there is none, or one under 500 pixels wide or not poster-shaped. The old one is kept; Kodi re-reads each item.' },
   subtitles: { title: 'Put subtitles where Kodi finds them', what: 'English and Dutch go beside the video under its name; other languages and extra copies go to quarantine.' },
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db, and NFOs, thumbnails or subtitles of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'renames', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'renames', 'film-renames', 'leftovers', 'empty-films'];
 // 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
 const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
 

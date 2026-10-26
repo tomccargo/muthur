@@ -24,7 +24,7 @@ def tv(tmp_path):
 def test_the_new_name_and_what_moves_with_it(tv):
     name = new_name("The Office (US)", "Season 2/The.Office.S02E01.720p.mkv", 2, [1], "The Dundies")
     assert name == "The Office (US) - S02E01 - The Dundies.mkv"
-    got = moves(str(tv / "TV"), "The Office (US)/Season 2/The.Office.S02E01.720p.mkv", name)
+    got = moves(str(tv / "TV"), "The Office (US)/Season 2/The.Office.S02E01.720p.mkv", f"The Office (US)/Season 2/{name}")
     to = [b.rsplit("/", 1)[1] for _, b in got]
     assert to == ["The Office (US) - S02E01 - The Dundies.mkv", "The Office (US) - S02E01 - The Dundies-thumb.jpg",
                   "The Office (US) - S02E01 - The Dundies.en.srt", "The Office (US) - S02E01 - The Dundies.nfo"]  # not another video's subtitle
@@ -36,10 +36,10 @@ def test_a_rename_is_journalled_never_overwrites_and_can_be_put_back(tv):
     root, s2 = str(tv / "TV"), tv / "TV" / "The Office (US)" / "Season 2"
     before = sorted(p.name for p in s2.iterdir())
     run = journal.start("library")
-    new = rename(journal, run, root, "TV", "The Office (US)/Season 2/The.Office.S02E01.720p.mkv", "The Office (US) - S02E01 - The Dundies.mkv")
+    new = rename(journal, run, root, "TV", "The Office (US)/Season 2/The.Office.S02E01.720p.mkv", "The Office (US)/Season 2/The Office (US) - S02E01 - The Dundies.mkv")
     assert new == "TV/The Office (US)/Season 2/The Office (US) - S02E01 - The Dundies.mkv" and (s2 / "The Office (US) - S02E01 - The Dundies.nfo").exists()
     with pytest.raises(ValueError, match="already exists"):  # S02E02's new name is taken: nothing moves
-        rename(journal, run, root, "TV", "The Office (US)/Season 2/The.Office.S02E02.mkv", "The Office (US) - S02E01 - The Dundies.mkv")
+        rename(journal, run, root, "TV", "The Office (US)/Season 2/The.Office.S02E02.mkv", "The Office (US)/Season 2/The Office (US) - S02E01 - The Dundies.mkv")
     assert (s2 / "The.Office.S02E02.mkv").exists()
     journal.undo(run)
     assert sorted(p.name for p in s2.iterdir()) == before
@@ -107,3 +107,37 @@ def test_health_renames_only_while_kodi_answers(env):  # noqa: F811
         rename_mod.read_before = saved
     assert on["failed"] == [] and on["done"]["renames"] == 1 and on["kodiRenames"] == {"followed": 1, "problems": []}
     assert (tmp / "TV" / "Other Show (2019)" / "Season 01" / "Other Show (2019) - S01E01 - One.mkv").exists()
+
+
+def test_films_get_title_and_year_and_a_folder_of_their_own(env, monkeypatch):  # noqa: F811
+    tmp, health, _ = env
+    film = tmp / "Film"
+    site = film / "www.Site.com   -   Some.Film.2005.1080p"
+    write(site / "Some.Film.2005.1080p.mkv")
+    write(site / "Some.Film.2005.1080p.nfo", "<movie><title>Some Film</title><year>2005</year></movie>")
+    write(site / "Some.Film.2005.1080p.en.srt")
+    write(site / "poster.jpg")
+    write(site / "Torrent Downloaded From www.Site.com.txt")
+    write(film / "Loose.Film.1999.mkv")
+    write(film / "Loose.Film.1999.nfo", "<movie><title>Loose Film</title><year>1999</year></movie>")
+    write(film / "Loose.Film.1999-poster.jpg")
+    plan = health.check(health.index.build())
+    fixes = {x["label"]: x for x in plan["fixes"]["film-renames"]}
+    assert fixes["Some Film (2005)"]["to"] == "Some Film (2005)/Some Film (2005).mkv"
+    assert fixes["Loose Film (1999)"]["to"] == "Loose Film (1999)/Loose Film (1999).mkv"
+
+    class On:
+        def check(self):
+            return {"connected": True}
+
+    monkeypatch.setattr("muthur.rename.read_before", lambda kodi, roots: {})
+    monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before: {"followed": len(renamed), "problems": []})
+    before = sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file())
+    result = health.apply(plan, ["film-renames"], On())
+    assert result["failed"] == [] and result["done"]["film-renames"] == 2
+    now = sorted(str(p.relative_to(film)).replace("\\", "/") for p in film.rglob("*") if p.is_file() and "Film (" in str(p))
+    assert now == ["Loose Film (1999)/Loose Film (1999)-poster.jpg", "Loose Film (1999)/Loose Film (1999).mkv", "Loose Film (1999)/Loose Film (1999).nfo",
+                   "Some Film (2005)/Some Film (2005).en.srt", "Some Film (2005)/Some Film (2005).mkv", "Some Film (2005)/Some Film (2005).nfo",
+                   "Some Film (2005)/poster.jpg"]  # the site's note went to quarantine
+    health.journal.undo(result["run"])
+    assert sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file()) == before
