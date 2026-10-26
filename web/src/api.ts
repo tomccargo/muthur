@@ -68,11 +68,19 @@ export type Settings = {
   tmdb: { tokenSet: boolean; tokenFrom: 'settings' | 'install' | null; language: string };
   titles: { keepOriginal: string[] };
   downloadStation: { url: string; user: string; passwordSet: boolean };
+  openSubtitles: { user: string; apiKeySet: boolean; passwordSet: boolean };
   dryRun: boolean;
   shield: { enabled: boolean; port: number; app: string };
   quality: { preferHdr: boolean };
   names: Names;
   paths: { downloads: string; tv: string; film: string };
+};
+
+// One subtitle on OpenSubtitles.com for a video, with what helps choose it ('same': what its release shares with the file).
+export type SubResult = {
+  fileId: number; language: string; release: string; hashMatch: boolean; same: string[]; downloads: number; rating: number; votes: number;
+  hearingImpaired: boolean; forced: boolean; aiTranslated: boolean; machineTranslated: boolean; fps: number | null; parts: number;
+  trusted: boolean; uploader: string | null; rank: string | null; uploaded: string | null; comments: string | null;
 };
 
 export type ApplyResult = { id: string; ok: boolean; files?: number; why?: string };
@@ -169,6 +177,10 @@ export const api = {
   job: () => call<Job | null>('/api/jobs/current'),
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  testOpenSubtitles: () => call<{ ok: true; level: string | null; allowed: number | null; vip: boolean } | { ok: false; problem: string }>('/api/opensubtitles/test', { method: 'POST' }),
+  subtitleSearch: (path: string) => call<{ file: string; results: SubResult[]; count: number; allowed: number | null }>(`/api/library/subtitles?${new URLSearchParams({ path })}`),
+  subtitleSave: (path: string, fileId: number, language: string) =>
+    call<{ saved: string; remaining: number | null }>('/api/library/subtitles', { method: 'POST', body: JSON.stringify({ path, fileId, language }) }),
   testDownloadStation: () => call<{ connected: true; tasks: number } | { connected: false; problem: string }>('/api/downloadstation/test', { method: 'POST' }),
   shieldApps: () => call<{ apps: string[]; current: string | null }>('/api/shield/apps'),
   wakeShield: () => call<{ ok: boolean; woke: boolean; note?: string }>('/api/shield/wake', { method: 'POST' }),

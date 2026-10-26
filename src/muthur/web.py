@@ -23,6 +23,7 @@ from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
 from .downloadstation import DownloadStation, DownloadStationError
+from .opensubs import OpenSubtitles, OpenSubtitlesError
 from .duplicates import Duplicates, apply_groups
 from .health import FIXES, Health
 from .inbox import Inbox
@@ -1425,6 +1426,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                      "language": store.get("tmdb.language") or "en-US"},
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
             "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
+            "openSubtitles": {"user": (store.get("opensubtitles") or {}).get("user", ""),
+                              "apiKeySet": bool((store.get("opensubtitles") or {}).get("apiKey")),
+                              "passwordSet": bool((store.get("opensubtitles") or {}).get("password"))},
             "dryRun": bool(store.get("dryRun", False)),
             "shield": {"enabled": bool((store.get("shield") or {}).get("enabled")), "port": int((store.get("shield") or {}).get("port") or 5555),
                        "app": (store.get("shield") or {}).get("app") or ""},
@@ -1485,6 +1489,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if new.get("password"):
                 d["password"] = new["password"]
             store.put("downloadstation", d)
+        if isinstance(body.get("openSubtitles"), dict):
+            new = body["openSubtitles"]
+            o = {} if new.get("forget") else dict(store.get("opensubtitles") or {})
+            if "user" in new and str(new["user"]).strip() != o.get("user", ""):
+                o.pop("password", None)  # a password only ever goes with the account it was typed for
+            if "user" in new:
+                o["user"] = str(new["user"]).strip()
+            for key in ("apiKey", "password"):
+                if new.get(key):
+                    o[key] = str(new[key]).strip() if key == "apiKey" else new[key]
+            store.put("opensubtitles", o)
+            store.put("opensubtitles.session", None)
         t = body.get("tmdb") or {}
         if t.get("forget"):
             store.put("tmdb.token", None)
@@ -1497,6 +1513,71 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if "titles" in body and isinstance(body["titles"].get("keepOriginal"), list):
             store.put("titles.keepOriginal", sorted({str(c) for c in body["titles"]["keepOriginal"]}))
         return get_settings()
+
+    def opensubtitles() -> OpenSubtitles:
+        o = store.get("opensubtitles") or {}
+        if not (o.get("apiKey") and o.get("user") and o.get("password")):
+            raise HTTPException(409, "Add your OpenSubtitles.com API key and account in Settings first.")
+        return OpenSubtitles(o["apiKey"], o["user"], o["password"], store)
+
+    @app.post("/api/opensubtitles/test")
+    def opensubtitles_test():
+        return opensubtitles().check()
+
+    def subtitle_target(path: str) -> tuple[str, dict]:
+        """A library video's full path, and what OpenSubtitles is searched by: the film's IMDb ID, or the show's with
+        the episode's season and number."""
+        lib_name = path.partition("/")[0]
+        if lib_name == "TV":
+            show, e = episode_at(path)
+            if e["season"] is None or len(e["episodes"]) != 1:
+                raise HTTPException(409, "muthur can’t tell which episode this is. Use “It’s another episode” first.")
+            imdb_id = health_tool(need_tmdb()).scores.show_ids(show["folder"])[0] if tmdb() else show["ids"].get("imdb")
+            return (os.path.join(cfg.tv, show["folder"], *e["file"].split("/")),
+                    {"parent_imdb_id": imdb_id or show["ids"].get("imdb"), "season": e["season"], "episode": e["episodes"][0]})
+        if lib_name == "Film":
+            film = film_at(path)
+            return os.path.join(cfg.film, *film["file"].split("/")), {"imdb_id": film["ids"].get("imdb")}
+        raise HTTPException(404, "That isn’t a video in the library.")
+
+    @app.get("/api/library/subtitles")
+    def library_subtitles(path: str):
+        """Subtitles on OpenSubtitles for one video, with what helps choose; English first, Dutch when English is thin."""
+        video, ids = subtitle_target(path)
+        try:
+            results = opensubtitles().search(video=video, **ids)
+        except OpenSubtitlesError as e:
+            raise HTTPException(409, str(e))
+        session = store.get("opensubtitles.session") or {}
+        return {"file": os.path.basename(video), "results": results[:40], "count": len(results), "allowed": session.get("allowed")}
+
+    @app.post("/api/library/subtitles")
+    def library_subtitle_save(body: dict):
+        """The subtitle the reader chose, saved beside the video as '<video>.en.srt' (or .nl), where Kodi finds it.
+        Never over an existing file: a second English one becomes '<video>.2.en.srt'. Journalled, so History can take
+        it away again."""
+        not_dry()
+        path = str(body.get("path") or "")
+        language = re.sub(r"[^a-z]", "", str(body.get("language") or "en").lower())[:3] or "en"
+        try:
+            file_id = int(body.get("fileId"))  # type: ignore[arg-type]
+        except (TypeError, ValueError):
+            raise HTTPException(422, "Choose a subtitle first.")
+        video, _ = subtitle_target(path)
+        try:
+            data, remaining = opensubtitles().download(file_id)
+        except OpenSubtitlesError as e:
+            raise HTTPException(409, str(e))
+        stem, k = os.path.splitext(video)[0], 2
+        target = f"{stem}.{language}.srt"
+        while os.path.lexists(target):
+            target, k = f"{stem}.{k}.{language}.srt", k + 1
+        with alone("edit"):
+            run = journal.start("library")
+            journal.create(run, path, target, data)
+            journal.finish(run, {"label": f"Subtitle for {path.rsplit('/', 1)[-1]}"})
+        start_library(by_user=False)  # the show page lists the new language
+        return {"saved": os.path.basename(target), "remaining": remaining}
 
     @app.post("/api/downloadstation/test")
     def downloadstation_test():

@@ -100,6 +100,7 @@ a.tile:hover { background: var(--surface-muted); }
   .ep-row { grid-template-columns: 64px minmax(0, 1fr) auto; }
   .ep-meta { grid-column: 2; grid-row: 2; flex-direction: row; align-items: center; gap: 12px; }
   .ep-menu { grid-column: 3; grid-row: 1; }
+  .ep-row .btn { white-space: normal; text-align: left; }  /* a long "Rename to …" wraps instead of running out of the row */
 }
 .btn-primary { background: var(--accent); color: var(--accent-ink); }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }

@@ -5,6 +5,7 @@ import { Dot, JobError, Loading } from '../components';
 import { count, hue, middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
+import { SubtitleSearch } from './Subtitles';
 import { hero, heroClick, heroLanded, motionOn } from '../motion';
 
 // The page a poster was clicked for: its cover takes over the flying poster (motion.ts).
@@ -62,6 +63,7 @@ function EpisodeMenu({ e, path, tmdbId, onClose }: { e: LibEpisode; path: string
   const [other, setOther] = useState<Season | null>(null);
   const [season, setSeason] = useState<number>(e.season ?? 1);
   const [episode, setEpisode] = useState<number | null>(null);
+  const [subs, setSubs] = useState(false);
   const run = (key: string, request: () => Promise<{ text: string }>) => {
     setBusy(key);
     setResult(null);
@@ -86,9 +88,11 @@ function EpisodeMenu({ e, path, tmdbId, onClose }: { e: LibEpisode; path: string
             Rename to “{middle(e.renameTo, 60)}”
           </button>
         )}
+        {!subs && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSubs(true)}>Find subtitles</button>}
         {tmdbId && !other && <button type="button" className="btn btn-ghost btn-sm" onClick={() => loadSeason(e.season ?? 1)}>It’s another episode</button>}
         <button type="button" className="btn btn-ghost btn-sm" onClick={onClose}>Close</button>
       </div>
+      {subs && <SubtitleSearch path={path} />}
       {other && (
         <div className="actions" style={{ flexWrap: 'wrap' }}>
           <select className="field" aria-label="Season" value={season} onChange={(ev) => loadSeason(Number(ev.target.value))} style={{ width: 'auto' }}>
@@ -220,6 +224,7 @@ function ShowPage({ folder, finished }: { folder: string; finished?: number | nu
 // ---- a film -------------------------------------------------------------------------------
 function FilmPage({ film }: { film: Film }) {
   const [note, setNote] = useState<string | null>(null);
+  const [findSubs, setFindSubs] = useState(false);
   const [flying] = useState(isFlying);
   useEffect(() => { if (flying) heroLanded(); }, [flying]);
   const stem = film.file ? `Film/${film.file.replace(/\.[^.]+$/, '')}` : '';
@@ -250,6 +255,14 @@ function FilmPage({ film }: { film: Film }) {
           {!film.file && <li><span className="small" style={{ color: 'var(--warn-text)' }}>No video in this folder.</span></li>}
         </ul>
       </section>
+      {film.file && (
+        <section className="panel" aria-labelledby="subs-h" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="subs-h">Subtitles</h2>
+            {!findSubs && <button type="button" className="btn btn-secondary btn-sm" onClick={() => setFindSubs(true)}>Find subtitles</button>}
+          </div>
+          {findSubs && <SubtitleSearch path={`Film/${film.file}`} />}
+        </section>
+      )}
     </div>
   );
 }

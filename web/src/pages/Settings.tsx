@@ -9,8 +9,10 @@ import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLangu
 type Draft = {
   host: string; port: string; tcpPort: string; user: string; password: string; token: string; tmdbLanguage: string; keepOriginal: string[];
   dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean; device: string; nas: string;
+  osKey: string; osUser: string; osPassword: string;
 } & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
+type OsState = { ok: true; level: string | null; allowed: number | null; vip: boolean } | { ok: false; problem: string };
 
 function toDraft(s: Settings): Draft {
   return {
@@ -18,6 +20,7 @@ function toDraft(s: Settings): Draft {
     tmdbLanguage: s.tmdb.language, keepOriginal: s.titles.keepOriginal,
     dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
     shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app, device: s.names.device, nas: s.names.nas,
+    osKey: '', osUser: s.openSubtitles.user, osPassword: '',
   };
 }
 
@@ -29,6 +32,7 @@ export function SettingsPage({ refresh }: StatusHook) {
   const [kodi, setKodi] = useState<KodiState | null>(null);
   const [testing, setTesting] = useState(false);
   const [ds, setDs] = useState<DsState | null>(null);
+  const [os, setOs] = useState<OsState | null>(null);
 
   useEffect(() => {
     api.settings().then((s) => { setSaved(s); setDraft(toDraft(s)); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
@@ -46,6 +50,7 @@ export function SettingsPage({ refresh }: StatusHook) {
       kodi: { host: draft.host, port: draft.port, tcpPort: draft.tcpPort, user: draft.user, ...(draft.password ? { password: draft.password } : {}) },
       titles: { keepOriginal: draft.keepOriginal },
       downloadStation: dsBody(),
+      openSubtitles: osBody(),
       dryRun: draft.dryRun,
       shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
@@ -55,6 +60,15 @@ export function SettingsPage({ refresh }: StatusHook) {
     api.saveSettings(body)
       .then((s) => { setSaved(s); setDraft(toDraft(s)); setDirty(false); refresh(); })
       .catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
+  };
+
+  function osBody() {
+    return { user: draft!.osUser, ...(draft!.osKey ? { apiKey: draft!.osKey } : {}), ...(draft!.osPassword ? { password: draft!.osPassword } : {}) };
+  }
+  const testOs = () => {
+    setOs(null);
+    const go = dirty ? api.saveSettings({ openSubtitles: osBody() }) : Promise.resolve(saved);
+    go.then(() => api.testOpenSubtitles()).then(setOs).catch((e: Error) => setOs({ ok: false, problem: e.message }));
   };
 
   function dsBody() {
@@ -179,6 +193,34 @@ export function SettingsPage({ refresh }: StatusHook) {
           {ds && (ds.connected
             ? <span className="status small"><Dot kind="dot-success" />Connected · {ds.tasks} tasks</span>
             : <span className="status small"><Dot kind="dot-danger" />{ds.problem}</span>)}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="os-h">
+        <h2 id="os-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Subtitles from OpenSubtitles.com</h2>
+        <HowTo>
+          For “Find subtitles” on an episode or a film. Make an account on opensubtitles.com (free: 20 downloads a day; VIP: 1000). In your
+          profile, under “API consumers”, add one (any name, for example muthur) and copy its API key here, with your username and password.
+          muthur only downloads the subtitle you pick.
+        </HowTo>
+        <label className="field-label">{saved.openSubtitles.apiKeySet ? 'API key (saved)' : 'API key'}
+          <input className="field" type="password" autoComplete="off" value={draft.osKey} onChange={(e) => edit({ osKey: e.target.value })} />
+        </label>
+        <div className="pair">
+          <label className="field-label">Username<input className="field" type="text" autoComplete="off" value={draft.osUser} onChange={(e) => edit({ osUser: e.target.value })} /></label>
+          <label className="field-label">{saved.openSubtitles.passwordSet ? 'Password (saved)' : 'Password'}
+            <input className="field" type="password" autoComplete="off" value={draft.osPassword} onChange={(e) => edit({ osPassword: e.target.value })} />
+          </label>
+        </div>
+        <div className="actions">
+          <button className="btn btn-secondary btn-sm" type="button" onClick={draft.osUser && (draft.osKey || saved.openSubtitles.apiKeySet) ? testOs : undefined}
+            {...(!draft.osUser || !(draft.osKey || saved.openSubtitles.apiKeySet) ? { 'aria-disabled': true, title: 'Enter the API key and the username first' } : {})}>Test the account</button>
+          {(saved.openSubtitles.user || saved.openSubtitles.apiKeySet) && !dirty && (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => forget({ openSubtitles: { forget: true } })}>Forget this account</button>
+          )}
+          {os && (os.ok
+            ? <span className="status small"><Dot kind="dot-success" />Signed in · {os.level ?? 'account'}{os.allowed != null ? ` · ${os.allowed} downloads a day` : ''}</span>
+            : <span className="status small"><Dot kind="dot-danger" />{os.problem}</span>)}
         </div>
       </section>
 

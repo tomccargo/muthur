@@ -44,6 +44,7 @@ Reports are written to `reports/`, which is git-ignored because they list your l
 ## Data sources
 - [TMDB](https://www.themoviedb.org/): this product uses the TMDB API but is not endorsed or certified by TMDB.
 - [IMDb non-commercial datasets](https://developer.imdb.com/non-commercial-datasets/): personal, non-commercial use only.
+- [OpenSubtitles.com](https://www.opensubtitles.com/) ([REST API](https://opensubtitles.stoplight.io/docs/opensubtitles-api)): "Find subtitles" on an episode or film, with your own account and API key (Settings).
 
 ## Licence
 MIT. The dependency guessit is LGPL-3.0 and is used unmodified.
