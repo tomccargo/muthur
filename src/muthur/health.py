@@ -74,7 +74,7 @@ class Health:
             fixes["leftovers"].append({"path": f"TV/{folder}/{f}", "why": why})
         self._subtitles_of("TV", folder, fixes)
         imdb_id, tmdb_id = self.scores.show_ids(folder)
-        eps = show["episodes"]
+        eps = [e for e in show["episodes"] if not e.get("extra")]  # interviews, openings...: not episodes, not questions
         if not tmdb_id and (not show["nfo"] or any(not e["nfo"] for e in eps)):
             # Look it up on TMDB by the folder name, as for a download; only a certain match counts.
             p = parse_show_folder(folder)

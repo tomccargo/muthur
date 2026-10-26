@@ -66,3 +66,19 @@ def test_a_score_that_cant_be_added_fails_with_its_reason(env):  # noqa: F811
     fix = {"path": "TV/Some Show/Season 01/Some Show - S01E02 - Two.nfo", "score": [7.2, 200], "label": "Some Show S01E02"}
     result = health.apply({"fixes": {"imdb-scores": [fix]}}, ["imdb-scores"])
     assert result["done"]["imdb-scores"] == 0 and "no place for a score" in result["failed"][0]["why"]
+
+
+def test_bare_numbers_in_a_season_folder_are_read_and_extras_are_no_questions(env):  # noqa: F811
+    tmp, health, _ = env
+    show = tmp / "TV" / "Some Show"
+    write(show / "Season 02" / "[Group] Some Show - 01 [720p BD 10bit].mkv")  # anime style: no SxxEyy (Magi, Tokyo Ghoul)
+    write(show / "Season 01" / "103.mkv")  # Broad City style: 103 = S01E03
+    write(show / "Extras" / "Hugh Laurie Interview.mkv")
+    write(show / "Season 01" / "[Commie] Some Show - NCOP 1 [BD 720p].mkv")  # an opening without credits
+    lib = health.index.build()
+    eps = {e["file"]: e for e in next(s for s in lib["shows"] if s["folder"] == "Some Show")["episodes"]}
+    assert (eps["Season 02/[Group] Some Show - 01 [720p BD 10bit].mkv"]["season"], eps["Season 02/[Group] Some Show - 01 [720p BD 10bit].mkv"]["episodes"]) == (2, [1])
+    assert (eps["Season 01/103.mkv"]["season"], eps["Season 01/103.mkv"]["episodes"]) == (1, [3])
+    assert eps["Extras/Hugh Laurie Interview.mkv"]["extra"] and eps["Season 01/[Commie] Some Show - NCOP 1 [BD 720p].mkv"]["extra"]
+    asked = [q["path"] for q in health.check(lib)["manual"]["numbers"]]
+    assert not any("Interview" in p or "NCOP" in p or "103.mkv" in p for p in asked)

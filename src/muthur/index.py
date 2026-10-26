@@ -15,7 +15,7 @@ from typing import Any
 
 from .library import scan_film
 from .nfo import NfoInfo, read_nfo
-from .parse import BROKEN_EPISODE, SAMPLE, is_video
+from .parse import BROKEN_EPISODE, EXTRA_NAME, SAMPLE, is_video
 from .subtitles import language
 
 NFO_PARSER = 3  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3; 3: genres and plot, 0.42)
@@ -128,6 +128,13 @@ class Index:
             season, numbers = _numbers(name)
             if season is None and nfo and nfo.season is not None and nfo.episode is not None:
                 season, numbers = nfo.season, [nfo.episode]
+            extra = season is None and bool(EXTRA_NAME.search(name))  # "Trailer Park Boys S01E01" is an episode
+            if season is None and not extra:
+                # No SxxEyy: what the inbox reads (season folders and guessit, cached): 'Season 1/Magi - 01', 'Season 1/101'
+                # (26 Oct: these were all questions). Only with a season: a bare number alone could be anything.
+                p = self.store.parsed("episode", [folder, *f.split("/")])
+                if p.season is not None and p.episodes:
+                    season, numbers = p.season, list(p.episodes)
             try:
                 st = os.stat(os.path.join(base, f))
                 size, added = st.st_size, int(st.st_mtime)
@@ -139,7 +146,7 @@ class Index:
                   "thumb": any(stem + s in present for s in ("-thumb.jpg", ".tbn", "-thumb.png")),
                   "subs": sum(1 for x in files if x.startswith(stem + ".") and x.lower().endswith(SUBTITLES)),
                   "subLangs": _sub_langs(stem, files),
-                  "damaged": bool(BROKEN_EPISODE.search(name)), "sample": bool(SAMPLE.search(name)),
+                  "damaged": bool(BROKEN_EPISODE.search(name)), "sample": bool(SAMPLE.search(name)), "extra": extra,
                   "mismatch": bool(nfo and nfo.season is not None and nfo.episode is not None and season is not None
                                    and (nfo.season, nfo.episode) != (season, numbers[0] if numbers else None)),
                   "watched": _was_played(played, ids, season, numbers)}

@@ -27,6 +27,9 @@ SEASON_DIR = re.compile(r"(?i)^(?:season|series|staffel|seizoen|saison)[ ._-]?(\
 SPECIALS_DIR = re.compile(r"(?i)^(?:specials?|season[ ._-]?0+)$")
 EXTRAS_DIR = re.compile(r"(?i)^(?:extras?|featurettes?|behind[ ._-]the[ ._-]scenes|deleted[ ._-]scenes|interviews?|trailers?|bonus|shorts?|other)$")
 SAMPLE = re.compile(r"(?i)(?:^|[ ._\-\[(])sample(?:[ ._\-\])]|$)")
+# A video beside the episodes that isn't one (26 Oct: Blackadder's interviews, Psycho-Pass's openings were questions).
+EXTRA_NAME = re.compile(r"(?i)(?:^|[ ._\-\[(])(?:interviews?|featurettes?|behind[ ._-]the[ ._-]scenes|making[ ._-]of|deleted[ ._-]scenes?|"
+                        r"bloopers?|gag[ ._-]reel|outtakes?|trailers?|teasers?|promos?|NC(?:OP|ED)\d*|creditless|revisited)(?:[ ._\-\])\d]|$)")
 COUNTRY_SUFFIX = re.compile(r"\s*(?:\((US|UK|AU|NZ|CA)\)|[ ._](US|UK))\s*$")
 COUNTRY_CODES = {"UK": "GB"}  # TMDB uses ISO 3166 codes
 
