@@ -37,6 +37,7 @@ def lib(tmp_path):
     write(days / "28 Days Later (2002).mkv")
     write(days / "Subtitles" / "28.Days.Later.(2002).English.srt")
     write(days / "Subtitles" / "28.Days.Later.(2002).German.srt")
+    write(days / "Subtitles" / "28.Days.Later.(2002).Dutch.srt")  # not needed: there is English
     fav = film / "The Favourite (2018)"
     write(fav / "The Favourite (2018).mkv")
     write(fav / "Subs" / "the.favourite.2018.1080p.idx")  # one picture subtitle in two files: they move together
@@ -47,6 +48,8 @@ def lib(tmp_path):
     write(film / "Dune (2021)" / "Dune (2021).mkv")
     write(film / "Fine (2001)" / "Fine (2001).mkv")
     write(film / "Fine (2001)" / "Fine (2001).en.srt")
+    write(film / "Only Dutch (2003)" / "Only Dutch (2003).mkv")
+    write(film / "Only Dutch (2003)" / "Subs" / "Dutch.srt")  # the only one: Dutch comes along
     return tmp_path
 
 
@@ -69,10 +72,13 @@ def test_what_kodi_misses_is_paired_with_its_video(lib):
 
     (days,) = plan("Film", str(lib / "Film"), "28 Days Later (2002)")[0]
     assert days["move"] == [["Film/28 Days Later (2002)/Subtitles/28.Days.Later.(2002).English.srt", "Film/28 Days Later (2002)/28 Days Later (2002).en.srt"]]
-    assert days["drop"] == ["Film/28 Days Later (2002)/Subtitles/28.Days.Later.(2002).German.srt"]
+    assert sorted(days["drop"]) == ["Film/28 Days Later (2002)/Subtitles/28.Days.Later.(2002).Dutch.srt",
+                                    "Film/28 Days Later (2002)/Subtitles/28.Days.Later.(2002).German.srt"]
     (fav,) = plan("Film", str(lib / "Film"), "The Favourite (2018)")[0]
     assert [t for _, t in fav["move"]] == ["Film/The Favourite (2018)/The Favourite (2018).idx", "Film/The Favourite (2018)/The Favourite (2018).sub"]
     assert plan("Film", str(lib / "Film"), "Fine (2001)") == ([], [])
+    (only,) = plan("Film", str(lib / "Film"), "Only Dutch (2003)")[0]
+    assert [t.rsplit("/", 1)[1] for _, t in only["move"]] == ["Only Dutch (2003).nl.srt"]
     (dune,) = plan("Film", str(lib / "Film"), "Dune (2021)")[0]  # forced is its own track; of two English the plain one stays
     assert [t.rsplit("/", 1)[1] for _, t in dune["move"]] == ["Dune (2021).en.srt", "Dune (2021).en.forced.srt"]
     assert dune["drop"] == ["Film/Dune (2021)/Subs/SDH.eng.HI.srt"]
@@ -86,7 +92,7 @@ def test_the_fix_moves_sets_aside_and_can_be_put_back(lib):
     health = Health(store, Journal(store), imdb, FakeTmdb(), index, str(lib / "TV"), str(lib / "Film"), str(lib / "_q"), str(lib / "backups"))
     before = sorted(str(p.relative_to(lib)) for p in lib.rglob("*") if p.is_file() and p.parts[len(lib.parts)] in ("TV", "Film"))
     checked = health.check(index.build())
-    assert len(checked["fixes"]["subtitles"]) == 6
+    assert len(checked["fixes"]["subtitles"]) == 7
     result = health.apply(checked, ["subtitles", "leftovers"])
     assert result["failed"] == []
     s1 = lib / "TV" / "Bad Sisters" / "Season 1"

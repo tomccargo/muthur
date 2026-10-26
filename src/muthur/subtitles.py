@@ -4,8 +4,9 @@ Kodi 21 (CUtil::ScanForExternalSubtitles) looks beside the video and one level i
 subs, subtitles, sub, vobsub, vobsubs or subtitle, and only takes files whose name starts with the
 video's; the language is a word after that name ('x.en.srt', 'x.English.srt'). So 'Subs/x/2_English.srt'
 (how RARBG ships them) or '28.Days.Later.(2002).English.srt' beside '28 Days Later (2002).mkv' is never
-shown. plan() pairs such subtitles with their video: English and Dutch go beside it under its name, other
-languages and ones the video already has go to quarantine, and those whose video is gone are leftovers.
+shown. plan() pairs such subtitles with their video: English goes beside it under its name (Dutch only when
+there is no English, and a Dutch one Kodi finds beside an English one is set aside), other languages and ones
+the video already has go to quarantine, and those whose video is gone are leftovers.
 """
 from __future__ import annotations
 
@@ -16,7 +17,7 @@ from .parse import SAMPLE, is_video
 
 SUBTITLES = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup", ".smi")
 KODI_DIRS = {"subs", "subtitles", "vobsubs", "sub", "vobsub", "subtitle"}
-KEEP = ("en", "nl")  # the languages moved beside the video; the rest is set aside
+KEEP = ("en", "nl")  # the languages moved beside the video, Dutch only where there is no English; the rest is set aside
 NUMBERS = re.compile(r"(?i)\bs(\d{1,3})[ ._-]?e(\d{1,3})")
 SKIP = ("@", ".", "#")
 _L = {
@@ -95,12 +96,15 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
         return every[0] if len(every) == 1 else None  # a film folder with one video
 
     have: dict[tuple[str, str], set] = {}  # (language, forced) Kodi already finds for each video
+    found_dutch: list[tuple[tuple[str, str], str]] = []  # (video, path) of Dutch subtitles Kodi finds
     for folder, name in subs:
         if kodi_finds(folder, name):
             for d, s in every:
                 if name.lower().startswith(s.lower()) and d in (folder, folder.rsplit("/", 1)[0]):
                     lang, forced, _ = kind(os.path.splitext(name)[0][len(s):])
                     have.setdefault((d, s), set()).add((lang, forced))
+                    if lang == "nl" and not forced:
+                        found_dutch.append(((d, s), f"{lib}/{folder}/{name}"))
     per_video: dict[tuple[str, str], dict] = {}
     leftovers: list[dict] = []
     taken: set[str] = set()
@@ -108,23 +112,35 @@ def plan(lib: str, root: str, unit: str) -> tuple[list[dict], list[dict]]:
     for folder, name in subs:
         if not kodi_finds(folder, name):
             groups.setdefault((folder, os.path.splitext(name)[0]), []).append(name)
+    owners = {g: owner(g[0], names[0]) for g, names in groups.items()}
+
+    def lang_of(group: tuple[str, str], stem: str) -> tuple[str | None, bool, bool]:
+        bare = group[1]
+        return kind(bare[len(stem):] if bare.lower().startswith(stem.lower()) else bare)
+
+    # Dutch only where there is no English: a video that has, or is getting, a full English subtitle needs no Dutch one.
+    english = {v for v, langs in have.items() if ("en", False) in langs}
+    english |= {o for g, o in owners.items() if o and lang_of(g, o[1])[:2] == ("en", False)}
+    for owned, path in found_dutch:
+        if owned in english:
+            per_video.setdefault(owned, {"path": "", "move": [], "drop": [], "dirs": []})["drop"].append(path)
     # Of two in one language the plain one is kept and the one for the hard of hearing set aside.
     for (folder, bare), names in sorted(groups.items(), key=lambda g: kind(g[0][1])[2]):
-        found = owner(folder, names[0])
+        found = owners[(folder, bare)]
         paths = [f"{lib}/{folder}/{n}" for n in names]
         if found is None:
             if tv:
                 leftovers += [{"path": p, "why": "belongs to no video"} for p in paths]
             continue
         d, stem = found
-        lang, forced, sdh = kind(bare[len(stem):] if bare.lower().startswith(stem.lower()) else bare)
+        lang, forced, sdh = lang_of((folder, bare), stem)
         item = per_video.setdefault(found, {"path": f"{lib}/{d}/{stem}", "move": [], "drop": [], "dirs": []})
         if folder.startswith(d + "/"):
             for k in range(folder.count("/"), d.count("/"), -1):  # the folders between it and the video, emptied by the move
                 p = f"{lib}/{'/'.join(folder.split('/')[:k + 1])}"
                 if p not in item["dirs"]:
                     item["dirs"].append(p)
-        if lang is not None and (lang not in KEEP or (lang, forced) in have.get(found, set())):
+        if lang is not None and (lang not in KEEP or (lang, forced) in have.get(found, set()) or (lang == "nl" and found in english)):
             item["drop"] += paths
             continue
         parts = new_name(stem, lang, forced, sdh)

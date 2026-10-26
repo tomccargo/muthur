@@ -176,37 +176,40 @@ class Applier:
         """Subtitles follow their video: next to it with the same name ('x.mkv' + 'x.en.srt'), or in a
         'Subs' folder of the download, as 'Subs/x/2_English.srt' or, when the download holds one video,
         'Subs/English.srt'. They get the video's new name plus their language ('… (1999).en.srt'). Only
-        English, Dutch and ones without a language come along, one per language (a forced track is its own);
-        the rest stays in the download and goes to quarantine with what is left of it."""
+        English and ones without a language come along, Dutch only when there is no English; one per language
+        (a forced track is its own). The rest stays in the download and goes to quarantine with what is left of it."""
         folder, stem = os.path.dirname(src), os.path.splitext(os.path.basename(src))[0]
         new_stem = os.path.splitext(dst)[0]
         n, have = 0, set()
+        beside = [x for x in sorted(os.listdir(folder)) if belongs_to(x, stem) and x.lower().endswith(SUBTITLE_EXTS)]
+        subs_dirs: list[tuple[str, list[str]]] = []  # (folder, subtitle names) in the download's 'Subs'
+        if os.path.normpath(folder) != os.path.normpath(self.downloads):  # a loose file's 'Subs' would belong to nobody
+            for d in sorted(os.listdir(folder)):
+                base = os.path.join(folder, d)
+                if not (SUBS_DIR.match(d) and os.path.isdir(base)):
+                    continue
+                own = os.path.join(base, stem)
+                source = own if os.path.isdir(own) else base if single else None
+                if source is not None:
+                    subs_dirs.append((source, [x for x in os.listdir(source)
+                                               if x.lower().endswith(SUBTITLE_EXTS) and os.path.isfile(os.path.join(source, x))]))
+        english = any(subtitles.kind(x[len(stem):])[:2] == ("en", False) for x in beside) or any(
+            subtitles.kind(os.path.splitext(x)[0])[:2] == ("en", False) for _, names in subs_dirs for x in names)
 
         def wanted(name: str) -> bool:
             lang, forced, _ = subtitles.kind(name)
-            if lang is not None and (lang not in subtitles.KEEP or (lang, forced) in have):
+            if lang is not None and (lang not in subtitles.KEEP or (lang, forced) in have or (lang == "nl" and english)):
                 return False
             if lang:
                 have.add((lang, forced))
             return True
 
-        beside = [x for x in sorted(os.listdir(folder)) if belongs_to(x, stem) and x.lower().endswith(SUBTITLE_EXTS)]
         for name in sorted(beside, key=lambda x: subtitles.kind(x[len(stem):])[2]):  # plain before SDH
             target = new_stem + name[len(stem):]
             if wanted(name[len(stem):]) and not os.path.lexists(target):
                 self._move(run, item, os.path.join(folder, name), target, "move")
                 n += 1
-        if os.path.normpath(folder) == os.path.normpath(self.downloads):
-            return n  # a loose file in the downloads folder: its 'Subs' would belong to nobody in particular
-        for d in sorted(os.listdir(folder)):
-            base = os.path.join(folder, d)
-            if not (SUBS_DIR.match(d) and os.path.isdir(base)):
-                continue
-            own = os.path.join(base, stem)
-            source = own if os.path.isdir(own) else base if single else None
-            if source is None:
-                continue
-            names = [x for x in os.listdir(source) if x.lower().endswith(SUBTITLE_EXTS) and os.path.isfile(os.path.join(source, x))]
+        for source, names in subs_dirs:
             for name in sorted(names, key=lambda x: (subtitles.kind(x)[2], x)):
                 bare, ext = os.path.splitext(name)
                 if not wanted(bare):
