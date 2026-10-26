@@ -103,3 +103,5 @@
 .pl-watch:has(.pl-menu-list) .pl-watch-top { opacity: 1; }  /* the bar stays while its menu is open */
 .pl-season-tools { margin: -4px 0 12px; font-size: 14px; }
 .pl-season-tools a { color: var(--accent-text); }
+/* OpenSubtitles list over the film: muthur's own panel and rows, on the right, scrolling. */
+.pl-subpanel { position: absolute; top: 64px; right: 16px; bottom: 72px; width: min(560px, calc(100% - 32px)); overflow: auto; z-index: 3; color: var(--text); text-align: left; }

@@ -24,7 +24,7 @@ function Facts({ s }: { s: SubResult }) {
 // "Find subtitles" for one video (an episode's menu, a film's page): OpenSubtitles.com searched by the video's IDs and
 // its file's fingerprint, the results listed with what helps choose, and only the one picked is downloaded
 // (DESIGN.md §1.9: the reader decides, muthur shows why).
-export function SubtitleSearch({ path }: { path: string }) {
+export function SubtitleSearch({ path, onSaved }: { path: string; onSaved?: (name: string) => void }) {
   const [data, setData] = useState<{ file: string; results: SubResult[]; count: number; allowed: number | null } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
@@ -41,7 +41,10 @@ export function SubtitleSearch({ path }: { path: string }) {
     setBusy(s.fileId);
     setError(null);
     api.subtitleSave(path, s.fileId, s.language)
-      .then((r) => setSaved(`Saved as ${r.saved}${r.remaining != null ? ` · ${count(r.remaining, 'download')} left today` : ''}. Kodi finds it the next time the video plays.`))
+      .then((r) => {
+        setSaved(`Saved as ${r.saved}${r.remaining != null ? ` · ${count(r.remaining, 'download')} left today` : ''}. Kodi finds it the next time the video plays.`);
+        onSaved?.(r.saved);
+      })
       .catch((e: Error) => setError(e.message))
       .finally(() => setBusy(null));
   };

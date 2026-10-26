@@ -7,6 +7,7 @@ import { Loading } from '../components';
 import { hue } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { art } from './Library';
+import { SubtitleSearch } from './Subtitles';
 import './player.css';
 
 type View = 'films' | 'tv' | 'test';
@@ -237,7 +238,7 @@ function Browse({ view, show }: { view: View; show: string | null }) {
 const ANDROID = /android/i.test(navigator.userAgent);
 const WINDOWS = /windows/i.test(navigator.userAgent);
 
-function OpenMenu({ id, onNote }: { id: string; onNote: (text: string, stay?: boolean) => void }) {
+function OpenMenu({ id, onNote, onFind }: { id: string; onNote: (text: string, stay?: boolean) => void; onFind: () => void }) {
   const [open, setOpen] = useState(false);
   const [links, setLinks] = useState<PlayerLinks | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -274,6 +275,7 @@ function OpenMenu({ id, onNote }: { id: string; onNote: (text: string, stay?: bo
               {!ANDROID && (
                 <a role="menuitem" href={`/api/player/video/${id}/playlist.m3u${WINDOWS ? '?windows=1' : ''}`} download>Open in your own player (.m3u)</a>
               )}
+              <button type="button" role="menuitem" onClick={() => { setOpen(false); onFind(); }}>Find subtitles</button>
               {links.share && <button type="button" role="menuitem" onClick={() => copy(WINDOWS ? links.share!.unc : links.share!.smb, 'Path')}>Copy path</button>}
               <button type="button" role="menuitem" onClick={() => copy(abs(links.stream), 'Link (12 hours)')}>Copy link</button>
               <span className="pl-menu-sep" />
@@ -311,22 +313,51 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
   const [subProgress, setSubProgress] = useState<number | null>(null);
   const [flash, setFlash] = useState<string | null>(null);  // what an Open-with entry just did
   const flashTimer = useRef(0);
-  // Said once when the film starts, when there are no full subtitles to show: a film without them otherwise just
-  // looks broken (Valerian, Casino Royale, 26 Oct).
+  const say = (text: string, ms = 12000) => {
+    setFlash(text);
+    window.clearTimeout(flashTimer.current);
+    flashTimer.current = window.setTimeout(() => setFlash(null), ms);
+  };
+  // OpenSubtitles' list over the film, to pick from (⋯ Find subtitles, or opened by itself, below).
+  const [finding, setFinding] = useState(false);
+  // No full subtitles on the share (Valerian, Casino Royale, Ford v Ferrari, 26 Oct): muthur looks on OpenSubtitles
+  // while the film waits. One made for this exact file (in sync) is fetched and switched on by itself; otherwise the
+  // list opens to choose from. When nothing turns up, the player says what there is, so the film doesn't look broken.
   useEffect(() => {
     if (!info || info.extractable.length || info.subtitles.some((s) => !s.forced)) return;
     const forced = info.subtitles.find((s) => s.forced);
     const f = forced ? info.forcedLines[forced.name] : null;
     const at = (s: number | null) => (s == null ? '' : `, the first at ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`);
-    const text = f && f.lines
+    const why = f && f.lines
       ? `Only forced subtitles: ${f.lines} ${f.lines === 1 ? 'line' : 'lines'} for the parts in another language${at(f.first)}.`
       : info.pictureSubs
-        ? `Subtitles only as pictures inside the file (${info.pictureSubs} ${info.pictureSubs === 1 ? 'track' : 'tracks'}): a browser can’t show those. Kodi can (⋯, Play on the TV).`
-        : info.adsOnly.length ? 'No subtitles for this video: the subtitle file beside it only holds the download site’s advertisements.'
-          : 'No subtitles for this video.';
-    setFlash(text);
-    window.clearTimeout(flashTimer.current);
-    flashTimer.current = window.setTimeout(() => setFlash(null), 12000);
+        ? `Subtitles only as pictures inside the file (${info.pictureSubs} ${info.pictureSubs === 1 ? 'track' : 'tracks'}): a browser can’t show those.`
+        : info.adsOnly.length ? 'The subtitle file beside this video only holds the download site’s advertisements.'
+          : 'No subtitles beside this video.';
+    let stop = false;
+    holding.current = true;
+    video.current?.pause();
+    setSubNote('Looking for subtitles on OpenSubtitles…');
+    setSubProgress(0);
+    api.subtitleSearch(info.path).then(async (d) => {
+      if (stop) return;
+      const best = d.results.find((s) => s.hashMatch && s.language === 'en' && !s.forced && !s.machineTranslated && !s.aiTranslated);
+      if (best && !info.dryRun) {
+        setSubNote('Fetching the subtitles made for this exact file…');
+        await api.subtitleSave(info.path, best.fileId, best.language);
+        const fresh = await api.playerInfo(id);
+        if (!stop) { setSubList(fresh.subtitles); say('Subtitles from OpenSubtitles, made for this exact file.', 6000); }
+      } else if (d.count) {
+        say(`${why} OpenSubtitles has ${d.count}: choose one.`);
+        setFinding(true);
+        return;  // the film waits while the list is open
+      } else {
+        say(`${why} OpenSubtitles has none for this film either.`);
+      }
+      release();
+    }).catch((e: Error) => { if (!stop) { say(`${why} ${e.message}`); release(); } })
+      .finally(() => { if (!stop) { setSubNote(null); setSubProgress(null); } });
+    return () => { stop = true; holding.current = false; };
   }, [info]);
   useEffect(() => { if (info) setSubList(info.subtitles); }, [info]);
   useEffect(() => {
@@ -468,7 +499,8 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
         <button type="button" className="pl-btn" onClick={back} aria-label="Back">←</button>
         <span className="pl-watch-title" title={info?.path}>{title}</span>
         {info && how !== 'kodi' && <span className="pl-watch-how" title="How this video plays">{repack ? 'repacked in the browser' : 'direct'}</span>}
-        <OpenMenu id={id} onNote={(t, stay) => { window.clearTimeout(flashTimer.current); setFlash(t); if (!stay) flashTimer.current = window.setTimeout(() => setFlash(null), 5000); }} />
+        <OpenMenu id={id} onNote={(t, stay) => { window.clearTimeout(flashTimer.current); setFlash(t); if (!stay) flashTimer.current = window.setTimeout(() => setFlash(null), 5000); }}
+          onFind={() => { holding.current = true; video.current?.pause(); setFinding(true); }} />
         {subs.length > 0 && (
           <button type="button" className="pl-btn" onClick={nextCue} title={`Subtitle size: ${cue === 's' ? 'small' : cue === 'm' ? 'medium' : 'large'}`}
             aria-label="Subtitle size">{cue === 's' ? 'a' : cue === 'm' ? 'Aa' : 'AA'}</button>
@@ -476,6 +508,15 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
         <button type="button" className="pl-btn" onClick={toggleFull} aria-label={full ? 'Leave full screen' : 'Full screen'}>{full ? '⤡' : '⤢'}</button>
       </div>
       {note && <p className={`pl-watch-msg${how === 'kodi' ? '' : ' corner'}`}>{note}</p>}
+      {finding && info && (
+        <aside className="panel pl-subpanel" aria-label="Subtitles from OpenSubtitles">
+          <div className="panel-head"><h2>Subtitles from OpenSubtitles</h2>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => { setFinding(false); release(); }}>Close</button></div>
+          <SubtitleSearch path={info.path} onSaved={() => {
+            api.playerInfo(id).then((fresh) => { setSubList(fresh.subtitles); setFinding(false); release(); }).catch(() => undefined);
+          }} />
+        </aside>
+      )}
       {flash && <p className="pl-watch-msg corner" role="status">{flash}</p>}
       {subNote && !note && !flash && (
         <div className="pl-watch-msg corner" role="status">
