@@ -15,8 +15,10 @@ import { LibraryPage } from './pages/Library';
 import { DuplicatesPage } from './pages/Duplicates';
 import { HealthPage } from './pages/Health';
 import { SignIn } from './pages/SignIn';
-// The player is its own page (docs/PLAYER.md), loaded only when opened.
+// The player (docs/PLAYER.md), loaded only when opened: browsing is a section like the others (26 Oct: it should look
+// like the rest of muthur); only watching fills the tab on its own.
 const PlayerApp = lazy(() => import('./pages/Player'));
+const PlayerBrowse = lazy(() => import('./pages/Player').then((m) => ({ default: m.PlayerBrowse })));
 
 // Five sections, one per job (DESIGN.md §1.4): the downloads, the library, what muthur did, and how it works.
 // Downloads and Library hold their pages as tabs. Only pages that exist are in the navigation (§1.5).
@@ -24,6 +26,7 @@ const SECTIONS = [
   { to: '/', label: 'Dashboard', icon: 'dashboard', paths: ['/'] },
   { to: '/inbox', label: 'Downloads', icon: 'inbox', paths: ['/inbox', '/review'] },
   { to: '/library', label: 'Library', icon: 'library', paths: ['/library', '/duplicates'] },
+  { to: '/player', label: 'Watch', icon: 'play', paths: ['/player', '/player/films', '/player/test'] },
   // Its own place, not a tab under Library: what needs fixing is found from anywhere (DESIGN.md §1.4).
   { to: '/health', label: 'Health', icon: 'health', paths: ['/health'] },
   { to: '/history', label: 'History', icon: 'history', paths: ['/history'] },
@@ -32,9 +35,11 @@ const SECTIONS = [
 const TABS: Record<string, { to: string; label: string }[]> = {
   '/inbox': [{ to: '/inbox', label: 'Inbox' }, { to: '/review', label: 'Review' }],
   '/library': [{ to: '/library', label: 'Shows and films' }, { to: '/duplicates', label: 'Duplicates' }],
+  '/player': [{ to: '/player', label: 'TV' }, { to: '/player/films', label: 'Films' }, { to: '/player/test', label: 'Test set' }],
 };
 const TITLES: Record<string, string> = {
   '/inbox': 'Inbox', '/review': 'Review', '/library': 'Library', '/duplicates': 'Duplicates', '/health': 'Health', '/history': 'History', '/settings': 'Settings',
+  '/player': 'Watch', '/player/films': 'Watch', '/player/test': 'Watch',
 };
 
 export type StatusHook = { status: Status | null; error: string | null; refresh: () => void };
@@ -78,6 +83,8 @@ function RailFoot({ status, onChange }: { status: Status | null; onChange: () =>
         <span className="status"><span className="dot" />Kodi not set up</span>
       ) : k.connected ? (
         <span className="status"><span className="dot dot-success" />{status?.names.device} · Kodi {k.version}</span>
+      ) : k.waking ? (
+        <span className="status"><Spinner /> Waking the {status?.names.device}…</span>
       ) : (
         <span className="status"><span className="dot dot-danger" />Kodi unreachable
           {k.canWake && (waking ? <span className="small"><Spinner /> Waking…</span>
@@ -108,14 +115,14 @@ export function App() {
 
 function Pages() {
   const { path } = useLocation();
-  if (path === '/player' || path.startsWith('/player/')) return <Suspense fallback={null}><PlayerApp /></Suspense>;
+  if (path === '/player/watch') return <Suspense fallback={null}><PlayerApp /></Suspense>;
   return <Shell />;
 }
 
 // On a phone the rail's status isn't there: one dot in the top bar says whether Kodi and the backup are fine.
 function StatusDot({ status }: { status: Status | null }) {
   const k = status?.kodi;
-  const text = !k ? 'Kodi not set up' : !k.connected ? 'Kodi unreachable' : status?.watched.paused ? 'Watched backup paused'
+  const text = !k ? 'Kodi not set up' : !k.connected ? (k.waking ? `Waking the ${status?.names.device}…` : 'Kodi unreachable') : status?.watched.paused ? 'Watched backup paused'
     : `${status?.names.device} · Kodi ${k.version}`;
   const kind = !k ? '' : k.connected && !status?.watched.paused ? 'dot-success' : 'dot-danger';
   if (status?.job?.running) {
@@ -186,6 +193,7 @@ function Shell() {
         {page === '/health' && <HealthPage {...hook} />}
         {page === '/history' && <HistoryPage {...hook} />}
         {page === '/settings' && <SettingsPage {...hook} />}
+        {page.startsWith('/player') && <Suspense fallback={null}><PlayerBrowse /></Suspense>}
       </main>
 
       <nav className="tabbar" aria-label="Main">

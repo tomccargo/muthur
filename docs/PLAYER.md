@@ -4,7 +4,7 @@ Status: steps 1 and 2 built 2026-10-26 (0.42.0: browse, direct play, full screen
 
 ## 1. What it is
 
-A page of its own at `/player`, reached by a button on the Dashboard. It is its own thing, not a muthur section: its own side bar with **TV** and **Films**, a visual browser of posters with filters, and a large player that fits the tab and can go full screen. Firefox comes first; Chrome and Edge must work too.
+A section of muthur, **Watch** in its sidebar (26 Oct: it should look like the rest of muthur), with **TV** and **Films** as tabs (TV first and chosen when you open it), each with a row of what was added last above a visual browser of posters with filters; a show opens in the same frame. Only watching leaves the frame: a large player that fits the tab and can go full screen. Firefox comes first; Chrome and Edge must work too.
 
 ### Hard rules
 
@@ -100,7 +100,7 @@ Considered and not chosen:
 | Open with | A small *⋯* menu in the watch view: **Play on the TV** (Kodi's Player.Open), **VLC / another app** on Android (an `intent:` link; VLC gets the `.srt`), **your own player** on a computer (a one-line `.m3u` with the share path, so the player finds the `.srt` itself), **Copy path** and **Copy link**. Links for outside players carry a key (an HMAC of that one video's id and an expiry, 12 hours) instead of the sign-in. A page can't see which players are installed. Kodi-only videos open the watch view for this menu. |
 | Downloads | **The file as it is**, and each `.srt` beside it; **a season as one ZIP**, packed as it is sent, without compression (the NAS converts nothing). For the few people in the house: a phone for a flight, a laptop for a holiday. |
 | Watched status | **Nothing**: the player doesn't read or write Kodi's watched status or resume points, and starts at the beginning. |
-| Place | **A button to `/player`**; the player is its own page with its own TV / Films side bar. |
+| Place | **Watch, a section of muthur** (TV · Films · Test set as tabs); first decided as its own page with its own side bar, changed 26 Oct because it looked out of place. |
 | Local trial | **muthur's dev server on this PC** (`scripts/dev.py`, http://127.0.0.1:8580), reading `//nostromo/Iedereen/TV` and `Film` through Windows' own access. Dry run on in that local copy first, so it can't change a file on the share. |
 | Test set | **muthur picks one real file per kind** (below); a *Test set* filter shows only those. The reader judges them in Firefox. |
 | Filters | Watched / unwatched (read from muthur's backup), genre, year, rating, recently added. |

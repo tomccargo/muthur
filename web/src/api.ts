@@ -7,7 +7,7 @@ export type Job = {
   queued?: boolean;  // waiting for the job before it
 };
 export type KodiState = ({ connected: true; version: string; sources?: { tv: boolean; film: boolean } } | { connected: false; problem: string; off?: boolean })
-  & { pendingScan?: number | null; pendingRefresh?: number; canWake?: boolean };
+  & { pendingScan?: number | null; pendingRefresh?: number; canWake?: boolean; waking?: boolean };
 
 export type Names = { device: string; nas: string };  // what the reader calls the Kodi box and the NAS
 

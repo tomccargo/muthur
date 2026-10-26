@@ -6,6 +6,7 @@ const PATHS: Record<string, string[]> = {
   library: ['M4 4h4v16H4z', 'M10 4h4v16h-4z', 'M16.2 4.6l3.8-1 3 15.6-3.8 1z'],
   duplicates: ['M8 8h12v12H8z', 'M4 16V4h12'],
   health: ['M3 12h4l3-8 4 16 3-8h4'],
+  play: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M10 8.5v7l5.5-3.5z'],
   history: ['M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z', 'M12 7v5l3 2'],
   settings: ['M4 6h9', 'M17 6h3', 'M15 4v4', 'M4 12h3', 'M11 12h9', 'M9 10v4', 'M4 18h11', 'M19 18h1', 'M17 16v4'],
   monitor: ['M3 4h18v12H3z', 'M8 20h8', 'M12 16v4'],

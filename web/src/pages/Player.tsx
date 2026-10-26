@@ -1,6 +1,6 @@
-// The player (docs/PLAYER.md): its own page at /player, outside muthur's sections. TV and Films as a visual grid with
-// filters; a show's seasons and episodes; and the watch view, which fits the tab and goes full screen. Read-only:
-// the files are played as they are, and nothing about watching is written anywhere.
+// The player (docs/PLAYER.md): muthur's Watch section at /player, with TV and Films as tabs (TV first), each a row of
+// what was added last and a visual grid with filters; a show's seasons and episodes; and the watch view, which fits
+// the tab and goes full screen. Read-only: the files are played as they are, and nothing about watching is written.
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
 import { Loading } from '../components';
@@ -49,7 +49,7 @@ function useFilters(genres: string[]) {
   const [seen, setSeen] = useState<Seen>('all');
   const [decade, setDecade] = useState('');
   const [minRating, setMinRating] = useState(0);
-  const [sort, setSort] = useState<Sort>('added');
+  const [sort, setSort] = useState<Sort>('title');  // what was added last has its own row above the grid
   const keep = <T extends { title: string; year: number | null; genres: string[]; rating: number | null }>(x: T, watched: boolean, partly = false) =>
     (!text || x.title.toLowerCase().includes(text.toLowerCase()))
     && (!genre || x.genres.includes(genre))
@@ -61,25 +61,25 @@ function useFilters(genres: string[]) {
       : sort === 'rating' ? (b.rating ?? 0) - (a.rating ?? 0) : b.added - a.added);
   const bar = (
     <div className="pl-filters" role="search">
-      <input type="search" placeholder="Search titles" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search titles" />
-      <select value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre">
+      <input className="field" type="search" placeholder="Search titles" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search titles" />
+      <select className="field" value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre">
         <option value="">All genres</option>
         {genres.map((g) => <option key={g} value={g}>{g}</option>)}
       </select>
-      <select value={decade} onChange={(e) => setDecade(e.target.value)} aria-label="Decade">
+      <select className="field" value={decade} onChange={(e) => setDecade(e.target.value)} aria-label="Decade">
         <option value="">Any year</option>
         {['2020', '2010', '2000', '1990', '1980', '1970', '1960', '1950'].map((d) => <option key={d} value={d}>{d}s</option>)}
       </select>
-      <select value={minRating} onChange={(e) => setMinRating(Number(e.target.value))} aria-label="Rating">
+      <select className="field" value={minRating} onChange={(e) => setMinRating(Number(e.target.value))} aria-label="Rating">
         <option value={0}>Any rating</option>
         {[6, 7, 8].map((r) => <option key={r} value={r}>{r}+</option>)}
       </select>
-      <span className="pl-seg" role="group" aria-label="Watched">
+      <span className="seg" role="group" aria-label="Watched">
         {(['all', 'unwatched', 'watched'] as Seen[]).map((s) => (
           <button key={s} type="button" aria-pressed={seen === s} onClick={() => setSeen(s)}>{s === 'all' ? 'All' : s === 'watched' ? 'Watched' : 'Unwatched'}</button>
         ))}
       </span>
-      <select value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort">
+      <select className="field" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort">
         {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
       </select>
     </div>
@@ -121,13 +121,24 @@ function Grid({ items, view }: { items: PlayerItems; view: 'films' | 'tv' }) {
   const films = order(items.films.filter((f) => keep(f, f.watched)));
   const shows = order(items.shows.filter((s) => keep(s, s.watched === s.episodes, s.watched < s.episodes)));
   const shown = view === 'films' ? films.length : shows.length;
+  // Recently added, per tab (26 Oct): the newest first, in one row that scrolls sideways.
+  const newest = <T extends { added: number }>(xs: T[]) => [...xs].sort((a, b) => b.added - a.added).slice(0, 14);
   return (
     <>
-      {bar}
-      <p className="pl-count">{shown.toLocaleString('en-GB')} {view === 'films' ? (shown === 1 ? 'film' : 'films') : (shown === 1 ? 'show' : 'shows')}</p>
-      <div className="pl-grid">
-        {view === 'films' ? films.map((f) => <FilmTile key={f.id} f={f} />) : shows.map((s) => <ShowTile key={s.folder} s={s} />)}
-      </div>
+      <section className="panel pl-recent" aria-labelledby="pl-recent-h">
+        <h2 id="pl-recent-h">Recently added</h2>
+        <div className="pl-row">
+          {view === 'films' ? newest(items.films).map((f) => <FilmTile key={f.id} f={f} />) : newest(items.shows).map((s) => <ShowTile key={s.folder} s={s} />)}
+        </div>
+      </section>
+      <section className="panel pl-all" aria-labelledby="pl-all-h">
+        <h2 id="pl-all-h">{view === 'films' ? 'All films' : 'All shows'}</h2>
+        {bar}
+        <p className="pl-count">{shown.toLocaleString('en-GB')} {view === 'films' ? (shown === 1 ? 'film' : 'films') : (shown === 1 ? 'show' : 'shows')}</p>
+        <div className="pl-grid">
+          {view === 'films' ? films.map((f) => <FilmTile key={f.id} f={f} />) : shows.map((s) => <ShowTile key={s.folder} s={s} />)}
+        </div>
+      </section>
     </>
   );
 }
@@ -194,7 +205,7 @@ function ShowView({ folder }: { folder: string }) {
             <>
               <span className="pl-thumb"><Art path={e.thumb} title={e.title ?? show.title} wide />{way(e.play) !== 'kodi' && <PlayMark />}</span>
               <span className="pl-ep-text"><span className="pl-name">{name}</span>
-                <span className="pl-sub">{way(e.play) === 'kodi' ? 'Kodi only' : way(e.play) === 'sound' ? 'Sound in a later step' : ''}{e.watched ? (way(e.play) === 'native' || way(e.play) === 'unknown' ? 'Watched' : ' · Watched') : ''}</span></span>
+                <span className="pl-sub">{[way(e.play) === 'kodi' ? 'Kodi only' : null, e.watched ? 'Watched' : null].filter(Boolean).join(' · ')}</span></span>
             </>
           );
           return (
@@ -209,25 +220,22 @@ function ShowView({ folder }: { folder: string }) {
   );
 }
 
-function Browse({ view, show }: { view: View; show: string | null }) {
+// Inside muthur's frame (App.tsx: the Watch section, its tabs TV · Films · Test set): /player is TV, /player/films the
+// films, /player?show=… a show.
+export function PlayerBrowse() {
+  const { path, search } = useLocation();
+  const show = new URLSearchParams(search).get('show');
+  const view: View = path === '/player/films' ? 'films' : path === '/player/test' ? 'test' : 'tv';
   const [items, setItems] = useState<PlayerItems | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => { api.playerItems().then(setItems).catch((e: Error) => setError(e.message)); }, []);
-  const nav: [View, string][] = [['films', 'Films'], ['tv', 'TV'], ['test', 'Test set']];
+  useEffect(() => {
+    document.title = 'Watch · muthur';
+    api.playerItems().then(setItems).catch((e: Error) => setError(e.message));
+  }, []);
   return (
-    <div className="pl">
-      <aside className="pl-side" aria-label="Player">
-        <Link to="/" className="pl-brand" title="Back to muthur">muthur <span>· watch</span></Link>
-        <nav className="pl-nav">
-          {nav.map(([v, label]) => (
-            <Link key={v} to={v === 'films' ? '/player' : `/player?view=${v}`} aria-current={!show && view === v ? 'page' : undefined}>{label}</Link>
-          ))}
-        </nav>
-      </aside>
-      <main className="pl-main" id="main">
-        {error && <p className="pl-empty">{error}</p>}
-        {show ? <ShowView folder={show} /> : view === 'test' ? <TestSet /> : items ? <Grid items={items} view={view} /> : !error && <Loading label="Loading the library" />}
-      </main>
+    <div className="page pl-page">
+      {error && <p className="pl-empty">{error}</p>}
+      {show ? <ShowView folder={show} /> : view === 'test' ? <TestSet /> : items ? <Grid items={items} view={view} /> : !error && <Loading label="Loading the library" />}
     </div>
   );
 }
@@ -532,7 +540,7 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
 export default function PlayerApp() {
   const { path, search } = useLocation();
   const q = new URLSearchParams(search);
-  if (path === '/player/watch' && q.get('id')) return <Watch id={q.get('id')!} title={q.get('t') ?? 'Video'} mute={q.get('mute') === '1'} />;
-  const view = (q.get('view') ?? 'films') as View;
-  return <Browse view={['films', 'tv', 'test'].includes(view) ? view : 'films'} show={q.get('show')} />;
+  const id = path === '/player/watch' ? q.get('id') : null;
+  useEffect(() => { if (!id) navigate('/player'); }, [id]);  // a watch link without a video: back to browsing
+  return id ? <Watch id={id} title={q.get('t') ?? 'Video'} mute={q.get('mute') === '1'} /> : null;
 }

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { WatchedPanel } from './Watched';
 import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobError, useElapsed } from '../components';
+import { Dot, JobError, Spinner, useElapsed } from '../components';
 import { count, when } from '../labels';
 import { Link } from '../nav';
 
@@ -98,7 +98,8 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
                 : <span className="status"><Dot kind="dot-danger" />{k.off ? 'Off (asleep, or Kodi closed)' : k.problem}</span>}
           </p>
           <div className="actions">
-            {k && !k.connected && k.canWake && (
+            {k && !k.connected && k.waking && !waking && <span className="status small"><Spinner /> muthur is waking the {device}…</span>}
+            {k && !k.connected && k.canWake && !k.waking && (
               <button className="btn btn-secondary btn-sm" type="button" disabled={waking} aria-busy={waking} onClick={() => {
                 setKodiNote(null);
                 setWaking(true);

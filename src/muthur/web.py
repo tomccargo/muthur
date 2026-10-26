@@ -256,7 +256,12 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         sh = shield()
         if not sh:
             raise ShieldError(f"Waking the {names()['device']} isn't set up in Settings.")
-        sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool((k := kodi()) and k.check().get("connected")))
+        waking["since"] = time.time()  # the status says so meanwhile, not 'Kodi unreachable' (26 Oct)
+        try:
+            sh.wake_and_start((store.get("shield") or {})["app"], lambda: bool((k := kodi()) and k.check().get("connected")))
+        finally:
+            waking.pop("since", None)
+            kodi_seen.clear()  # asked again on the next status poll: 'connected' shows at once
 
     def kodi_ready(timeout: float = 90) -> Kodi:
         """Kodi, answering: woken first when it sleeps and waking is set up. Otherwise a 409 that says why."""
@@ -372,6 +377,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     # -- status ---------------------------------------------------------------
     kodi_seen: dict = {}
+    waking: dict = {}  # 'since': muthur is waking the box right now
 
     def kodi_state(k: Kodi) -> dict:
         """Kodi's answer for the status poll, reused for 20 s: a Shield that is off shouldn't slow every page."""
@@ -407,7 +413,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
             "kodi": {**kodi_state(k), "pendingScan": store.get("kodi.pendingScan"), "pendingRefresh": len(store.get("kodi.pendingRefresh") or []),
-                     "canWake": shield() is not None} if k else None,
+                     "canWake": shield() is not None, "waking": "since" in waking} if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
@@ -1480,11 +1486,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
         def work(job):
             k = kodi(timeout=30)
+            unwoken = None
             if k and shield() and not k.check().get("connected"):
+                job.begin(f"Waking the {names()['device']} so Kodi follows the changes", 0)
                 try:
                     wake_kodi()  # the reader started this: Kodi should re-read what changed
-                except ShieldError:
-                    pass  # the fixes still happen; Kodi re-reads the items later
+                except ShieldError as e:
+                    unwoken = str(e)  # the fixes still happen; Kodi re-reads the items later, and the result says so
             extra = {}
             if "imdb-data" in kinds:
                 # The download covers every show in the library; muthur's own NFOs get their scores right away.
@@ -1502,8 +1510,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             lost = len((result.get("kodiRenames") or {}).get("problems", []))
             job.result = f"{count(sum(result['done'].values()), 'fix', 'fixes')} done" + (f", {failed} couldn't be: see Health." if failed else ".") + (
                 f" Kodi didn’t take {count(lost, 'renamed item')}: their watched status is safe in muthur’s backup (Settings, Watched, Restore to Kodi)."
-                if lost else "")
-            job.attention = bool(failed or lost)
+                if lost else "") + (f" Kodi couldn’t be woken ({unwoken}): it re-reads the changed items once it’s on." if unwoken else "")
+            job.attention = bool(failed or lost or unwoken)
 
         job = jobs.start("fixes-apply", work)
         return job.as_dict()

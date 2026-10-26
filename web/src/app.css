@@ -39,7 +39,7 @@
   .tab { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; min-height: 48px; color: var(--muted); text-decoration: none; font-size: 11.5px; font-weight: 600; }
   .tab[aria-current='page'] { color: var(--accent-text); }
 }
-@media (max-width: 420px) {  /* six tabs on a small phone: labels a little smaller, so they don't touch */
+@media (max-width: 420px) {  /* seven tabs on a small phone: labels a little smaller, so they don't touch */
   .tab { font-size: 10.5px; letter-spacing: -0.01em; }
 }
 
