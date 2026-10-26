@@ -186,7 +186,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                  "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
                  "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed",
-                 "rename": "Renaming an episode"}
+                 "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -376,7 +376,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     @app.get("/api/health", include_in_schema=False)
     def health():
-        return {"ok": True}
+        """For the container's health check and for deploying: 'busy' while a job runs or waits, so an update never
+        restarts muthur in the middle of one (docs/DEPLOY.md)."""
+        return {"ok": True, "busy": bool((jobs.current and jobs.current.running) or jobs.waiting())}
 
     @app.get("/api/status")
     def status():
@@ -459,6 +461,39 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             _tell_kodi()
         if store.get("kodi.pendingRefresh"):
             jobs.start("kodi-refresh", refresh_waiting, by_user=False)
+        if renaming.pending(store):
+            jobs.start("kodi-renames", finish_renames, by_user=False)
+
+    def finish_renames(job):
+        """Renamed files whose Kodi step a restart or a sleeping Kodi cut short: Kodi scans their folders, the new
+        entries get the old ones' play count and resume point, the old entries go (rename.py)."""
+        waiting = renaming.pending(store)
+        k = kodi(timeout=30)
+        if not waiting or not k or not k.check().get("connected"):
+            return
+        roots = {"TV": cfg.tv, "Film": cfg.film}
+        job.begin("Reading what Kodi knows", 0)
+        before = renaming.read_before(k, roots, follow_watched)  # Kodi kept the old entries, with their status
+        job.begin(f"Kodi takes {count(len(waiting), 'new name')}", len(waiting))
+
+        def took(old):
+            renaming.forget(store, old)
+            job.done += 1
+
+        r = renaming.follow_in_kodi(k, waiting, roots, before, done=took)
+        job.result = f"Kodi took {count(r['followed'], 'renamed file')} with {'its' if r['followed'] == 1 else 'their'} watched status" + (
+            f"; {r['kodiAway']:,} wait for Kodi again." if r.get("kodiAway") else ".") + (
+            f" {count(len(r['problems']), 'file')} Kodi didn’t list: their status is safe in muthur’s backup." if r["problems"] else "")
+        job.attention = bool(r["problems"])
+
+    def recover_interrupted():
+        """At start-up: runs a restart cut short are closed in History, and the files they renamed still get their
+        Kodi step (kodi_back), so no watched status stays behind."""
+        for run in journal.unfinished():
+            renamed = renaming.from_run(journal.ops(run["id"]), {"TV": cfg.tv, "Film": cfg.film}) if run["kind"] in ("health", "library") else []
+            renaming.remember(store, renamed)
+            journal.finish(run["id"], {"interrupted": True, "label": "Stopped by a restart; what it changed stays",
+                                       "done": {}, "failed": [], "kodiWaiting": len(renamed)})
 
     def refresh_waiting(job):
         waiting = store.get("kodi.pendingRefresh") or []
@@ -678,6 +713,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back,
                         port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090))
+    recover_interrupted()  # before any job: an unfinished run now can only be one a restart cut short
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
         threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
@@ -850,7 +886,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 else:
                     journal.create(run, moved, nfo, data)
             job.begin("Kodi takes the new name", 0)
-            followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before)
+            renaming.remember(store, [(path, moved)])  # until Kodi took it, even across a restart
+            followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before, done=lambda old: renaming.forget(store, old))
             journal.finish(run, {"label": f"Renamed {label}", "kodi": followed})
             job.result = (f"Renamed {label} to {new}." + ("" if followed["followed"] else
                           f" Kodi didn’t take it all ({followed['problems'][0]['why'] if followed['problems'] else 'unknown'}); its watched status is safe"

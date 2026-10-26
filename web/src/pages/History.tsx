@@ -43,6 +43,7 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
         <h2>{new Date(run.started * 1000).toDateString() === new Date().toDateString() ? `Today, ${when(run.started)}` : when(run.started)}</h2>
         <span className="status small">
           {run.undone ? <><Dot />Put back {when(run.undone)}</>
+            : s?.interrupted ? <><Dot kind="dot-warning" />Stopped by a restart · what it changed stays</>
             : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
               : run.kind === 'library' ? <><Dot kind="dot-success" />Library edit</>
               : run.kind === 'health' ? <><Dot kind="dot-success" />{count(fixed, 'fix', 'fixes')}{stopped.length ? `, ${stopped.length} not done` : ''}</>

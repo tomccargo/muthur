@@ -229,7 +229,9 @@ class Health:
         if kodi and self._renamed and self._before is not None:
             if job:
                 job.begin(f"Kodi takes {len(self._renamed):,} new names", 0)
-            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before)
+            renaming.remember(self.store, self._renamed)  # until Kodi took each one, even across a restart
+            summary["kodiRenames"] = renaming.follow_in_kodi(kodi, self._renamed, self.roots, self._before,
+                                                             done=lambda old: renaming.forget(self.store, old))
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))

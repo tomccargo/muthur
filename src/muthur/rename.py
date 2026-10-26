@@ -60,31 +60,86 @@ def rename(journal, run: int, root: str, lib: str, rel: str, new_rel: str) -> st
     return f"{lib}/{todo[0][1]}"
 
 
-def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict) -> dict:
+def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict, done=None) -> dict:
     """Kodi takes the renamed files: each folder is scanned once, then every new entry gets the old one's play count
     and resume point and the old entry goes. renamed: (old, new) library paths ('TV/…' an episode, 'Film/…' a film);
-    before: Kodi's items by library path, read before the renames (read_before)."""
+    before: Kodi's items by library path, read before the renames (read_before). done(old) after each one Kodi took
+    or answered about; when Kodi goes away the rest is left for later ('kodiAway')."""
+    import requests
+
     from .duplicates import _carry
     from .kodi import folder_name
 
     prefixes = {lib: kodi.source_prefix(folder_name(root)) for lib, root in roots.items()}
     scanned: set[str] = set()
-    followed, problems = 0, []
-    for old, new in renamed:
+    followed, problems = 0, []  # type: ignore[var-annotated]
+    for n, (old, new) in enumerate(renamed):
         lib, _, rel = new.partition("/")
         prefix = prefixes.get(lib)
-        if prefix:
-            folder = prefix + (rel.rsplit("/", 1)[0] + "/" if "/" in rel else "")
-            if folder not in scanned:
-                kodi.scan_and_wait(folder)
-                scanned.add(folder)
+        try:
+            if prefix:
+                folder = prefix + (rel.rsplit("/", 1)[0] + "/" if "/" in rel else "")
+                if folder not in scanned:
+                    kodi.scan_and_wait(folder)
+                    scanned.add(folder)
+        except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
+            return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}
         g = {"kind": "episode" if lib == "TV" else "movie", "plan": {"final": new}, "copies": [{"path": old}]}
         r = _carry(kodi, g, before, prefixes, scan=False)
+        if not r.get("ok") and not kodi.check().get("connected"):
+            return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}
         if r.get("ok"):
             followed += 1
         else:
             problems.append({"path": new, "why": r.get("why")})
+        if done:
+            done(old)
     return {"followed": followed, "problems": problems}
+
+
+# Renames whose Kodi step hasn't happened yet survive a restart: muthur finishes them when it starts again or
+# when Kodi answers again (web.py). Kodi keeps the old entry, with its watched status, until then.
+PENDING = "kodi.pendingRenames"
+
+
+def remember(store, renamed: list[tuple[str, str]]) -> None:
+    have = [tuple(p) for p in store.get(PENDING) or []]
+    store.put(PENDING, [list(p) for p in dict.fromkeys(have + [tuple(p) for p in renamed])])
+
+
+def forget(store, old: str) -> None:
+    store.put(PENDING, [p for p in store.get(PENDING) or [] if p[0] != old])
+
+
+def pending(store) -> list[tuple[str, str]]:
+    return [tuple(p) for p in store.get(PENDING) or []]  # type: ignore[misc]
+
+
+def from_run(ops: list[dict], roots: dict[str, str]) -> list[tuple[str, str]]:
+    """(old, new) library paths of the videos a run renamed, from its journal: for a run a restart cut short. A film
+    whose folder moved after its video was renamed ends up in that folder."""
+    from .parse import is_video
+
+    def lib_path(full: str) -> str | None:
+        for lib, root in roots.items():
+            base = os.path.normpath(root)
+            if os.path.normpath(full).startswith(base + os.sep):
+                return f"{lib}/{os.path.relpath(full, base).replace(os.sep, '/')}"
+        return None
+
+    out = []
+    moves = [o for o in ops if o["op"] == "move" and o["status"] == "done"]
+    for o in moves:
+        if not is_video(o["src"] or "") or not is_video(o["dst"]):
+            continue
+        dst = o["dst"]
+        for later in moves:  # its folder moved afterwards
+            if later["id"] > o["id"] and later["item"] == o["item"] and later["src"] == os.path.dirname(dst):
+                dst = os.path.join(later["dst"], os.path.basename(dst))
+        new = lib_path(dst)
+        if new and o["item"] != new:
+            out.append((o["item"], new))
+    return out
 
 
 def read_before(kodi, roots: dict[str, str], backup=None) -> dict:

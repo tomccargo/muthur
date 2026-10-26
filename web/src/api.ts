@@ -80,7 +80,7 @@ export type Run = {
   id: number; kind: string; started: number; finished: number | null; undone: number | null;
   // Apply, Duplicates and Inbox runs list their items; Health runs count what was done per kind and list what failed.
   summary: { applied?: number; stopped?: number; items?: ApplyResult[]; done?: Record<string, number>;
-    failed?: { path: string; why: string }[]; label?: string } | null;
+    failed?: { path: string; why: string }[]; label?: string; interrupted?: boolean } | null;
   counts: { move: number; write: number; quarantine: number; mkdir: number; update: number };
 };
 export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine' | 'update'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };

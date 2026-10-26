@@ -70,6 +70,11 @@ class Journal:
     def finish(self, run_id: int, summary: dict) -> None:
         self._exec("UPDATE runs SET finished = ?, summary = ? WHERE id = ?", (time.time(), json.dumps(summary), run_id))
 
+    def unfinished(self) -> list[dict]:
+        """Runs that started but never finished: at start-up, the ones a restart cut short."""
+        with self.store.lock:
+            return [dict(r) for r in self.store.db.execute("SELECT * FROM runs WHERE finished IS NULL ORDER BY id").fetchall()]
+
     def record(self, run_id: int, item: str, op: str, src: str | None, dst: str, size: int | None = None,
                digest: str | None = None, status: str = "done", error: str | None = None) -> int:
         return self._exec(

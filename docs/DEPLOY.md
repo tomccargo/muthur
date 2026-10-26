@@ -51,6 +51,12 @@ Add the TV and Film folders as **video sources** (over SMB or NFS), with **Local
 
 The project uses `tomccargo/muthur:latest` unless `.env` sets `MUTHUR_VERSION`.
 
+**Update only while muthur is idle.** An update restarts the container; a job running then is cut off. muthur picks
+up a cut-off rename's Kodi step after the restart, but nothing else of that job. Check first: `"busy": false` from
+```bash
+docker exec muthur python -c "import json, urllib.request; print(json.load(urllib.request.urlopen('http://127.0.0.1:8580/api/health')))"
+```
+
 - **Synology, from the NAS's own screens:** Container Manager → **Image**: `tomccargo/muthur` shows *Update available*; update it, then recreate the container (Project → muthur → stop and start, or Container → muthur → Action → Reset). This is how community guides describe it ([drfrankenstein](https://drfrankenstein.co.uk/updating-containers-in-the-synology-docker-package/comment-page-1)); Container Manager may take a day to notice a new image.
 - **Synology, over SSH (as root):** pull the image and let Container Manager rebuild the project with [`scripts/nas-update-project.py`](../scripts/nas-update-project.py), which finds the project by its name:
   ```bash

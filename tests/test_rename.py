@@ -70,6 +70,9 @@ def test_kodi_scans_once_carries_the_play_count_and_drops_the_old_entry():
     before = {"tv/show/season 1/show.s01e01.mkv": {"kodiid": 7, "playcount": 2, "lastplayed": "2024-01-01 20:00:00", "resume": 0, "total": 0}}
     r = follow_in_kodi(k, [("TV/Show/Season 1/Show.S01E01.mkv", "TV/Show/Season 1/Show - S01E01 - Pilot.mkv")], {"TV": "/data/TV"}, before)
     assert r == {"followed": 1, "problems": []} and k.scans == ["smb://nas/TV/Show/Season 1/"]
+    seen: list[str] = []
+    follow_in_kodi(k, [("TV/Show/Season 1/Show.S01E01.mkv", "TV/Show/Season 1/Show - S01E01 - Pilot.mkv")], {"TV": "/data/TV"}, before, done=seen.append)
+    assert seen == ["TV/Show/Season 1/Show.S01E01.mkv"]  # each one Kodi took is crossed off the waiting list
     assert ("VideoLibrary.SetEpisodeDetails", {"episodeid": 8, "playcount": 2, "lastplayed": "2024-01-01 20:00:00"}) in k.calls
     assert ("VideoLibrary.RemoveEpisode", {"episodeid": 7}) in k.calls
 
@@ -131,7 +134,7 @@ def test_films_get_title_and_year_and_a_folder_of_their_own(env, monkeypatch):  
             return {"connected": True}
 
     monkeypatch.setattr("muthur.rename.read_before", lambda kodi, roots, backup=None: {})
-    monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before: {"followed": len(renamed), "problems": []})
+    monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before, done=None: {"followed": len(renamed), "problems": []})
     before = sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file())
     result = health.apply(plan, ["film-renames"], On())
     assert result["failed"] == [] and result["done"]["film-renames"] == 2
@@ -139,5 +142,33 @@ def test_films_get_title_and_year_and_a_folder_of_their_own(env, monkeypatch):  
     assert now == ["Loose Film (1999)/Loose Film (1999)-poster.jpg", "Loose Film (1999)/Loose Film (1999).mkv", "Loose Film (1999)/Loose Film (1999).nfo",
                    "Some Film (2005)/Some Film (2005).en.srt", "Some Film (2005)/Some Film (2005).mkv", "Some Film (2005)/Some Film (2005).nfo",
                    "Some Film (2005)/poster.jpg"]  # the site's note went to quarantine
+    # What a restart in the Kodi step would leave to finish: read back from the journal, folder moves included.
+    from muthur.rename import from_run
+
+    assert sorted(from_run(health.journal.ops(result["run"]), health.roots)) == [
+        ("Film/Loose.Film.1999.mkv", "Film/Loose Film (1999)/Loose Film (1999).mkv"),
+        ("Film/www.Site.com   -   Some.Film.2005.1080p/Some.Film.2005.1080p.mkv", "Film/Some Film (2005)/Some Film (2005).mkv")]
     health.journal.undo(result["run"])
     assert sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file()) == before
+
+
+def test_a_run_a_restart_cut_short_is_closed_and_its_renames_wait_for_kodi(tmp_path, monkeypatch):
+    from fastapi.testclient import TestClient
+
+    from muthur.web import Config, create_app
+
+    for k, v in {"MUTHUR_CONFIG": tmp_path / "config", "MUTHUR_DOWNLOADS": tmp_path / "dl", "MUTHUR_TV": tmp_path / "TV",
+                 "MUTHUR_FILM": tmp_path / "Film", "MUTHUR_QUARANTINE": tmp_path / "_q"}.items():
+        monkeypatch.setenv(k, str(v))
+    app = create_app(Config(dotenv=False))
+    journal, store = Journal(app.state.store), app.state.store
+    old, new = tmp_path / "Film" / "Old.Name.mkv", tmp_path / "Film" / "New (2001)" / "New (2001).mkv"
+    write(old)
+    run = journal.start("health")  # the files moved, then muthur was restarted before Kodi was told
+    journal.move(run, "Film/Old.Name.mkv", str(old), str(new), "move")
+    assert TestClient(app).get("/api/health").json() == {"ok": True, "busy": False}
+
+    create_app(Config(dotenv=False))  # the restart
+    assert journal.unfinished() == []
+    assert journal.runs(1)[0]["summary"]["interrupted"] is True
+    assert store.get("kodi.pendingRenames") == [["Film/Old.Name.mkv", "Film/New (2001)/New (2001).mkv"]]
