@@ -85,7 +85,7 @@ class Health:
         title = show["title"] if show["nfo"] else details.get("name") or folder
         if self._have is None:
             self._have = self.imdb.shows_with_data()
-        if imdb_id and imdb_id not in self._have:
+        if imdb_id and imdb_id not in self._have and imdb_id not in set(self.imdb.asked()):
             # Its IMDb ID came after the last download (a new show, an NFO written since): its scores aren't there yet.
             fixes["imdb-data"].append({"path": f"TV/{folder}", "label": title})
         if show["nfo"]:  # a show without an NFO gets its poster with it ('show-nfos')
@@ -155,6 +155,10 @@ class Health:
             if not e["nfo"]:
                 if len(e["episodes"]) > 1:
                     continue  # double-episode NFOs: not written by muthur yet
+                if n not in season(s):
+                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask,
+                                              "why": f"TMDB has no S{s:02d}E{n:02d} for this show, so muthur can’t write its NFO."})
+                    continue
                 fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
                                               "season": s, "episode": n, "show": title, "imdbShow": imdb_id,
                                               **({"aired": list(aired(s, n))} if mapped is not None else {}),
@@ -202,7 +206,7 @@ class Health:
             if want != f["file"] and not taken:
                 fixes["film-renames"].append({"path": f"Film/{f['file']}", "to": want, "folder": f["key"] if f["folder"] else None,
                                               "label": new_folder, "why": f"from {f['file'].split('/')[0]}"})
-        if f["nfo"] and f["file"] and f.get("nfoFile") and str(f["ids"].get("tmdb", "")).isdigit():
+        if f["nfo"] and f["file"] and f.get("nfoFile") and str(f["ids"].get("tmdb", "")).isdigit() and int(f["ids"]["tmdb"]) > 0:
             stem = f"Film/{f['file'].rsplit('.', 1)[0]}"  # beside the video, where Kodi looks: 'poster.jpg' in its folder, else '<name>-poster.jpg'
             folder = f"Film/{f['file'].rsplit('/', 1)[0]}"
             places = ([f"{folder}/poster.jpg", f"{folder}/folder.jpg"] if f["folder"] and "/" in f["file"] else []) + [stem + "-poster.jpg"]
@@ -281,7 +285,19 @@ class Health:
         quarantine.note(self.quarantine, dst, path, run, why)
 
     def _write(self, run: int, path: str, data: bytes | None) -> bool:
-        return self.journal.create(run, path, self._full(path), data)  # never over an existing file
+        """A new file, never over an existing one; an empty file in its place is replaced (a copy is kept)."""
+        full = self._full(path)
+        if data and os.path.isfile(full) and os.path.getsize(full) == 0:
+            self.journal.replace(run, path, full, data, self.backups)
+            return True
+        return self.journal.create(run, path, full, data)
+
+    def _nfo(self, run: int, path: str, data: bytes | None) -> None:
+        """An item's NFO: written, or the fix fails with why (it never counts as done without a change)."""
+        if not data:
+            raise ValueError("TMDB gave nothing to write")
+        if not self._write(run, path, data):
+            raise ValueError("an NFO is already there; check the library again")
 
     def _imdb_data(self, run, x, nfos):
         """Done for all shows at once, by the score refresh before the other fixes (web.py)."""
@@ -318,8 +334,8 @@ class Health:
         if not ep:
             raise ValueError("TMDB didn't return the episode")
         score = self.imdb.episode(x["imdbShow"], ts, te, len(listed))
-        if self._write(run, x["path"], nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], number=x["episode"], imdb=score)):
-            nfos.append(x["path"])
+        self._nfo(run, x["path"], nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], number=x["episode"], imdb=score))
+        nfos.append(x["path"])
         if x.get("thumb") and ep.get("still_path"):
             self._write(run, x["thumb"], self.tmdb.image(ep["still_path"], "original"))
 
@@ -328,8 +344,8 @@ class Health:
         if not show:
             raise ValueError("TMDB didn't return the show")
         imdb_id = (show.get("external_ids") or {}).get("imdb_id")
-        if self._write(run, x["path"], nfo_write.tvshow_nfo(show, show.get("name") or x["label"], self.imdb.rating(imdb_id))):
-            nfos.append(x["path"])
+        self._nfo(run, x["path"], nfo_write.tvshow_nfo(show, show.get("name") or x["label"], self.imdb.rating(imdb_id)))
+        nfos.append(x["path"])
         folder = x["path"].rsplit("/", 1)[0]
         for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
             if show.get(key):
@@ -346,8 +362,8 @@ class Health:
         keep = set(self.store.get("titles.keepOriginal", sorted(LATIN_SCRIPT)))
         title = display_title(movie.get("title") or x["label"], movie.get("original_title"), movie.get("original_language"), keep)
         imdb_id = movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id")
-        if self._write(run, x["path"], nfo_write.movie_nfo(movie, title, self.imdb.rating(imdb_id))):
-            nfos.append(x["path"])
+        self._nfo(run, x["path"], nfo_write.movie_nfo(movie, title, self.imdb.rating(imdb_id)))
+        nfos.append(x["path"])
         # Artwork: 'poster.jpg' in the film's own folder, '<name>-poster.jpg' next to a loose file.
         for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
             if movie.get(key):
@@ -405,7 +421,8 @@ class Health:
         with open(full, encoding="utf-8", errors="strict") as f:
             text = f.read()
         new = with_imdb(text, tuple(x["score"]))
-        if new is not None:
-            self.scores._rewrite(run, full, text, new)
-            nfos.append(x["path"])
+        if new is None:
+            raise ValueError("its NFO has no place for a score (it may be empty or not an NFO); check the library again")
+        self.scores._rewrite(run, full, text, new)
+        nfos.append(x["path"])
 

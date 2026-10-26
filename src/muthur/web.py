@@ -922,6 +922,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             return {str(s): "No IMDb scores: the show has no IMDb ID." for s in lacking}
         on_imdb = imdb.season_counts(imdb_id)
         if not on_imdb:
+            if imdb_id in set(imdb.asked()):  # asked for in the last download, and still nothing: IMDb has no episodes for it
+                return {str(s): "No IMDb scores: IMDb has no episodes for this show." for s in lacking}
             return {str(s): "No IMDb scores yet: they aren’t downloaded for this show. Health can download them." for s in lacking}
         on_tmdb: dict[int, int] = {}
         client = tmdb()
@@ -1103,14 +1105,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def outdated_check() -> bool:
-        """The last Health check is from before an update that added kinds of fixes: it can't show them."""
+        """The last Health check was made by another version of muthur: its list may hold fixes this one makes
+        differently (or not at all), or miss kinds it added. It is checked again soon after an update (read-only)."""
         plan, _ = store.snapshot("health")
-        return bool(plan) and not set(FIXES) <= set(plan["fixes"])
+        return bool(plan) and (not set(FIXES) <= set(plan["fixes"]) or plan.get("version") != __version__)
 
     def check_health(client, job):
         lib = index.build(watched.latest(), job)
         store.save_snapshot("library", lib)
         plan = health_tool(client).check(lib, job)
+        plan["version"] = __version__
         store.save_snapshot("health", plan)
         health_counts(plan)
         if job:

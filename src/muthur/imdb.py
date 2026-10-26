@@ -99,7 +99,12 @@ class Imdb:
             db.commit()
         info = {"at": time.time(), "shows": len(shows), "titles": len(titles), "episodes": len(episodes), "ratings": len(ratings)}
         self.store.put("imdb.refreshed", info)
+        self.store.put("imdb.asked", sorted(shows))  # a show asked for that still has no episodes: IMDb has none
         return info
+
+    def asked(self) -> list[str]:
+        """IMDb IDs of the shows the last download asked for."""
+        return self.store.get("imdb.asked") or []
 
     def refreshed(self) -> dict | None:
         return self.store.get("imdb.refreshed")

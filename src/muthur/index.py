@@ -61,6 +61,8 @@ class Index:
             st = os.stat(path)
         except OSError:
             return None
+        if st.st_size == 0:  # an empty NFO (some tools leave them) tells Kodi nothing: as good as none
+            return None
         with self.store.lock:
             row = self.store.db.execute("SELECT mtime, size, body FROM nfo_cache WHERE path = ?", (path,)).fetchone()
         if row and row[0] == st.st_mtime and row[1] == st.st_size:
