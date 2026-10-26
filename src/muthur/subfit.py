@@ -141,16 +141,17 @@ class SubFit:
         a, b = os.stat(srt), os.stat(video)
         return f"{a.st_size}:{a.st_mtime}:{b.st_size}:{b.st_mtime}"
 
-    def check(self, video: str, duration: float, beside: list[dict], inside: list[dict]) -> list[dict]:
-        """For each .srt beside the video (as player.sidecars) that has a track inside the video in its language
-        (player.embedded; a file without a language counts as English): {name, verdict, fit}."""
+    def check(self, video: str, duration: float, beside: list[dict], inside) -> list[dict]:
+        """For each .srt beside the video (as player.sidecars) that has a track inside the video in its language (a file
+        without a language counts as English): {name, verdict, fit}. inside(): the video's text tracks (player.embedded),
+        asked only when a file wasn't measured yet: a Health check that finds nothing new doesn't read the videos at all
+        (it took ages on 26 Oct, asking ffprobe for 2,790 videos every time)."""
         refs: dict[str, list] = {}
+        tracks: list[dict] | None = None
         out = []
         for s in beside:
-            lang = "en" if s["lang"] == "und" else s["lang"]
-            track = next((t for t in inside if t["lang"] == lang and not t["forced"]), None)
-            if s["forced"] or track is None:
-                continue  # forced lines are too few to match; nothing to compare a language with
+            if s["forced"]:
+                continue  # forced lines are too few to match
             srt = os.path.join(os.path.dirname(video), s["name"])
             try:
                 stamp = self._stamp(srt, video)
@@ -161,15 +162,22 @@ class SubFit:
             if row and row[0] == stamp:
                 found = json.loads(row[1])
             else:
-                if lang not in refs:
-                    refs[lang] = sample(video, track["index"], duration)
-                with open(srt, "rb") as fh:
-                    f = fit(refs[lang], cues(decode(fh.read())))
-                found = {"verdict": verdict(f), "fit": f}
+                lang = "en" if s["lang"] == "und" else s["lang"]
+                tracks = inside() if tracks is None else tracks
+                track = next((t for t in tracks if t["lang"] == lang and not t["forced"]), None)
+                if track is None:
+                    found = {"verdict": None, "fit": None}  # nothing inside to compare with: remembered as such
+                else:
+                    if lang not in refs:
+                        refs[lang] = sample(video, track["index"], duration)
+                    with open(srt, "rb") as fh:
+                        f = fit(refs[lang], cues(decode(fh.read())))
+                    found = {"verdict": verdict(f), "fit": f}
                 with self.store.lock:
                     self.store.db.execute("INSERT OR REPLACE INTO sub_fit VALUES (?, ?, ?)", (srt, stamp, json.dumps(found)))
                     self.store.db.commit()
-            out.append({"name": s["name"], **found})
+            if found["verdict"]:
+                out.append({"name": s["name"], **found})
         return out
 
 

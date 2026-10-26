@@ -54,7 +54,7 @@ class Health:
         fixes: dict[str, list] = {k: [] for k in FIXES}
         manual: dict[str, list] = {"shows": [], "seasons": [], "numbers": [], "films": []}
         if job:
-            job.total, job.done = len(lib["shows"]) + 1, 0
+            job.begin("Checking each show and film", len(lib["shows"]) + 1)
         for show in lib["shows"]:
             self._show(show, fixes, manual)
             if job:

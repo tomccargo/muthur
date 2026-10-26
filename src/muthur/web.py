@@ -1398,7 +1398,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             beside = player.sidecars(full)
             if beside:
                 facts = play_facts.cached(full) or {}
-                for r in sub_fit.check(full, facts.get("duration") or 0, beside, player.embedded(full)):
+                for r in sub_fit.check(full, facts.get("duration") or 0, beside, lambda full=full: player.embedded(full)):
                     srt = f"{path.rsplit('/', 1)[0]}/{r['name']}"
                     if r["verdict"] == "stretch":
                         plan["fixes"]["subtitle-timing"].append({"path": srt, "shift": r["fit"]["shift"], "speed": r["fit"]["speed"],

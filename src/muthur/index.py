@@ -91,7 +91,7 @@ class Index:
         shows = [] if not os.path.isdir(self.tv_root) else sorted(
             d for d in os.listdir(self.tv_root) if os.path.isdir(os.path.join(self.tv_root, d)) and not d.startswith((".", "@", "#")))
         if job:
-            job.total, job.done = len(shows) + 1, 0
+            job.begin("Reading the TV and Film folders", len(shows) + 1)
         out_shows = []
         for folder in shows:
             out_shows.append(self._show(folder, played))
