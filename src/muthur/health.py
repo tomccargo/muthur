@@ -178,11 +178,13 @@ class Health:
                 stem = f"TV/{folder}/{e['file'].rsplit('.', 1)[0]}"
                 label = f"{title} S{ps:02d}E{pn:02d}"
                 # Its NFO, when there is one, still says the old number: it is written again (the old one kept), so Kodi
-                # doesn't show it under the number it had.
-                fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
-                                              "season": ps, "episode": pn, "show": title, "imdbShow": imdb_id,
-                                              "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label,
-                                              **({"replace": True} if e["nfo"] else {})})
+                # doesn't show it under the number it had. Once it says TMDB's number, only the rename is left.
+                info = self.index.nfo(self._full(stem + ".nfo")) if e["nfo"] else None
+                if not (info and (info.season, info.episode) == (ps, pn)):
+                    fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
+                                                  "season": ps, "episode": pn, "show": title, "imdbShow": imdb_id,
+                                                  "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label,
+                                                  **({"replace": True} if e["nfo"] else {})})
                 new = renaming.new_name(folder, e["file"], ps, [pn], pt)
                 if new != e["file"].rsplit("/", 1)[-1]:
                     fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": label,
@@ -389,16 +391,26 @@ class Health:
         if not best or best_share < 0.7:
             return None
         new_id = int(best["id"])
+        details = self.tmdb.tv(new_id) or {}
+        names = [best.get("name") or "", best.get("original_name") or "",
+                 *[a.get("title") or "" for a in (details.get("alternative_titles") or {}).get("results", [])]]
+        if best_similarity(p.title or folder, [n for n in names if n]) < 0.6:
+            return None  # another show than the folder's name (26 Oct: 'Jiskefet' holds the spin-off 'Sint Hubertusberg')
+        # The new show has to explain the folder, not only its titled files: most of all its episodes are that show's
+        # (Jiskefet: 8 of 19 were the spin-off's).
+        if sum(self._fits(f, best_listing, True) for f in files) < 0.7 * len(files):
+            return None
         name = best.get("name") or folder
         year = (best.get("first_air_date") or "")[:4]
         mine, strays = [], []
         homes = [sh for sh in getattr(self, "_shows_of", {}).get(str(tmdb_id), []) if sh["folder"] != folder]
         for f in files:
             e = f[0]
-            if self._fits(f, best_listing, False) or not self._fits(f, old, True):
-                if (e["season"], e["episodes"][0]) in best_listing:
-                    mine.append([e["file"], e["season"], e["episodes"][0]])
+            if self._fits(f, best_listing, False):
+                mine.append([e["file"], e["season"], e["episodes"][0]])  # the new show's episode at its own number
                 continue
+            if not self._fits(f, old, True):
+                continue  # neither show's for certain: left alone, judged against the new match next time
             s, n = e["season"], e["episodes"][0]
             home = homes[0] if homes else None
             if not home:

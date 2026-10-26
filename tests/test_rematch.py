@@ -89,6 +89,38 @@ def test_a_folder_named_after_another_show_is_rematched(env):  # noqa: F811
     assert (fix["from"], fix["to"]) == (8, 21) and len(fix["episodes"]) == 8
 
 
+class SpinTmdb(TwinTmdb):
+    """Searching 'Twin' also finds 'Spin Off' (22), a spin-off whose episodes some of the folder holds."""
+
+    def tv(self, i):
+        if i == 22:
+            return {"id": 22, "name": "Spin Off", "first_air_date": "2005-01-01", "seasons": [{"season_number": 1, "episode_count": 8}]}
+        return super().tv(i)
+
+    def search_tv(self, query, year=None):
+        return [*super().search_tv(query, year), {"id": 22, "name": "Spin Off"}] if query.lower() == "twin" else super().search_tv(query, year)
+
+    def tv_season(self, i, n):
+        if i == 22:
+            return {"episodes": [{"id": 2200 + k, "episode_number": k, "name": t, "air_date": "2005-02-01"} for k, t in enumerate(US, 1)]}
+        return super().tv_season(i, n)
+
+
+def test_a_spin_off_inside_the_folder_is_no_reason(env):  # noqa: F811
+    """26 Oct: 'Jiskefet' was matched to its spin-off 'Sint Hubertusberg', whose episodes sat in a subfolder: the new
+    show must be called like the folder, and explain most of its episodes, not only the titled ones."""
+    tmp, health, _ = env
+    health.tmdb = health.scores.tmdb = SpinTmdb()
+    show = tmp / "TV" / "Twin"
+    write(show / "tvshow.nfo", '<tvshow><title>Twin</title><uniqueid type="tmdb">20</uniqueid></tvshow>')
+    for k, t in enumerate(US[:6], 1):
+        write(show / "Spin Off" / f"Twin - S01E{k:02d} - {t}.mkv")  # the spin-off's titles; 'Twin' (US) shares them here
+    for k in range(1, 11):
+        write(show / "Season 02" / f"Twin S02E{k:02d}.mkv")  # nobody's titles, no year
+    plan = health.check(health.index.build())
+    assert not plan["fixes"]["show-rematch"]  # 'Spin Off' isn't called 'Twin'; 'Twin' (US) explains 6 of 16
+
+
 def test_a_show_in_another_order_is_not_rematched(env):  # noqa: F811
     """Titles of the matched show at other numbers: its own episodes, numbered differently."""
     tmp, health, _ = env

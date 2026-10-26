@@ -226,7 +226,7 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="titles-h">
         <h2 id="titles-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Which films keep their original title?</h2>
-        <p className="hint">On: the original title (Aguirre, der Zorn Gottes). Off: the English title (Spirited Away).</p>
+        <p className="hint">On: the title in the film’s own language. Off: the English title.</p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {ALL_LANGUAGES.map((code) => (
             <button key={code} type="button" className="chip" aria-pressed={draft.keepOriginal.includes(code)} onClick={() => toggle(code)}>

@@ -98,5 +98,8 @@ def test_a_renumbered_episode_gets_its_nfo_rewritten(env):  # noqa: F811
     assert fix["replace"] and (fix["season"], fix["episode"]) == (2, 1)
     result = health.apply({"fixes": {"episode-nfos": [fix]}}, ["episode-nfos"])
     assert result["failed"] == [] and "<season>2</season>" in (show / "Season 1" / "Long Show - 1x03.nfo").read_text(encoding="utf-8")
+    again = health.check(health.index.build())  # its NFO says TMDB's number now: only the rename is left
+    assert not [x for x in again["fixes"]["episode-nfos"] if x["path"].endswith("1x03.nfo")]
+    assert [x for x in again["fixes"]["renames"] if x["path"].endswith("1x03.mkv")]
     health.journal.undo(result["run"])
     assert "<title>Old</title>" in (show / "Season 1" / "Long Show - 1x03.nfo").read_text(encoding="utf-8")
