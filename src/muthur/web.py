@@ -13,7 +13,7 @@ from dataclasses import asdict
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.concurrency import run_in_threadpool
 
@@ -96,6 +96,11 @@ def _choice(body: dict) -> tuple[str, dict]:
         except (KeyError, TypeError, ValueError):
             raise HTTPException(422, "An episode choice is incomplete: pick the episode it is.")
     return item_id, {"kind": c["kind"], "tmdbId": int(c["tmdbId"]), "episodes": episodes}
+
+
+def _ascii(name: str) -> str:
+    """A file name for a Content-Disposition header: plain ASCII, no quotes (the header can't carry more)."""
+    return re.sub(r"[^\x20-\x7e]|\"", "_", name)
 
 
 def _ep_key(e: dict) -> tuple | None:
@@ -187,11 +192,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                  "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
                  "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed",
-                 "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names", "player-scan": "Reading how each video plays"}
+                 "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names", "player-scan": "Reading how each video plays",
+                 "subtitles-extract": "Copying subtitles out of a video"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
     OPEN = {"/api/health", "/api/auth", "/api/auth/login", "/api/auth/setup", "/api/auth/logout"}
+    # A video and its .srt files for a player outside the browser, with a link key instead of the sign-in (Auth.link_key).
+    LINKED = re.compile(r"^/api/player/video/([0-9a-f]{16})(?:/sidecar/[^/]+)?$")
     BUSY = "Another job is running. Try again when it's done."
 
     @app.middleware("http")
@@ -202,7 +210,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if path.startswith("/api/"):
             if request.method not in ("GET", "HEAD", "OPTIONS") and not same_site(request.headers):
                 return JSONResponse({"detail": "Refused: this request came from another website."}, status_code=403)
-            if auth.required and path not in OPEN and not await run_in_threadpool(auth.valid, request.cookies.get(COOKIE)):
+            linked = request.method == "GET" and (m := LINKED.match(path)) and auth.link_valid(m.group(1), request.query_params.get("key"))
+            if auth.required and path not in OPEN and not linked and not await run_in_threadpool(auth.valid, request.cookies.get(COOKIE)):
                 return JSONResponse({"detail": "Sign in to muthur first.", "auth": "login" if auth.is_set() else "setup"},
                                     status_code=401)
         return await call_next(request)
@@ -1075,8 +1084,36 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         path, full = player_video(vid)
         f = play_facts.get(full)
         original = original_language(path)
+        inside = [name for _, name in player.to_extract(full, player.embedded(full))] if f and f.get("embeddedSubs") else []
         return {"id": vid, "path": path, "name": os.path.basename(full), "play": player.playback(f), "facts": f,
-                "subtitles": player.sidecars(full), "original": original, "audio": player.audio_pick(f, original)}
+                "subtitles": player.sidecars(full), "original": original, "audio": player.audio_pick(f, original),
+                "extractable": inside, "dryRun": bool(store.get("dryRun", False))}
+
+    @app.post("/api/player/video/{vid}/subtitles/extract", status_code=202)
+    def player_extract(vid: str):
+        """Copy the video's text subtitles out as .srt beside it (decided 26 Oct): English, Dutch only without English.
+        A journalled run, so History can put it back; the video itself is only read."""
+        not_dry()
+        path, full = player_video(vid)
+        folder = path.rsplit("/", 1)[0]
+
+        def work(job):
+            chosen = player.to_extract(full, player.embedded(full))
+            if not chosen:
+                job.result = "No subtitles to copy out."
+                return
+            length = int((play_facts.get(full) or {}).get("duration") or 0)
+            # done/total: seconds of the film read so far, so the player shows how far the copy is
+            job.begin(f"Copying {count(len(chosen), 'subtitle')} out of {os.path.basename(full)}", length)
+            data = player.extract(full, chosen, os.path.join(cfg.config_dir, "tmp", "subtitles"),
+                                  progress=(lambda s: setattr(job, "done", min(int(s), length))) if length else None)
+            run = journal.start("subtitles")
+            written = [name for name, body in data.items()
+                       if journal.create(run, f"{folder}/{name}", os.path.join(os.path.dirname(full), name), body)]
+            journal.finish(run, {"subtitles": written})
+            job.result = f"{count(len(written), 'subtitle file')} written beside {os.path.basename(full)}."
+
+        return jobs.start("subtitles-extract", work).as_dict()
 
     languages: dict[tuple, str | None] = {}
 
@@ -1108,11 +1145,97 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         return languages[key]
 
     @app.get("/api/player/video/{vid}")
-    def player_file(vid: str):
-        """The video exactly as it is on disk, with Range requests (seeking)."""
+    def player_file(vid: str, download: int = 0):
+        """The video exactly as it is on disk, with Range requests (seeking); download=1 saves it under its own name."""
         _, full = player_video(vid)
         return FileResponse(full, media_type=VIDEO_TYPES.get(os.path.splitext(full)[1].lower(), "application/octet-stream"),
-                            headers={"Cache-Control": "private, max-age=3600"})
+                            headers={"Cache-Control": "private, max-age=3600", "Referrer-Policy": "no-referrer"},
+                            filename=os.path.basename(full) if download else None)
+
+    def source_prefixes() -> dict:
+        """Each library's place on the share as Kodi knows it ('smb://nas/share/TV/'), remembered from the last Health
+        check; a library folder that is itself a share path (a local copy reading //nas/share/TV) stands for itself."""
+        known = store.get("player.sources") or {}
+        out = {}
+        for lib_, root in (("TV", cfg.tv), ("Film", cfg.film)):
+            unc = root.replace("\\", "/")
+            out[lib_] = known.get(lib_) or ("smb:" + unc.rstrip("/") + "/" if unc.startswith("//") else None)
+        return out
+
+    @app.get("/api/player/video/{vid}/links")
+    def player_links(vid: str):
+        """For 'Open with': links a player outside the browser can open (a key instead of the sign-in, for 12 hours), the
+        share path, and whether Kodi can play it on the TV."""
+        path, full = player_video(vid)
+        key = auth.link_key(vid)
+        lib_name, _, rel = path.partition("/")
+        return {"stream": f"/api/player/video/{vid}?key={key}",
+                "subtitles": [{**s, "url": f"/api/player/video/{vid}/sidecar/{s['name']}?key={key}"} for s in player.sidecars(full)],
+                "share": player.share_paths(source_prefixes().get(lib_name), rel), "tv": kodi() is not None,
+                "name": os.path.basename(full)}
+
+    @app.get("/api/player/video/{vid}/sidecar/{name}")
+    def player_sidecar(vid: str, name: str, download: int = 0):
+        """An .srt beside the video as it is (VLC and downloads want the file itself, not WebVTT)."""
+        _, full = player_video(vid)
+        if name not in {s["name"] for s in player.sidecars(full)}:
+            raise HTTPException(404, "No such subtitle file beside the video.")
+        return FileResponse(os.path.join(os.path.dirname(full), name), media_type="application/x-subrip",
+                            filename=name if download else None, headers={"Referrer-Policy": "no-referrer"})
+
+    @app.get("/api/player/video/{vid}/playlist.m3u")
+    def player_playlist(vid: str, windows: int = 0):
+        """A one-line playlist for the PC's own player (VLC, mpv, MPC-HC, IINA): the share path, so the player finds the
+        .srt beside the video itself. Windows gets the \\\\nas\\share path, other systems smb://."""
+        path, full = player_video(vid)
+        lib_name, _, rel = path.partition("/")
+        where = player.share_paths(source_prefixes().get(lib_name), rel)
+        if not where:
+            raise HTTPException(409, "muthur doesn't know the share yet: it learns it from Kodi at the next Health check.")
+        name = os.path.splitext(os.path.basename(full))[0]
+        body = f"#EXTM3U\n#EXTINF:-1,{name}\n{where['unc'] if windows else where['smb']}\n"
+        return Response(body, media_type="audio/x-mpegurl", headers={"Content-Disposition": f'attachment; filename="{_ascii(name)}.m3u"'})
+
+    @app.post("/api/player/video/{vid}/tv")
+    def player_tv(vid: str):
+        """Kodi plays the video on the TV (Player.Open with its path in Kodi's source)."""
+        path, _ = player_video(vid)
+        k = kodi(timeout=10)
+        if not k:
+            raise HTTPException(409, "Set up the Kodi connection in Settings first.")
+        lib_name, _, rel = path.partition("/")
+        try:
+            prefix = k.source_prefix(folder_name(cfg.tv if lib_name == "TV" else cfg.film))
+            if not prefix:
+                raise HTTPException(409, f"Kodi has no video source for the {lib_name} folder.")
+            k.call("Player.Open", {"item": {"file": prefix + rel}})
+        except HTTPException:
+            raise
+        except Exception:
+            state = k.check()
+            raise HTTPException(409, state.get("problem") or "Kodi didn't answer. Is the TV on?")
+        return {"ok": True, "device": names()["device"]}
+
+    @app.get("/api/player/zip")
+    def player_zip(folder: str, season: int):
+        """A season as one ZIP for a laptop: each episode as it is, with the .srt files beside it, made as it is sent."""
+        lib, _ = store.snapshot("library")
+        show = next((s for s in (lib or {}).get("shows", []) if s["folder"] == folder), None)
+        if not show:
+            raise HTTPException(404, "That show isn't in the index.")
+        files = []
+        for e in sorted(show["episodes"], key=lambda x: x["file"]):
+            if e["season"] != season or e.get("sample"):
+                continue
+            full = library_full(f"TV/{folder}/{e['file']}")
+            if os.path.isfile(full):
+                files.append((os.path.basename(full), full))
+                files += [(s["name"], os.path.join(os.path.dirname(full), s["name"])) for s in player.sidecars(full)]
+        if not files:
+            raise HTTPException(404, "No episodes of that season on disk.")
+        title = f"{show['title']} - Season {season:02d}"
+        return StreamingResponse(player.zip_stream([(f"{title}/{n}", p) for n, p in files]), media_type="application/zip",
+                                 headers={"Content-Disposition": f'attachment; filename="{_ascii(title)}.zip"'})
 
     @app.get("/api/player/video/{vid}/subtitles/{name}")
     def player_subtitles(vid: str, name: str):
@@ -1242,6 +1365,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     job.begin("Reading what Kodi lists", 0)
                 items = Watched.read_kodi(k)
                 prefixes = {lib_: k.source_prefix(folder_name(root)) for lib_, root in (("TV", cfg.tv), ("Film", cfg.film))}
+                if all(prefixes.values()):
+                    store.put("player.sources", prefixes)  # where the player's 'Open with' finds the share (docs/PLAYER.md)
                 follow_watched(items)  # a watched backup comes free with it
         except Exception:  # Kodi went away: the rest of the check doesn't need it
             items, prefixes = None, None

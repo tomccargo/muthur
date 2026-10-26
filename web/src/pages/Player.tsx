@@ -2,7 +2,7 @@
 // filters; a show's seasons and episodes; and the watch view, which fits the tab and goes full screen. Read-only:
 // the files are played as they are, and nothing about watching is written anywhere.
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
-import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerShow, type PlayerShowTile, type PlayerTest } from '../api';
+import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
 import { Loading } from '../components';
 import { hue } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
@@ -21,7 +21,7 @@ const MSE = typeof window !== 'undefined' && 'MediaSource' in window;  // repack
 const PLAY_NOTE: Record<Way, string | null> = {
   native: null,
   sound: MSE ? null : 'This browser can’t decode this file’s sound (AC3, E-AC3 or DTS): it plays without sound.',
-  kodi: 'Plays in Kodi only: no browser plays this kind of file.',
+  kodi: 'Plays in Kodi only: no browser plays this kind of file. The ⋯ menu above plays it on the TV, opens it in your own player, or downloads it.',
   unknown: null,
 };
 const code = (s: number | null, e: number[]) => (s == null ? '' : `S${String(s).padStart(2, '0')}${e.map((n) => `E${String(n).padStart(2, '0')}`).join('')}`);
@@ -98,7 +98,7 @@ function FilmTile({ f }: { f: PlayerFilm }) {
       <span className="pl-sub">{[f.year, f.rating ? `★ ${f.rating.toFixed(1)}` : null].filter(Boolean).join(' · ')}</span>
     </>
   );
-  if (kodi) return <div className="pl-tile dim" title={`${label}: plays in Kodi only`}>{body}</div>;
+  if (kodi) return <Link className="pl-tile dim" to={watchUrl(f.id, label)} title={`${label}: plays in Kodi only; open it for the TV, VLC or a download`}>{body}</Link>;
   return <Link className="pl-tile" to={watchUrl(f.id, label)} title={`Play ${label}`}>{body}</Link>;
 }
 
@@ -180,6 +180,12 @@ function ShowView({ folder }: { folder: string }) {
           </button>
         ))}
       </div>
+      {current != null && (
+        <p className="pl-season-tools">
+          <a href={`/api/player/zip?${new URLSearchParams({ folder, season: String(current) })}`} download title="Every episode of this season as it is, with its subtitles, in one ZIP (for a laptop)">
+            Download {current === 0 ? "the specials" : `season ${current}`} (ZIP)</a>
+        </p>
+      )}
       <ul className="pl-episodes">
         {show.episodes.filter((e) => e.season === current).map((e) => {
           const name = `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
@@ -192,7 +198,7 @@ function ShowView({ folder }: { folder: string }) {
           );
           return (
             <li key={e.id}>
-              {way(e.play) === 'kodi' ? <div className="pl-ep dim">{inner}</div>
+              {way(e.play) === 'kodi' ? <Link className="pl-ep dim" to={watchUrl(e.id, `${show.title} ${name}`)} title="Plays in Kodi only; open it for the TV, VLC or a download">{inner}</Link>
                 : <Link className="pl-ep" to={watchUrl(e.id, `${show.title} ${name}`)}>{inner}</Link>}
             </li>
           );
@@ -225,6 +231,63 @@ function Browse({ view, show }: { view: View; show: string | null }) {
   );
 }
 
+// ---- open with, download ------------------------------------------------------------------------
+// A small menu beside Play (decided 26 Oct): the TV, the phone's own player, the PC's own player, the share path, and
+// downloads. A page can't see which players are installed, so each entry simply works or does nothing visible.
+const ANDROID = /android/i.test(navigator.userAgent);
+const WINDOWS = /windows/i.test(navigator.userAgent);
+
+function OpenMenu({ id, onNote }: { id: string; onNote: (text: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [links, setLinks] = useState<PlayerLinks | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  useEffect(() => {
+    if (open && !links) api.playerLinks(id).then(setLinks).catch((e: Error) => setFailed(e.message));
+  }, [open, links, id]);
+  const abs = (path: string) => new URL(path, location.origin).href;
+  // Android: VLC by name (it takes the .srt along), or any app that plays video (the phone asks which).
+  const intent = (pkg: string | null) => {
+    if (!links) return '#';
+    const u = new URL(links.stream, location.origin);
+    const sub = links.subtitles.find((s) => s.lang === 'en' && !s.forced) ?? links.subtitles[0];
+    const extras = [`S.title=${encodeURIComponent(links.name)}`, ...(sub && pkg ? [`S.subtitles_location=${encodeURIComponent(abs(sub.url))}`] : [])];
+    return `intent://${u.host}${u.pathname}${u.search}#Intent;scheme=${u.protocol.replace(':', '')};type=video/*;${pkg ? `package=${pkg};` : ''}${extras.join(';')};end`;
+  };
+  const copy = (text: string, what: string) => navigator.clipboard.writeText(text).then(() => onNote(`${what} copied.`), () => onNote(text));
+  const tv = () => {
+    setOpen(false);
+    api.playerTv(id).then((r) => onNote(`Playing on ${r.device}.`)).catch((e: Error) => onNote(e.message));
+  };
+  return (
+    <span className="pl-menu">
+      <button type="button" className="pl-btn" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} title="Open with, download">⋯</button>
+      {open && (
+        <span className="pl-menu-list" role="menu">
+          {failed && <span className="pl-menu-note">{failed}</span>}
+          {!links && !failed && <span className="pl-menu-note">Loading…</span>}
+          {links && (
+            <>
+              {links.tv && <button type="button" role="menuitem" onClick={tv}>Play on the TV</button>}
+              {ANDROID && <a role="menuitem" href={intent('org.videolan.vlc')}>Open in VLC</a>}
+              {ANDROID && <a role="menuitem" href={intent(null)}>Open in another app</a>}
+              {!ANDROID && links.share && (
+                <a role="menuitem" href={`/api/player/video/${id}/playlist.m3u${WINDOWS ? '?windows=1' : ''}`} download>Open in your own player (.m3u)</a>
+              )}
+              {links.share && <button type="button" role="menuitem" onClick={() => copy(WINDOWS ? links.share!.unc : links.share!.smb, 'Path')}>Copy path</button>}
+              <button type="button" role="menuitem" onClick={() => copy(abs(links.stream), 'Link (12 hours)')}>Copy link</button>
+              <span className="pl-menu-sep" />
+              <a role="menuitem" href={`/api/player/video/${id}?download=1`} download>Download video</a>
+              {links.subtitles.map((s) => (
+                <a key={s.name} role="menuitem" href={`${s.url}&download=1`} download>Download subtitles: {s.label}</a>
+              ))}
+            </>
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
 // ---- watching -------------------------------------------------------------------------------
 function Watch({ id, title, mute = false }: { id: string; title: string; mute?: boolean }) {
   const box = useRef<HTMLDivElement>(null);
@@ -232,7 +295,54 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
   const [info, setInfo] = useState<PlayerInfo | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [full, setFull] = useState(false);
+  const [cue, setCue] = useState<'s' | 'm' | 'l'>(() => {
+    try { return (localStorage.getItem('muthur.cue') as 's' | 'm' | 'l') || 'm'; } catch { return 'm'; }
+  });
+  const nextCue = () => {
+    const n = cue === 's' ? 'm' : cue === 'm' ? 'l' : 's';
+    setCue(n);
+    try { localStorage.setItem('muthur.cue', n); } catch { /* the size just isn't remembered */ }
+  };
   useEffect(() => { api.playerInfo(id).then(setInfo).catch((e: Error) => setError(e.message)); }, [id]);
+  // The subtitle files beside the video; it grows when muthur copies subtitles out of the file (decided 26 Oct).
+  const [subList, setSubList] = useState<PlayerSub[]>([]);
+  const [subNote, setSubNote] = useState<string | null>(null);
+  const [subProgress, setSubProgress] = useState<number | null>(null);
+  const [flash, setFlash] = useState<string | null>(null);  // what an Open-with entry just did
+  useEffect(() => { if (info) setSubList(info.subtitles); }, [info]);
+  useEffect(() => {
+    if (!info || !info.extractable.length) return;
+    if (info.dryRun) {
+      setSubNote('This video has subtitles inside; muthur copies them out beside it, but not while dry run is on.');
+      return;
+    }
+    let stop = false;
+    setSubNote('Copying the subtitles out of the file…');
+    setSubProgress(0);
+    api.playerExtract(id).then(async () => {
+      // ffmpeg reads the whole film: the job says how far (seconds read of the film), shown as a bar.
+      for (let i = 0; i < 1200 && !stop; i++) {
+        await new Promise((r) => setTimeout(r, 1500));
+        const job = await api.job().catch(() => null);
+        if (job?.name === 'subtitles-extract' && job.running) {
+          if (!stop) {
+            setSubProgress(job.total ? job.done / job.total : 0);
+            setSubNote(job.queued ? 'Subtitles: waiting for another job to finish…' : 'Copying the subtitles out of the file…');
+          }
+          continue;
+        }
+        const fresh = await api.playerInfo(id);
+        if (!stop) {
+          if (fresh.subtitles.length > info.subtitles.length) setSubList(fresh.subtitles);
+          else if (job?.error) setSubNote(`The subtitles couldn’t be copied out: ${job.error}`);
+          setSubProgress(null);
+          if (!job?.error) setSubNote(null);
+        }
+        return;
+      }
+    }).catch((e: Error) => { if (!stop) { setSubProgress(null); setSubNote(`The subtitles couldn’t be copied out: ${e.message}`); } });
+    return () => { stop = true; };
+  }, [info, id]);
   useEffect(() => {
     const onFull = () => setFull(document.fullscreenElement === box.current);
     document.addEventListener('fullscreenchange', onFull);
@@ -275,13 +385,22 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
     return () => { gone = true; engine?.destroy(); };
   }, [repack, info, src]);
   const note = info && how ? (how === 'kodi' && info.play.endsWith('-hi10') ? 'Firefox doesn’t play this video (H.264 in 10-bit): Chrome, Edge and Kodi do.' : PLAY_NOTE[how]) : null;
-  const firstEnglish = info?.subtitles.findIndex((s) => s.lang === 'en' && !s.forced) ?? -1;
+  // On by default: English, else a subtitle file whose name gives no language (in this library nearly always English).
+  const subs = subList;
+  const firstEnglish = [subs.findIndex((s) => s.lang === 'en' && !s.forced), subs.findIndex((s) => s.lang === 'und' && !s.forced)].find((i) => i >= 0) ?? -1;
+  // A track added after the video loaded isn't switched on by its default attribute: switch it on here.
+  useEffect(() => {
+    const v = video.current;
+    if (!v || firstEnglish < 0) return;
+    const t = setTimeout(() => { const tt = v.textTracks[firstEnglish]; if (tt && ![...v.textTracks].some((x) => x.mode === 'showing')) tt.mode = 'showing'; }, 300);
+    return () => clearTimeout(t);
+  }, [subs, firstEnglish]);
   return (
-    <div className={`pl-watch${full ? ' full' : ''}`} ref={box}>
+    <div className={`pl-watch${full ? ' full' : ''}${cue === 'm' ? '' : ` cue-${cue}`}`} ref={box}>
       {error && <p className="pl-watch-msg">{error}</p>}
       {info && how !== 'kodi' && (
         <video ref={video} src={repack ? undefined : src} controls autoPlay playsInline preload="auto" muted={mute}>
-          {info.subtitles.map((s, i) => (
+          {subs.map((s, i) => (
             <track key={s.name} kind="subtitles" src={`/api/player/video/${id}/subtitles/${encodeURIComponent(s.name)}`}
               srcLang={s.lang === 'und' ? undefined : s.lang} label={s.label} default={i === firstEnglish} />
           ))}
@@ -291,9 +410,21 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
         <button type="button" className="pl-btn" onClick={back} aria-label="Back">←</button>
         <span className="pl-watch-title" title={info?.path}>{title}</span>
         {info && how !== 'kodi' && <span className="pl-watch-how" title="How this video plays">{repack ? 'repacked in the browser' : 'direct'}</span>}
+        <OpenMenu id={id} onNote={(t) => { setFlash(t); setTimeout(() => setFlash(null), 4000); }} />
+        {subs.length > 0 && (
+          <button type="button" className="pl-btn" onClick={nextCue} title={`Subtitle size: ${cue === 's' ? 'small' : cue === 'm' ? 'medium' : 'large'}`}
+            aria-label="Subtitle size">{cue === 's' ? 'a' : cue === 'm' ? 'Aa' : 'AA'}</button>
+        )}
         <button type="button" className="pl-btn" onClick={toggleFull} aria-label={full ? 'Leave full screen' : 'Full screen'}>{full ? '⤡' : '⤢'}</button>
       </div>
       {note && <p className={`pl-watch-msg${how === 'kodi' ? '' : ' corner'}`}>{note}</p>}
+      {flash && <p className="pl-watch-msg corner" role="status">{flash}</p>}
+      {subNote && !note && !flash && (
+        <div className="pl-watch-msg corner" role="status">
+          <span>{subNote}{subProgress != null && subProgress > 0 ? ` ${Math.round(subProgress * 100)}%` : ""}</span>
+          {subProgress != null && <span className={`pl-progress${subProgress > 0 ? "" : " busy"}`}><span style={{ width: `${Math.max(4, subProgress * 100)}%` }} /></span>}
+        </div>
+      )}
       {!info && !error && <p className="pl-watch-msg">Loading…</p>}
     </div>
   );

@@ -245,6 +245,9 @@ export const api = {
   playerTestSet: () => call<{ items: PlayerTest[] }>('/api/player/testset'),
   playerInfo: (id: string) => call<PlayerInfo>(`/api/player/video/${id}/info`),
   playerScan: () => call<Job>('/api/player/scan', { method: 'POST' }),
+  playerExtract: (id: string) => call<Job>(`/api/player/video/${id}/subtitles/extract`, { method: 'POST' }),
+  playerLinks: (id: string) => call<PlayerLinks>(`/api/player/video/${id}/links`),
+  playerTv: (id: string) => call<{ ok: boolean; device: string }>(`/api/player/video/${id}/tv`, { method: 'POST', body: '{}' }),
 };
 
 // How a video plays in a browser: by itself, with the page decoding its sound, in Kodi only, or not read yet.
@@ -267,7 +270,14 @@ export type PlayerSub = { name: string; lang: string; label: string; forced: boo
 export type PlayerInfo = {
   id: string; path: string; name: string; play: Playback; subtitles: PlayerSub[];
   original: string | null;  // the film's or show's original language (TMDB, 'ja')
+  extractable: string[];  // subtitle files muthur can copy out of the video (English, or Dutch without English)
+  dryRun: boolean;
   audio: number | null;  // the audio track to play: the first in the original language, else the default
   facts: { container: string; video: { codec: string; width: number; height: number; tenBit: boolean; hdr: boolean }[];
     audio: { codec: string; channels: number; lang: string | null; title: string | null; default: boolean }[]; embeddedSubs: number; duration: number } | null;
+};
+// For "Open with": links that work without the sign-in (a key, 12 hours), the share path, and whether Kodi is set up.
+export type PlayerLinks = {
+  stream: string; name: string; tv: boolean; share: { smb: string; unc: string } | null;
+  subtitles: (PlayerSub & { url: string })[];
 };

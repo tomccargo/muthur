@@ -103,6 +103,28 @@ class Auth:
                 self.store.db.commit()
         return True
 
+    # -- links for players outside the browser (docs/PLAYER.md) -----------------------------
+    # VLC on a phone doesn't carry the browser's sign-in. A link carries a key instead: an HMAC of one video's id and
+    # an expiry time, so it opens that video (and its subtitles) only, and only for a while.
+    def _link_secret(self) -> bytes:
+        secret = self.store.get("auth.linkSecret")
+        if not secret:
+            secret = secrets.token_hex(32)
+            self.store.put("auth.linkSecret", secret)
+        return bytes.fromhex(secret)
+
+    def link_key(self, scope: str, seconds: int = 12 * 3600) -> str:
+        until = int(time.time()) + seconds
+        sig = hmac.new(self._link_secret(), f"{scope}|{until}".encode(), "sha256").hexdigest()[:32]
+        return f"{until}.{sig}"
+
+    def link_valid(self, scope: str, key: str | None) -> bool:
+        until, _, sig = (key or "").partition(".")
+        if not until.isdigit() or int(until) < time.time() or not sig:
+            return False
+        good = hmac.new(self._link_secret(), f"{scope}|{until}".encode(), "sha256").hexdigest()[:32]
+        return hmac.compare_digest(sig, good)
+
     def end_session(self, token: str | None) -> None:
         if token:
             with self.store.lock:

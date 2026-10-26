@@ -11,13 +11,16 @@ decides by the browser it runs in.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
 import shutil
 import subprocess
+import zipfile
 
 from .subtitles import kind as sub_kind
+from .subtitles import new_name as new_sub_name
 
 SCHEMA = "CREATE TABLE IF NOT EXISTS play_cache (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime REAL NOT NULL, body TEXT NOT NULL);"
 CONTAINERS = {".mkv", ".mp4", ".m4v", ".webm", ".mov"}
@@ -242,6 +245,125 @@ def sidecars(full: str) -> list[dict]:
         out.append({"name": n, "lang": lang or "und", "label": label + (" (forced)" if forced else "") + (" (SDH)" if sdh else ""),
                     "forced": forced})
     return sorted(out, key=lambda s: (s["lang"] != "en", s["forced"], s["label"]))
+
+
+TEXT_SUBS = {"subrip", "ass", "ssa", "mov_text", "webvtt", "text"}  # image subtitles (PGS, VobSub) can't become .srt
+
+
+def embedded(full: str) -> list[dict]:
+    """The text subtitle tracks inside a video: stream index, language (ISO 639-1 when known), forced, SDH, title."""
+    if not shutil.which("ffprobe"):
+        return []
+    try:
+        out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "s", "-show_entries",
+                              "stream=index,codec_name:stream_tags=language,title:stream_disposition=forced,hearing_impaired",
+                              "-of", "json", full], capture_output=True, text=True, timeout=120).stdout
+        streams = json.loads(out or "{}").get("streams") or []
+    except (subprocess.SubprocessError, ValueError):
+        return []
+    iso1 = {code: one for one, codes in ISO2.items() for code in codes}
+    found = []
+    for s in streams:
+        if s.get("codec_name") not in TEXT_SUBS:
+            continue
+        tags, disp = s.get("tags") or {}, s.get("disposition") or {}
+        title = tags.get("title") or ""
+        found.append({"index": s["index"], "lang": iso1.get(tags.get("language") or "", None), "title": title,
+                      "forced": bool(disp.get("forced")) or "forced" in title.lower(),
+                      "sdh": bool(disp.get("hearing_impaired")) or bool(re.search(r"\b(sdh|cc|hearing)\b", title, re.I))})
+    return found
+
+
+def to_extract(full: str, tracks: list[dict]) -> list[tuple[dict, str]]:
+    """Which embedded tracks to copy out beside the video, and their names (muthur's subtitle rule: English, Dutch only
+    without English; one per kind; never over a file that is there)."""
+    stem = os.path.splitext(os.path.basename(full))[0]
+    beside = {s["lang"] for s in sidecars(full) if not s["forced"]}
+    langs = {t["lang"] for t in tracks}
+    wanted = "en" if "en" in langs or "en" in beside else "nl" if "nl" in langs else None
+    if not wanted or (wanted in beside and not any(t["forced"] for t in tracks if t["lang"] == wanted)):
+        return []
+    out, names = [], set()
+    for t in tracks:
+        if t["lang"] != wanted or (wanted in beside and not t["forced"]):
+            continue
+        name = ".".join(new_sub_name(stem, wanted, t["forced"], t["sdh"])) + ".srt"
+        if name in names or os.path.exists(os.path.join(os.path.dirname(full), name)):
+            continue
+        names.add(name)
+        out.append((t, name))
+    return out
+
+
+def extract(full: str, chosen: list[tuple[dict, str]], tmp: str, progress=None) -> dict[str, bytes]:
+    """Copy the chosen tracks out as .srt in one read of the file (ffmpeg converts the subtitle text only; the video is
+    untouched). progress(seconds read): as ffmpeg goes through the film. name -> contents."""
+    os.makedirs(tmp, exist_ok=True)
+    args = ["ffmpeg", "-v", "error", "-nostdin", "-y", "-progress", "pipe:1", "-i", full]
+    temps = []
+    for i, (t, _) in enumerate(chosen):
+        temps.append(os.path.join(tmp, f"part{i}.srt"))
+        args += ["-map", f"0:{t['index']}", "-c:s", "srt", "-f", "srt", temps[-1]]
+    with subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True) as proc:
+        for line in proc.stdout or []:  # 'out_time_us=123456789' about twice a second
+            if line.startswith("out_time_us=") and progress and line[12:].strip().isdigit():
+                progress(int(line[12:]) / 1e6)
+        err = (proc.stderr.read() if proc.stderr else "").strip()
+    if proc.returncode:
+        raise ValueError(f"ffmpeg couldn't copy the subtitles out: {err[-200:] or proc.returncode}")
+    out = {}
+    for (_, name), path in zip(chosen, temps, strict=True):
+        with open(path, "rb") as fh:
+            out[name] = fh.read()
+        os.remove(path)
+    return out
+
+
+def zip_stream(files: list[tuple[str, str]], chunk: int = 1 << 20):
+    """A ZIP of (name in the ZIP, full path) pairs, made as it is sent: stored without compression (video doesn't
+    shrink, and the NAS converts nothing), with ZIP64 for files over 4 GB. Yields bytes."""
+    class Sink(io.RawIOBase):
+        def __init__(self):
+            self.parts: list[bytes] = []
+            self.pos = 0
+
+        def writable(self):
+            return True
+
+        def write(self, b):
+            self.parts.append(bytes(b))
+            self.pos += len(b)
+            return len(b)
+
+        def tell(self):
+            return self.pos
+
+    sink = Sink()
+
+    def out():
+        data, sink.parts = b"".join(sink.parts), []
+        return data
+
+    with zipfile.ZipFile(sink, "w", zipfile.ZIP_STORED, allowZip64=True) as zf:
+        for name, full in files:
+            with open(full, "rb") as src, zf.open(name, "w", force_zip64=True) as dst:
+                while block := src.read(chunk):
+                    dst.write(block)
+                    if data := out():
+                        yield data
+    if data := out():
+        yield data
+
+
+def share_paths(prefix: str | None, rel: str) -> dict | None:
+    """The video's place on the share for players outside the browser, from Kodi's source ('smb://nas/share/TV/'):
+    {'smb': 'smb://nas/share/TV/x.mkv', 'unc': '\\\\nas\\share\\TV\\x.mkv'}. A user name or password in the source never
+    leaves muthur."""
+    if not prefix or not prefix.lower().startswith("smb://"):
+        return None
+    host_path = prefix[6:].split("@", 1)[-1].rstrip("/")
+    smb = f"smb://{host_path}/{rel}"
+    return {"smb": smb, "unc": "\\\\" + f"{host_path}/{rel}".replace("/", "\\")}
 
 
 TIME = re.compile(r"(\d{1,2}:\d{2}:\d{2})[,.](\d{1,3})")

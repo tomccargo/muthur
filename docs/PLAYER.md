@@ -1,6 +1,6 @@
 # Player: watching the library in the browser
 
-Status: steps 1 and 2 built 2026-10-26 (0.42.0: browse, direct play, full screen, .srt subtitles; 0.43.0: repacking in the browser, sound for AC3/E-AC3/DTS as stereo FLAC, the original-language track, seeking), in the local trial. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
+Status: steps 1 and 2 built 2026-10-26 (0.42.0: browse, direct play, full screen, .srt subtitles; 0.43.0: repacking in the browser, sound for AC3/E-AC3/DTS as stereo FLAC, the original-language track, seeking; 0.44.0: subtitles copied out of files, larger subtitles, Open with, downloads), in the local trial. Decisions are the reader's (pick lists, 26 Oct); findings were measured or sourced on that day.
 
 ## 1. What it is
 
