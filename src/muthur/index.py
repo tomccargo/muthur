@@ -18,6 +18,7 @@ from .nfo import NfoInfo, read_nfo
 from .parse import BROKEN_EPISODE, SAMPLE, is_video
 from .subtitles import language
 
+NFO_PARSER = 2  # raise when nfo.py reads NFOs differently (2: double-episode NFOs, 0.39.3)
 SCHEMA = "CREATE TABLE IF NOT EXISTS nfo_cache (path TEXT PRIMARY KEY, mtime REAL NOT NULL, size INTEGER NOT NULL, body TEXT NOT NULL);"
 NUMBERS = re.compile(r"(?i)\bs(\d{1,3})((?:[ ._-]?e\d{1,3})+)")
 ART = (".jpg", ".jpeg", ".png", ".tbn")
@@ -54,6 +55,11 @@ class Index:
         with store.lock:
             store.db.execute(SCHEMA)
             store.db.commit()
+        if store.get("nfo.parser") != NFO_PARSER:  # NFOs are read differently now: what was cached is read again
+            with store.lock:
+                store.db.execute("DELETE FROM nfo_cache")
+                store.db.commit()
+            store.put("nfo.parser", NFO_PARSER)
 
     # -- NFOs, cached ------------------------------------------------------------------
     def nfo(self, path: str) -> NfoInfo | None:
@@ -107,7 +113,7 @@ class Index:
         info = self.nfo(os.path.join(base, "tvshow.nfo")) if "tvshow.nfo" in present else None
         ids = info.ids if info else {}
         show: dict[str, Any] = {"folder": folder, "title": (info.title if info and info.title else folder), "year": info.year if info else None,
-                "ids": ids, "nfo": info is not None, "muthur": bool(info and info.muthur),
+                "ids": ids, "nfo": bool(info and info.readable), "muthur": bool(info and info.muthur),
                 "poster": "poster.jpg" in present, "fanart": "fanart.jpg" in present, "rating": _shown(info),
                 "episodes": [], "loose": []}
         stems = set()
@@ -125,7 +131,7 @@ class Index:
                 size = os.path.getsize(os.path.join(base, f))
             except OSError:
                 size = 0
-            ep = {"file": f, "size": size, "season": season, "episodes": numbers, "nfo": nfo is not None,
+            ep = {"file": f, "size": size, "season": season, "episodes": numbers, "nfo": bool(nfo and nfo.readable),
                   "muthur": bool(nfo and nfo.muthur), "title": nfo.title if nfo else None, "rating": _shown(nfo),
                   "imdb": list(nfo.ratings["imdb"]) if nfo and "imdb" in nfo.ratings else None,
                   "thumb": any(stem + s in present for s in ("-thumb.jpg", ".tbn", "-thumb.png")),
@@ -157,7 +163,7 @@ class Index:
                 "key": unit.key, "folder": unit.folder, "file": "/".join(unit.main.parts) if unit.main else None,
                 "size": unit.main.size if unit.main else 0, "others": ["/".join(o.parts) for o in unit.others],
                 "title": info.title if info and info.title else unit.key, "year": info.year if info else None,
-                "ids": ids, "nfo": info is not None, "muthur": bool(info and info.muthur), "rating": _shown(info),
+                "ids": ids, "nfo": bool(info and info.readable), "muthur": bool(info and info.muthur), "rating": _shown(info),
                 "imdb": list(info.ratings["imdb"]) if info and "imdb" in info.ratings else None,
                 "poster": bool(unit.folder and unit.main and os.path.isfile(os.path.join(self.film_root, *unit.main.parts[:-1], "poster.jpg"))),
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),

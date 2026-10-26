@@ -23,6 +23,7 @@ from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
 from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title, movie_path
+from .nfo import read_nfo
 from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
@@ -296,6 +297,10 @@ class Health:
         """An item's NFO: written, or the fix fails with why (it never counts as done without a change)."""
         if not data:
             raise ValueError("TMDB gave nothing to write")
+        full = self._full(path)
+        if os.path.isfile(full) and os.path.getsize(full) > 0 and not read_nfo(full).readable:
+            # Release notes or a bare link where Kodi looks for the NFO: kept in quarantine, a real NFO takes its place.
+            self._quarantine(run, path, "Release notes (or a link) named like the video’s NFO, which Kodi can’t read; a real NFO took its place.")
         if not self._write(run, path, data):
             raise ValueError("an NFO is already there; check the library again")
 

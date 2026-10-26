@@ -38,6 +38,12 @@ def parse_nfo_text(text: str) -> NfoInfo:
         root = ET.fromstring(text[start:] if start > 0 else text)
     except ET.ParseError:
         root = None
+        # Kodi's NFO for a double episode holds one <episodedetails> per episode, so it has two roots: read the first.
+        if m := re.search(r"<episodedetails\b.*?</episodedetails>", text, re.S):
+            try:
+                root = ET.fromstring(m.group(0))
+            except ET.ParseError:
+                root = None
 
     if root is None:
         # A "URL nfo" or a scene .nfo: pick IDs out of the text.

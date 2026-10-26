@@ -35,6 +35,30 @@ def test_a_show_imdb_has_no_episodes_for_isnt_offered_again(env):  # noqa: F811
     assert health.check(health.index.build())["fixes"]["imdb-data"] == []
 
 
+def test_a_double_episode_nfo_is_read_with_its_score():
+    from muthur.nfo import parse_nfo_text
+
+    two = ('<episodedetails>\n  <title>A Little Kiss (1)</title>\n  <season>5</season>\n  <episode>1</episode>\n  <ratings>\n'
+           '    <rating name="imdb" max="10" default="true">\n      <value>8.5</value>\n      <votes>3469</votes>\n    </rating>\n'
+           '  </ratings>\n</episodedetails>\n<episodedetails>\n  <title>A Little Kiss (2)</title>\n  <season>5</season>\n'
+           '  <episode>2</episode>\n</episodedetails>\n')
+    info = parse_nfo_text(two)  # one <episodedetails> per episode: two roots, as Kodi wants them
+    assert info.readable and info.title == "A Little Kiss (1)" and info.ratings["imdb"] == (8.5, 3469)
+
+
+def test_release_notes_in_the_nfos_place_make_way_for_a_real_nfo(env):  # noqa: F811
+    tmp, health, _ = env
+    nfo = tmp / "TV" / "Some Show" / "Season 01" / "Some Show - S01E01 - One.nfo"
+    nfo.write_text("Some.Show.S01E01.1080p.WEB-GROUP\nSize : 3.99 GiB\nVideo : AVC\n", encoding="utf-8")
+    plan = health.check(health.index.build())
+    fix = next(x for x in plan["fixes"]["episode-nfos"] if x["path"] == "TV/Some Show/Season 01/Some Show - S01E01 - One.nfo")
+    result = health.apply({"fixes": {"episode-nfos": [fix]}}, ["episode-nfos"])
+    assert result["failed"] == [] and ET.parse(nfo).getroot().findtext("title") == "One"
+    assert any(p.name == nfo.name for p in (tmp / "_q").rglob("*.nfo"))  # the notes are kept in quarantine
+    health.journal.undo(result["run"])
+    assert nfo.read_text(encoding="utf-8").startswith("Some.Show.S01E01")
+
+
 def test_a_score_that_cant_be_added_fails_with_its_reason(env):  # noqa: F811
     tmp, health, _ = env
     nfo = tmp / "TV" / "Some Show" / "Season 01" / "Some Show - S01E02 - Two.nfo"
