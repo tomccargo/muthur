@@ -766,12 +766,17 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             return {}
         titles: dict[int, dict] = {}
         out = {}
+        group = (store.get("library.orders") or {}).get(show["folder"])
+        order = health_tool(tmdb()).order_map(group) if group and tmdb() else None  # the show read by another TMDB order
         for e in show["episodes"]:
             if e["season"] is None or len(e["episodes"]) != 1 or e["damaged"]:
                 continue
-            if e["season"] not in titles:
-                titles[e["season"]] = season_titles(int(tid), e["season"])
-            title = (titles[e["season"]].get(e["episodes"][0]) or {}).get("name")
+            if order is not None:
+                title = (order.get((e["season"], e["episodes"][0])) or {}).get("name")
+            else:
+                if e["season"] not in titles:
+                    titles[e["season"]] = season_titles(int(tid), e["season"])
+                title = (titles[e["season"]].get(e["episodes"][0]) or {}).get("name")
             if title:
                 name = renaming.new_name(show["folder"], e["file"], e["season"], e["episodes"], title)
                 if name != e["file"].rsplit("/", 1)[-1]:
@@ -822,6 +827,11 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         stem = path.rsplit(".", 1)[0]
         x = {"path": stem + ".nfo", "video": path, "tmdb": tmdb_id, "season": e["season"], "episode": e["episodes"][0], "show": show["title"],
              "imdbShow": imdb_id, "thumb": None if e["thumb"] else stem + "-thumb.jpg"}
+        if (order := tool.show_order(show["folder"])) is not None:  # another order chosen: TMDB is asked by the aired numbers
+            ep = order.get((e["season"], e["episodes"][0]))
+            if not ep:
+                raise HTTPException(409, "The order chosen for this show has no episode at this number.")
+            x["aired"] = [ep["season_number"], ep["episode_number"]]
         label = episode_label(show, e["season"], e["episodes"][0])
 
         def work() -> dict:
@@ -1252,6 +1262,45 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         manual_new: dict = {k: [] for k in plan["manual"]}
         health_tool(client)._show(show, fixes_new, manual_new)
         return merge_plan(plan, lambda x: x["path"] == f"TV/{folder}" or x["path"].startswith(f"TV/{folder}/"), fixes_new, manual_new)
+
+    ORDER_TYPES = {1: "Original air date", 2: "Absolute", 3: "DVD", 4: "Digital", 5: "Story arc", 6: "Production", 7: "TV"}
+
+    @app.get("/api/library/orders")
+    def library_orders(folder: str):
+        """TMDB's other orders for a show ('episode groups': DVD, production…), each with how many of the library's
+        episode files it has a place for, so the reader picks the one that matches the files."""
+        client = need_tmdb()
+        lib, _ = store.snapshot("library")
+        show = next((s for s in (lib or {}).get("shows", []) if s["folder"] == folder), None)
+        if not show:
+            raise HTTPException(404, "That show isn't in the index. Index the library again.")
+        tool = health_tool(client)
+        tmdb_id = tool.scores.show_ids(folder)[1]
+        if not tmdb_id:
+            raise HTTPException(409, "The show’s NFO has no TMDB ID. Change the show’s match first.")
+        files = [(e["season"], e["episodes"][0]) for e in show["episodes"] if e["season"] is not None and e["episodes"]]
+        out = []
+        for g in (client.get(f"/tv/{tmdb_id}/episode_groups", max_age=7 * 86400) or {}).get("results", []):
+            mapping = tool.order_map(g["id"])
+            out.append({"id": g["id"], "name": g.get("name"), "kind": ORDER_TYPES.get(g.get("type"), "Other"),
+                        "seasons": g.get("group_count") or 0, "episodes": g.get("episode_count") or 0,
+                        "fits": sum(1 for f in files if f in mapping)})
+        out.sort(key=lambda o: -o["fits"])
+        return {"orders": out, "files": len(files), "current": (store.get("library.orders") or {}).get(folder)}
+
+    @app.post("/api/library/order")
+    def library_order(body: dict):
+        """Read a show by another TMDB order (or, with no group, by TMDB's own again); the show is checked again."""
+        client = need_tmdb()
+        folder, group = str(body.get("folder") or ""), body.get("groupId")
+        orders = dict(store.get("library.orders") or {})
+        if group:
+            orders[folder] = str(group)
+        else:
+            orders.pop(folder, None)
+        with alone("edit"):
+            store.put("library.orders", orders)
+            return replan_show(client, folder)
 
     @app.post("/api/fixes/trust")
     def fixes_trust(body: dict):

@@ -51,9 +51,19 @@ function EpisodeAnswers({ q, kind, onDone, leave }: { q: Question; kind: string;
     api.season(q.tmdb, s).then(setPicker).catch((e: Error) => setError(e.message));
   };
   const picked = picker?.episodes.find((x) => x.episode === episode);
+  // TMDB's other orders for the show (DVD, production…), with how many of its files each fits.
+  const [orders, setOrders] = useState<Awaited<ReturnType<typeof api.libraryOrders>> | null>(null);
+  const loadOrders = () => {
+    setBusy('orders');
+    api.libraryOrders(folder).then(setOrders).catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
+  };
   return (
     <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span className="actions">
+        {kind === 'seasons' && !orders && (
+          <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'orders'} onClick={loadOrders}
+            title="TMDB keeps other orders for many shows (DVD, production): one may match your files">Use another order</button>
+        )}
         {kind === 'numbers' && q.tmdb && !picker && <button type="button" className="btn btn-secondary btn-sm" onClick={() => load(season)}>Which episode is it?</button>}
         {kind === 'numbers' && !q.noNumber && (
           <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'trust'}
@@ -82,6 +92,25 @@ function EpisodeAnswers({ q, kind, onDone, leave }: { q: Question; kind: string;
         </span>
       )}
       {picker && <span className="small muted">The file gets that number and title, and its NFO describes that episode. Kodi keeps the watched status (Kodi has to be on).</span>}
+      {orders && (orders.orders.length === 0
+        ? <span className="small muted">TMDB has no other order for {q.show ?? folder}.</span>
+        : (
+          <ul className="rows">
+            {orders.orders.map((o) => (
+              <li key={o.id}>
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                  <strong>{o.name}</strong>
+                  <span className="small muted">{o.kind} order · {count(o.seasons, 'season')} · {count(o.episodes, 'episode')} · fits {o.fits} of your {count(orders.files, 'file')}</span>
+                </span>
+                {orders.current === o.id
+                  ? <button type="button" className="btn btn-ghost btn-sm" aria-busy={busy === 'own'}
+                      onClick={() => run('own', () => api.setOrder(folder, null), `${q.show ?? folder} is read by TMDB’s own order again.`)}>Back to TMDB’s order</button>
+                  : <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === o.id}
+                      onClick={() => run(o.id, () => api.setOrder(folder, o.id), `${q.show ?? folder} is read by “${o.name}” now; its fixes and questions are updated.`)}>Use this order</button>}
+              </li>
+            ))}
+          </ul>
+        ))}
       {error && <span className="banner banner-error" role="alert">{error}</span>}
     </span>
   );

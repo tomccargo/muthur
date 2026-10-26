@@ -12,6 +12,7 @@ in the file name, when there is one, doesn't belong to another TMDB episode.
 from __future__ import annotations
 
 import os
+import re
 import time
 
 from . import nfo_write, quarantine, subtitles
@@ -102,18 +103,25 @@ class Health:
                 manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask, "noNumber": True,
                                           "why": "The episode number in the name is damaged or missing."})
         trusted = set(self.store.get("health.trusted") or [])  # "the number is right": the reader's word over muthur's doubt
-        titles: dict[int, dict[int, str]] = {}
+        titles: dict[int, dict[int, str | None]] = {}
+        mapped = self.show_order(folder)  # another TMDB order the reader chose: the library is read by it
 
-        def season(s: int) -> dict[int, str]:
+        def season(s: int) -> dict[int, str | None]:
             if s not in titles:
-                titles[s] = {x["episode_number"]: x.get("name") for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])}
+                titles[s] = ({e: x.get("name") for (ss, e), x in mapped.items() if ss == s} if mapped is not None else
+                             {x["episode_number"]: x.get("name") for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])})
             return titles[s]
+
+        def aired(s: int, n: int) -> tuple[int, int]:
+            """TMDB's own numbers for the library's S/E: the same, unless another order was chosen (IMDb uses these too)."""
+            ep = (mapped or {}).get((s, n))
+            return (int(ep["season_number"]), int(ep["episode_number"])) if ep else (s, n)
 
         highest: dict[int, int] = {}
         for e in numbered:
             highest[e["season"]] = max(highest.get(e["season"], 0), max(e["episodes"]))
         # The season's own list is fresher than the show's episode counts, which TMDB caches longer.
-        differs = {s for s, top in highest.items() if top > max(counts.get(s, 0), len(season(s)))}
+        differs = {s for s, top in highest.items() if top > (len(season(s)) if mapped is not None else max(counts.get(s, 0), len(season(s))))}
         for s in sorted(differs):
             manual["seasons"].append({"path": f"TV/{folder}", "season": s, **ask,
                                       "why": f"Your library numbers season {s} up to episode {highest[s]}; TMDB has {len(season(s))}. "
@@ -123,7 +131,7 @@ class Health:
             written = e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1)  # nothing to write or score: only its name is checked
             named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
             sure = f"TV/{folder}/{e['file']}" in trusted
-            if not sure and s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n])):
+            if not sure and s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n] or "")):
                 if not written:
                     manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask,
                                               "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
@@ -149,9 +157,27 @@ class Health:
                     continue  # double-episode NFOs: not written by muthur yet
                 fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
                                               "season": s, "episode": n, "show": title, "imdbShow": imdb_id,
+                                              **({"aired": list(aired(s, n))} if mapped is not None else {}),
                                               "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label})
-            elif score := self.imdb.episode(imdb_id, s, n, counts.get(s)):
+            elif score := self.imdb.episode(imdb_id, *aired(s, n), counts.get(aired(s, n)[0])):
                 fixes["imdb-scores"].append({"path": stem + ".nfo", "score": list(score), "label": label})
+
+    def order_map(self, group_id: str) -> dict[tuple[int, int], dict]:
+        """One of TMDB's other orders for a show (DVD, production…; an 'episode group'): the library's (season,
+        episode) → TMDB's episode, which keeps its own season_number and episode_number (the aired order)."""
+        data = self.tmdb.get(f"/tv/episode_group/{group_id}", max_age=30 * 86400) or {}
+        out: dict[tuple[int, int], dict] = {}
+        for g in data.get("groups", []):
+            m = re.search(r"(?i)season\s*(\d+)", g.get("name") or "")
+            s = int(m.group(1)) if m else 0 if re.search(r"(?i)special", g.get("name") or "") else int(g.get("order") or 0)
+            for ep in g.get("episodes", []):
+                out[(s, int(ep.get("order") or 0) + 1)] = ep
+        return out
+
+    def show_order(self, folder: str) -> dict[tuple[int, int], dict] | None:
+        """The order the reader chose for this show, if any (Health's 'Use another order')."""
+        group = (self.store.get("library.orders") or {}).get(folder)
+        return self.order_map(group) if group else None
 
     def _subtitles_of(self, lib: str, folder: str, fixes: dict) -> None:
         moves, orphans = subtitles.plan(lib, self.roots[lib], folder)
@@ -285,12 +311,14 @@ class Health:
     def _episode_nfos(self, run, x, nfos):
         if not os.path.isfile(self._full(x["video"])):
             raise ValueError("the video isn't there any more")
-        listed = (self.tmdb.tv_season(x["tmdb"], x["season"]) or {}).get("episodes", [])
-        ep = next((e for e in listed if e.get("episode_number") == x["episode"]), None)
+        # In another order the file's own numbers go into the NFO; TMDB and IMDb are asked by the aired ones.
+        ts, te = x.get("aired") or (x["season"], x["episode"])
+        listed = (self.tmdb.tv_season(x["tmdb"], ts) or {}).get("episodes", [])
+        ep = next((e for e in listed if e.get("episode_number") == te), None)
         if not ep:
             raise ValueError("TMDB didn't return the episode")
-        score = self.imdb.episode(x["imdbShow"], x["season"], x["episode"], len(listed))
-        if self._write(run, x["path"], nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], imdb=score)):
+        score = self.imdb.episode(x["imdbShow"], ts, te, len(listed))
+        if self._write(run, x["path"], nfo_write.episode_nfo(x["show"], x["season"], ep, x["tmdb"], number=x["episode"], imdb=score)):
             nfos.append(x["path"])
         if x.get("thumb") and ep.get("still_path"):
             self._write(run, x["thumb"], self.tmdb.image(ep["still_path"], "original"))

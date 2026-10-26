@@ -225,6 +225,8 @@ export const api = {
     call<{ changed: number }>('/api/fixes/leave', { method: 'POST', body: JSON.stringify(body) }),
   quarantineDownload: (id: string) => call<{ run: number }>('/api/inbox/quarantine', { method: 'POST', body: JSON.stringify({ id }) }),
   checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
+  libraryOrders: (folder: string) => call<{ orders: { id: string; name: string; kind: string; seasons: number; episodes: number; fits: number }[]; files: number; current: string | null }>(`/api/library/orders?${new URLSearchParams({ folder })}`),
+  setOrder: (folder: string, groupId: string | null) => call<{ fixes: Record<string, number>; questions: number }>('/api/library/order', { method: 'POST', body: JSON.stringify({ folder, groupId }) }),
   trustNumber: (path: string) => call<{ fixes: Record<string, number>; questions: number }>('/api/fixes/trust', { method: 'POST', body: JSON.stringify({ path }) }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
   chooseForLibrary: (kind: Kind, path: string, tmdbId: number) =>
