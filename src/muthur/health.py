@@ -119,6 +119,10 @@ class Health:
             if score := self.imdb.rating(imdb_id):
                 fixes["imdb-scores"].append({"path": f"TV/{folder}/tvshow.nfo", "score": list(score), "label": title})
 
+        # A number beyond every episode the show has, in any order (aired, DVD, absolute), is a damaged name: 'S01E968'
+        # in a show of three is asked as 'which episode is this?', not taken as the season's length.
+        if total := sum(counts.values()):
+            eps = [{**e, "damaged": True} if e["episodes"] and max(e["episodes"]) > total else e for e in eps]
         regular = sorted(s for s in counts if s > 0)
         if len(regular) == 1:  # one season at TMDB: 'Death note - EP 1' without a season is that season's
             eps = [{**e, "season": regular[0]} if e["season"] is None and e["episodes"] and not e["damaged"] else e for e in eps]

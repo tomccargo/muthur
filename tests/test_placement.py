@@ -85,6 +85,16 @@ def test_a_special_beyond_the_count_leaves_the_season_alone(env):  # noqa: F811
     assert {x["episode"] for x in plan["fixes"]["episode-nfos"] if "Long Show" in x["path"]} == {1, 2}
 
 
+def test_an_impossible_number_is_a_damaged_name(env):  # noqa: F811
+    """'S01E968' in a show of five episodes: asked which episode it is, not 'season 1 numbered up to 968'."""
+    tmp, health, _ = env
+    write(tmp / "TV" / "Some Show" / "Season 01" / "Some Show S01E968 (2017) - 1080p.mkv")
+    plan = health.check(health.index.build())
+    q = next(q for q in plan["manual"]["numbers"] if "E968" in q["path"])
+    assert q.get("noNumber")
+    assert not [s for s in plan["manual"]["seasons"] if s["path"] == "TV/Some Show" and s["season"] == 1]
+
+
 def test_a_renumbered_episode_gets_its_nfo_rewritten(env):  # noqa: F811
     tmp, health, _ = env
     health.tmdb = health.scores.tmdb = MoreTmdb()
