@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api, type DupGroup, type DupPlan, type DupResult } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { libraryPath, middle, size, when } from '../labels';
+import { count, libraryPath, middle, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
 type Kind = 'all' | 'episode' | 'film';
@@ -104,7 +104,7 @@ export function DuplicatesPage({ status, refresh }: StatusHook) {
           <p className="eyebrow">More than one copy</p>
           <h1>Duplicates</h1>
           <p className="lede">
-            {data?.at ? `${data.groups.length} episodes and films have more than one copy · checked ${when(data.at)}`
+            {data?.at ? `${count(data.groups.length, 'episode or film has', 'episodes and films have')} more than one copy · checked ${when(data.at)}`
               : 'Not checked yet. Look for duplicates to compare the copies in your library.'}
           </p>
         </div>

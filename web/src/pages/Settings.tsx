@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api, type KodiState, type Settings } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, Footer, HowTo, Loading } from '../components';
+import { Dot, HowTo, Loading } from '../components';
 import { PasswordSettings } from './PasswordSettings';
 import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
 import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLanguage } from '../labels';
@@ -84,8 +84,8 @@ export function SettingsPage({ refresh }: StatusHook) {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">Settings</p>
-          <h1>How muthur works</h1>
+          <p className="eyebrow">How muthur works</p>
+          <h1>Settings</h1>
         </div>
         <div className="actions">
           {dirty && <span className="status small muted"><Dot kind="dot-warning" />Unsaved changes</span>}
@@ -216,7 +216,6 @@ export function SettingsPage({ refresh }: StatusHook) {
           <li><span>Film</span><span className="mono small" style={{ overflowWrap: 'anywhere' }}>{libraryPath(saved.paths.film)}</span></li>
         </ul>
       </section>
-      <Footer />
     </div>
   );
 }

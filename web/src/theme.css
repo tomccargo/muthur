@@ -28,6 +28,10 @@
   --track: #262e2a;
   --poster-bg: #0a0c0b;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 6px 18px rgb(0 0 0 / 0.28);
+  /* Posters stay dark in both themes: one set. A missing poster's tint: the title's hue at this saturation and lightness. */
+  --tint-s: 30%;
+  --tint-l: 20%;
+  --sheen: rgb(255 255 255 / 0.35);  /* the light passing over a working bar */
 
   --radius: 12px;
   --radius-sm: 8px;

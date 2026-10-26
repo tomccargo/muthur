@@ -18,7 +18,7 @@ from guessit import guessit
 from .kodi import folder_name
 from .media import probe
 from .parse import SEASON_DIR, SPECIALS_DIR, is_video
-from .text import normalize
+from .text import count, normalize
 
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
 
@@ -85,7 +85,7 @@ def quality(path: str, size: int, facts: dict | None, subs: int, prefer_hdr: boo
 def describe(q: dict) -> str:
     """'Blu-ray · 1080p · HEVC · 5.1 · 4.2 Mbit/s' for the page."""
     if not q.get("readable"):
-        return "ffprobe can't read this file"
+        return "muthur can't read this video's details"
     res = {4: "2160p", 3: "1080p", 2: "720p", 1: "576p/480p", 0: "SD"}[_resolution(q["width"], q["height"])]
     audio = "lossless" if q["rank"][4] == 3 else "5.1" if q["channels"] >= 6 else "stereo" if q["channels"] >= 2 else "mono" if q["channels"] else "no audio"
     parts = [SOURCE_LABEL.get(q["source"], ""), res, "HDR" if q.get("hdr") else "",
@@ -350,7 +350,7 @@ def apply_groups(dups: Duplicates, groups: list[dict], journal, quarantine: str,
             back = journal.undo(run, g["id"])
             why = f"It went wrong halfway ({type(e).__name__}: {e}); muthur put back what it had changed."
             if back["skipped"]:
-                why += f" {len(back['skipped'])} change(s) could not be put back; see History."
+                why += f" {count(len(back['skipped']), 'change')} could not be put back; see History."
             results.append({"id": g["id"], "label": g["label"], "ok": False, "why": why})
         if job:
             job.done += 1

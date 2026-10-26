@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api, type Film, type LibEpisode, type LibProblems, type Library, type Season, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { middle, score, size, when } from '../labels';
+import { count, hue, middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
 import { hero, heroClick, heroLanded, motionOn } from '../motion';
@@ -30,7 +30,7 @@ function Cover({ src, title, width = '100%', hero = false }: { src: string | nul
   const style = { width, ...(hero ? { viewTransitionName: 'hero' } : {}) };
   if (!src || failed) {
     const initials = title.split(/\s+/).filter((w) => /\w/.test(w)).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-    return <span className="poster" style={style} aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
+    return <span className="poster" style={{ ...style, '--hue': hue(title) } as CSSProperties} aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
   }
   return <img className="poster" style={style} src={src} alt="" loading={hero ? 'eager' : 'lazy'} onError={() => setFailed(true)} />;
 }
@@ -48,7 +48,7 @@ function problemsText(p: LibProblems, film = false): string[] {
   const out: string[] = [];
   if (p.noNfo) out.push(film ? 'No NFO' : `${p.noNfo} without an NFO`);
   if (p.damaged) out.push(film ? 'Video missing or too small' : `${p.damaged} with a damaged or missing number`);
-  if (p.duplicates) out.push(film ? `${p.duplicates + 1} copies` : `${p.duplicates} numbers twice`);
+  if (p.duplicates) out.push(film ? `${p.duplicates + 1} copies` : `${count(p.duplicates, 'number')} twice`);
   if (p.loose) out.push(`${p.loose} leftover files`);
   return out;
 }
@@ -117,19 +117,19 @@ function EpisodeRow({ e, path, tmdbId }: { e: LibEpisode; path: string; tmdbId: 
   const flags = [!e.nfo && 'no NFO', e.damaged && 'damaged number', e.season == null && !e.damaged && 'no number', e.duplicate && 'number twice', e.mismatch && 'NFO says another number']
     .filter(Boolean) as string[];
   return (
-    <li style={{ display: 'grid', gridTemplateColumns: '84px minmax(0, 1fr) auto auto', gap: '2px 12px', alignItems: 'baseline' }}>
+    <li className="ep-row">
       <span className="mono small">{code(e.season, e.episodes)}</span>
-      <span style={{ minWidth: 0 }}>
+      <span className="ep-main">
         <span className="ellipsis" style={{ display: 'block' }}>{e.title ?? <span className="muted">—</span>}</span>
         <span className="mono small muted ellipsis" style={{ display: 'block' }} title={e.file}>{middle(name, 70)}</span>
         {flags.length > 0 && <span className="small" style={{ color: 'var(--warn-text)' }}>{flags.join(' · ')}</span>}
         {(e.subLangs?.length ?? 0) > 0 && <span className="small muted" style={{ display: 'block' }}>Subtitles {e.subLangs!.join(' · ')}</span>}
       </span>
-      <span style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+      <span className="ep-meta">
         <span className="small num">{score(e.rating) || <span className="muted">no score</span>}</span>
         <span className="status small">{e.watched ? <><Dot kind="dot-success" />Watched</> : e.watched === 0 ? <><Dot />Not watched</> : <span className="muted">—</span>}</span>
       </span>
-      <button type="button" className="btn btn-ghost btn-sm" aria-expanded={open} aria-label={`Actions for ${code(e.season, e.episodes)}`}
+      <button type="button" className="btn btn-ghost btn-sm ep-menu" aria-expanded={open} aria-label={`Actions for ${code(e.season, e.episodes)}`}
         title="Re-read, NFO, rename" onClick={() => setOpen(!open)}>⋯</button>
       {open && <EpisodeMenu e={e} path={path} tmdbId={tmdbId} onClose={() => setOpen(false)} />}
     </li>
@@ -166,7 +166,7 @@ function ShowPage({ folder, finished }: { folder: string; finished?: number | nu
               <h1 style={{ margin: 0, fontSize: '2rem', overflowWrap: 'anywhere' }}>{show.title}{show.year ? ` (${show.year})` : ''}</h1>
               <span className="mono small muted">TV/{show.folder}/</span>
               <Links ids={show.ids} kind="tv" />
-              <span className="small">{show.count} episodes · {show.seasons} seasons · {size(show.size)} · {show.watched} watched{show.rating ? ` · ${score(show.rating)}` : ''}</span>
+              <span className="small">{count(show.count, 'episode')} · {count(show.seasons, 'season')} · {size(show.size)} · {show.watched} watched{show.rating ? ` · ${score(show.rating)}` : ''}</span>
               {problemsText(show.problems).length > 0 && <span className="small" style={{ color: 'var(--warn-text)' }}>{problemsText(show.problems).join(' · ')}</span>}
               {!show.nfo && <span className="small" style={{ color: 'var(--warn-text)' }}>The show folder has no tvshow.nfo.</span>}
             </div>
@@ -192,7 +192,7 @@ function ShowPage({ folder, finished }: { folder: string; finished?: number | nu
               <section className="panel" aria-label={s == null ? 'Without a number' : `Season ${s}`}>
                 <div className="panel-head">
                   <h2>{s == null ? 'Without a season number' : s === 0 ? 'Specials' : `Season ${s}`}</h2>
-                  <span className="small muted">{eps.length} episodes · {eps.filter((e) => e.watched).length} watched</span>
+                  <span className="small muted">{count(eps.length, 'episode')} · {eps.filter((e) => e.watched).length} watched</span>
                 </div>
                 {why && (
                   <p className="hint" style={{ margin: '0 0 8px', color: 'var(--warn-text)' }}>
@@ -273,7 +273,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
   const matches = (title: string, p: LibProblems) => (filter === 'all' || p[filter] > 0) && title.toLowerCase().includes(query.trim().toLowerCase());
   const shows = useMemo(() => (lib?.shows ?? []).filter((s) => matches(s.title, s.problems)), [lib, filter, query]); // eslint-disable-line react-hooks/exhaustive-deps
   const films = useMemo(() => (lib?.films ?? []).filter((f) => matches(f.title, f.problems)), [lib, filter, query]); // eslint-disable-line react-hooks/exhaustive-deps
-  const count = (f: Filter) => (kind === 'tv' ? lib?.shows ?? [] : lib?.films ?? []).filter((x: ShowSummary | Film) => f === 'all' || x.problems[f] > 0).length;
+  const inFilter = (f: Filter) => (kind === 'tv' ? lib?.shows ?? [] : lib?.films ?? []).filter((x: ShowSummary | Film) => f === 'all' || x.problems[f] > 0).length;
   // The button pressed spins until its request is answered; a job then shows in the job bar (DESIGN.md §7.6).
   // Every hook comes before the returns below: the list and a show are one component, and React counts its hooks.
   const [starting, setStarting] = useState<string | null>(null);
@@ -297,7 +297,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           <p className="eyebrow">Library</p>
           <h1>Shows and films</h1>
           <p className="lede">
-            {lib?.at ? `${lib.shows.length} shows · ${episodes.toLocaleString('en-GB')} episodes · ${lib.films.length} films · indexed ${when(lib.at)}` : 'Not indexed yet.'}
+            {lib?.at ? `${count(lib.shows.length, 'show')} · ${count(episodes, 'episode')} · ${count(lib.films.length, 'film')} · indexed ${when(lib.at)}` : 'Not indexed yet.'}
           </p>
         </div>
         <div className="actions">
@@ -318,7 +318,9 @@ export function LibraryPage({ status, refresh }: StatusHook) {
       </div>
       <div className="seg filters" role="group" aria-label="Show">
         {FILTERS.map(([k, label]) => (
-          <button key={k} type="button" aria-pressed={filter === k} onClick={() => go(kind, k)}>{label} <span className="num muted">{count(k)}</span></button>
+          <button key={k} type="button" aria-pressed={filter === k} onClick={() => go(kind, k)}>
+            {kind === 'film' && k === 'damaged' ? 'Video missing or too small' : label} <span className="num muted">{inFilter(k)}</span>
+          </button>
         ))}
       </div>
       {FIX_HINT[filter] && (

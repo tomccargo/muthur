@@ -3,7 +3,7 @@
 The look and the rules of muthur's web UI. The **look** follows *Playlist Parser*: a dark-first media app with a side rail, an amber accent, Figtree and Bricolage Grotesque, posters as the main visual. The **rules** are adapted from the *PXL CloudLabs* dashboard design system: one primary action per view, status dots, honest status, readable labels.
 
 What muthur does not take from either:
-- Playlist Parser's playful motion (confetti, disco ball, cursor trail, shader backdrops, count-up numbers, flying covers). See §6 for the motion that is allowed.
+- Playlist Parser's Zen and disco modes (confetti, disco ball, beats, cursor trail, smoky or shader backdrops). Its normal-mode motion, count-up numbers and flying covers included, is muthur's (§6).
 - CloudLabs' flat GitHub look (3px corners, no pill buttons). Where the two clash, Playlist Parser's look wins.
 
 The UI is built in **React + TypeScript** (Vite). Playlist Parser is GPL-3.0 and muthur is MIT, so only its *design values* (colours, sizes, fonts, layout) are reused here. Its code is not copied: every muthur component is written for muthur.
@@ -23,7 +23,7 @@ Section numbers are referenced from code comments; do not renumber.
 
 ### 1.2 One primary button per view
 
-- **Exactly one** solid `.btn-primary` per view or dialog that has an action: the thing the view is for. *Check downloads* on the dashboard, *Apply 17 ready items* in the inbox, *It's Solaris (1972)* in review, *Keep 1, quarantine 2* on a duplicate group, *Apply 3 fixes* on Health, *Save* in settings. A view that is only for reading (History) has none.
+- **Exactly one** solid `.btn-primary` per view or dialog that has an action: the thing the view is for. *Look for new downloads* on the dashboard, *Apply 17 ready items* in the inbox, *It's Solaris (1972)* in review, *Resolve 3 selected* on Duplicates, *Apply 3 fixes* on Health, *Save* in settings. A view that is only for reading (History) has none.
 - Everything else is `.btn-secondary`, `.btn-ghost` or `.btn-link`.
 - An action repeated per row is never primary.
 - **Destructive or hard-to-undo actions** are never a bare solid button. They sit behind `.btn-danger-outline` and are confirmed in the page (§7.3). Examples: *Empty quarantine*, *Restore watched status* (it writes to Kodi), *Undo whole run*.
@@ -41,7 +41,7 @@ Section numbers are referenced from code comments; do not renumber.
 - Desktop (wider than 960px): a **side rail** with icon + label per section; the current section is marked with `--accent-soft`. A counter pill sits after a section and after a tab only when it isn't zero (a section's is the sum of its tabs').
 - Phone (960px or narrower): a **top bar** (brand, a status dot for Kodi and the watched backup, the theme switch) and a **bottom tab bar** with all six sections. Material 3 keeps a bottom bar to five destinations or fewer; the sixth (Health) was chosen over hiding it (0.33), so labels stay short.
 - A **skip link** ("Skip to the page") is the first thing a keyboard reaches.
-- **One name per thing:** the rail item, the page title and every link to it use the same word. *Review* is never also *Queue* or *To check*.
+- **One name per thing:** the rail item, the page title and every link to it use the same word. *Review* is never also *Queue* or *To check*; the *Settings* page is titled *Settings*, *History* is *History* (a description goes in the eyebrow above it).
 
 ### 1.5 The UI never describes behaviour the system does not have
 
@@ -63,6 +63,8 @@ muthur examples:
 
 - Code words never reach the screen as is. Parser flags get sentences: `absolute-number` becomes *Numbered 1, 2, 3 without seasons*, `broken-episode-number` becomes *Episode number is damaged (S10E-1)*. TMDB `first_air_date` becomes *2021*.
 - Every enum has a label map in one place; an unknown value falls back to itself rather than a blank.
+- **A number has its noun:** *1 show*, *3 shows*, *1 file has*, never *1 shows* or *file(s)* (`count()` in `labels.ts` and `text.py`).
+- **No program names as messages:** *muthur can't read this video's details*, not *ffprobe can't read this file*.
 - **The heading asks, the cell answers.** No repeating the column name in every cell; an empty value is a dash.
 - **Name what happens to the reader's files**, not the record. *Move to quarantine*, not *Delete duplicate*. *Rename to S01E01*, not *Fix flag*.
 - IDs and release names are shown only where they help a decision: a release name in monospace as the file it is, a TMDB or IMDb ID as a link to that site.
@@ -82,12 +84,12 @@ muthur examples:
 
 ### 1.10 Say where data comes from
 
-- TMDB requires attribution: the footer says *Data and images from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.*
+- No TMDB credit on screen (0.34): muthur is a personal tool with one user, who didn't want it. The README lists TMDB and IMDb as data sources.
 - Scores name their source next to the number: *IMDb 8.4*, *TMDB 7.9*. Never a bare number.
 
 ### 1.11 Status, not explanations (0.25)
 
-- A page shows **numbers, status and actions**. What a panel means is explained once, in Settings or the docs, not on every visit. *162 remembered*, not *162 shows remembered. New episodes of a remembered show go straight into its folder, without a search.*
+- A page shows **numbers, status and actions**. What a panel means is explained once, in Settings or the docs, not on every visit. At most one short clause says what a number is for when the label alone was unclear: *Known shows 162 · their new episodes go straight to their folder*, not a paragraph. A button that changes nothing says so (*Read the TV folder · changes nothing*).
 - A **problem keeps its sentence and its way out** (§1.5): a paused backup, a folder that can't be read, Kodi that doesn't answer (*Off (asleep, or Kodi closed)* with *Wake the Shield*).
 - A panel with **nothing to say is left out**: the Folders panel appears only when a folder has a problem.
 - Tiles are a label and a number; a status line joins its facts with ` · ` (*Backed up 20:38 · 783 of 5,335 watched · hourly*).
@@ -208,6 +210,7 @@ Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not 
 - **A poster flies** into its show or film page (560 ms); the page change waits at most 400 ms for the cover.
 - **Hover and press:** background, border and colour in 150 ms; buttons, tiles and posters press in to 97 %.
 - **Bars and job progress** move with real progress; a skeleton shimmers while a list loads.
+- **Livelier (0.28):** tiles and posters lift on hover (3 px, with a shadow) and spring back; panels and tiles arrive with a little overshoot; a counter that changes pops; a working bar has a light passing over it. Only while something works: the job bar is still when it is hidden.
 
 **Not allowed:** confetti, disco, cursor trails, shader or animated backdrops, intro sequences, parallax, and anything that loops while the page is idle.
 
@@ -220,7 +223,8 @@ Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not 
 
 - **Brand** at the top of the rail: the mark plus *MU/TH/UR* in the display font, and *muthur* in small muted text beneath.
 - **Rail footer**, separated by a top divider:
-  - Kodi's connection (`● Shield · Kodi 21.3`, or `● Kodi unreachable` with *Check*).
+  - A running job: its step, a bar, the count and what waits next (§7.6), only while one runs.
+  - Kodi's connection (`● Shield · Kodi 21.3`, or `● Kodi unreachable` with *Wake* when waking is set up).
   - Dry run (`● Dry run on`, only when on).
   - Watched-status backup (`● Backed up 21:14`).
   - The theme switch.
@@ -274,7 +278,8 @@ Every wait shows itself, the same way everywhere (`components.tsx`):
 - Grid tracks are `minmax(0, 1fr)`, never a bare `1fr` (a long file name would widen the page on a phone).
 - The page never scrolls sideways at 375px. Tables that can grow scroll inside their own panel.
 - **Only short values stay on one line:** durations, sizes, dates, scores, status dots, headings. File names ellipsise; sentences wrap.
-- Touch targets are at least 44px on phones (rail rows, tab bar, buttons).
+- Touch targets are at least 44px on phones (rail rows, tab bar, buttons). A small button keeps its look; its touch area reaches past its edge.
+- On a phone a list row stacks: an episode's score and watched status go under its title, so the file name keeps the width.
 - Every interactive thing is a real `<button>`, `<a href>` or `<input>` with a `<label>`. Icon-only buttons have `aria-label`. Visible focus (`:focus-visible`, 3px `--focus` ring, offset 2px).
 
 ---
@@ -287,7 +292,7 @@ Planned with the web UI (architecture, milestone 2 onwards), modelled on the Clo
 - more than one primary button on a view, or none on a view that has an action
 - a raw parser flag, container path or TMDB field name on screen
 - a corner rounder than 12px
-- a missing TMDB attribution in the footer
+- Health not reachable from the rail, or six phone tabs that don't fit at 375px
 - any animation running with `prefers-reduced-motion: reduce`
 
 Built (2026-10-25): `tests/test_ui.py` runs these checks with Playwright on every push, against sample data that includes a long path without hyphens and long release names. It is skipped locally when Playwright or the built UI is missing. Its first run caught the Inbox and Settings showing container paths that didn't wrap on a phone.

@@ -5,7 +5,7 @@ import type { Card, Kind } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { libraryPath, middle, when } from '../labels';
+import { count, libraryPath, middle, when } from '../labels';
 
 // What each fix does to the reader's files (DESIGN.md §1.7: name what happens, not the record).
 const FIX: Record<FixKind, { title: string; what: string }> = {
@@ -45,7 +45,7 @@ function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy:
   const choose = () => {
     if (!picked) return;
     api.chooseForLibrary(kind, path, picked.tmdbId)
-      .then((r) => onDone(`${picked.title}${picked.year ? ` (${picked.year})` : ''}: ${Object.values(r.fixes).reduce((a, b) => a + (b ?? 0), 0)} fixes added${r.questions ? `, ${r.questions} questions left` : ''}.`))
+      .then((r) => onDone(`${picked.title}${picked.year ? ` (${picked.year})` : ''}: ${count(Object.values(r.fixes).reduce((a, b) => a + (b ?? 0), 0), 'fix', 'fixes')} added${r.questions ? `, ${count(r.questions, 'question')} left` : ''}.`))
       .catch((e: Error) => setError(e.message));
   };
   return (
@@ -105,14 +105,14 @@ export function HealthPage({ status, refresh }: StatusHook) {
         <div className="actions">
           {!asking && <button className="btn btn-secondary btn-sm" type="button" aria-busy={starting === 'check'} onClick={check}>{data?.at ? 'Check again' : 'Check the library'}</button>}
           {!asking && (chosen.size > 0
-            ? <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>Apply {total.toLocaleString('en-GB')} fixes</button>
+            ? <button className="btn btn-primary" type="button" disabled={running} onClick={() => setAsking(true)}>Apply {count(total, 'fix', 'fixes')}</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Choose fixes first">Apply fixes</button>)}
         </div>
       </header>
 
       {asking && (
         <section className="panel" role="group" aria-labelledby="ask-h" style={{ display: 'flex', flexDirection: 'column', gap: 12, borderColor: 'var(--mark)' }}>
-          <h2 id="ask-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Apply {total.toLocaleString('en-GB')} fixes to the library?</h2>
+          <h2 id="ask-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Apply {count(total, 'fix', 'fixes')} to the library?</h2>
           <ul className="rows">{[...chosen].map((k) => <li key={k}><span>{FIX[k].title}</span><span className="num">{data?.fixes[k]?.count.toLocaleString('en-GB')}</span></li>)}</ul>
           <p className="hint">Nothing is overwritten or deleted: new files only where none exist, NFO changes with a copy of the old file, removals into quarantine. The whole run can be put back from History.</p>
           <div className="actions" style={{ justifyContent: 'flex-end' }}>

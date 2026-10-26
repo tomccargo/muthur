@@ -87,9 +87,13 @@ export function WatchedPanel({ status, refresh }: { status: Status | null; refre
       )}
       {message && <div className={`banner banner-${message.kind}`} role="alert">{message.text}</div>}
       <div className="actions">
-        <button className="btn btn-secondary btn-sm" type="button" disabled={!kodiSet || Boolean(working)} aria-busy={working === 'backup'}
-          onClick={() => run(api.backupWatched, () => 'Backed up just now.', 'backup')}>Back up now</button>
-        <button className="btn btn-danger-outline btn-sm" type="button" disabled={!kodiSet || Boolean(working) || !w?.last} aria-busy={working === 'look'} onClick={look}>Restore to Kodi…</button>
+        {/* A standing reason stays reachable: aria-disabled with the reason as its title (DESIGN.md §3). */}
+        <button className="btn btn-secondary btn-sm" type="button" disabled={Boolean(working)} aria-busy={working === 'backup'}
+          {...(!kodiSet ? { 'aria-disabled': true, title: 'Set up Kodi in Settings first' } : {})}
+          onClick={kodiSet ? () => run(api.backupWatched, () => 'Backed up just now.', 'backup') : undefined}>Back up now</button>
+        <button className="btn btn-danger-outline btn-sm" type="button" disabled={Boolean(working)} aria-busy={working === 'look'}
+          {...(!kodiSet || !w?.last ? { 'aria-disabled': true, title: !kodiSet ? 'Set up Kodi in Settings first' : 'Nothing is backed up yet' } : {})}
+          onClick={kodiSet && w?.last ? look : undefined}>Restore to Kodi…</button>
         {working === 'restore' && <span className="small"><Spinner /> Restoring in Kodi…</span>}
       </div>
     </section>

@@ -40,6 +40,7 @@ from . import rename as renaming
 from .scores import ScoreRefresh
 from .shield import COMPONENT, Shield, ShieldError
 from .store import Store
+from .text import count
 from .tmdb import Tmdb
 from .watched import Listener, Watched
 
@@ -467,7 +468,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.put("kodi.pendingRefresh", [])  # what Kodi misses again is remembered again (remember_refresh)
         job.total = len(waiting)
         r = k.refresh_files(waiting, {"TV": cfg.tv, "Film": cfg.film}, lambda d, t: setattr(job, "done", d))
-        job.result = f"Kodi re-read {r['refreshed']:,} changed item(s)" + (f"; {r['kodiAway']:,} wait for it again." if r.get("kodiAway") else ".")
+        job.result = f"Kodi re-read {count(r['refreshed'], 'changed item')}" + (f"; {r['kodiAway']:,} wait for it again." if r.get("kodiAway") else ".")
 
     @app.post("/api/apply", status_code=202)
     def apply(body: dict | None = None):
@@ -497,7 +498,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 except DownloadStationError as e:
                     result["downloadStation"] = {"problem": str(e)}
             store.save_snapshot("last-apply", result)
-            job.result = f"{result['applied']} download(s) filed" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
+            job.result = f"{count(result['applied'], 'download')} filed" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
             job.attention = bool(result["stopped"])
             _rescan(client)
             if result["applied"]:
@@ -557,7 +558,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             result = journal.undo(run_id, item)
             store.save_snapshot("last-undo", result)
             job.result = ("Put back." if not result["skipped"]
-                          else f"Put back, but {len(result['skipped'])} change(s) couldn't be: see History.")
+                          else f"Put back, but {count(len(result['skipped']), 'change')} couldn't be: see History.")
             job.attention = bool(result["skipped"])
             if client:
                 _rescan(client)
@@ -589,7 +590,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             refresh = ScoreRefresh(store, journal, imdb, client, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"), kodi())
             summary = refresh.run(job)
             store.save_snapshot("last-scores", summary)
-            job.result = f"IMDb scores refreshed: {summary['updated']} NFO(s) updated."
+            job.result = f"IMDb scores refreshed: {count(summary['updated'], 'NFO')} updated."
 
         return jobs.start("scores", work, by_user=by_user)
 
@@ -1019,7 +1020,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             watched.follow(Watched.read_kodi(k))  # a fresh backup right before anything moves (§11)
             result = apply_groups(dups, groups, journal, cfg.quarantine, k, job)
             store.save_snapshot("last-duplicates", result)
-            job.result = f"{result['applied']} duplicate(s) resolved" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
+            job.result = f"{count(result['applied'], 'duplicate')} resolved" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
             job.attention = bool(result["stopped"])
             done = {r["id"] for r in result["items"] if r["ok"]}
             data, _ = store.snapshot("duplicates")
@@ -1064,8 +1065,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.save_snapshot("health", plan)
         health_counts(plan)
         if job:
-            job.result = (f"Library checked: {sum(len(v) for v in plan['fixes'].values()):,} fix(es), "
-                          f"{sum(len(v) for v in plan['manual'].values()):,} question(s).")
+            job.result = (f"Library checked: {count(sum(len(v) for v in plan['fixes'].values()), 'fix', 'fixes')}, "
+                          f"{count(sum(len(v) for v in plan['manual'].values()), 'question')}.")
 
     @app.post("/api/fixes/check", status_code=202)
     def fixes_check():
@@ -1141,8 +1142,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             check_health(client, job)
             failed = len(result["failed"])
             lost = len((result.get("kodiRenames") or {}).get("problems", []))
-            job.result = f"{sum(result['done'].values()):,} fix(es) done" + (f", {failed} couldn't be: see Health." if failed else ".") + (
-                f" Kodi didn’t take {lost} renamed item(s): their watched status is safe in muthur’s backup (Settings, Watched, Restore to Kodi)."
+            job.result = f"{count(sum(result['done'].values()), 'fix', 'fixes')} done" + (f", {failed} couldn't be: see Health." if failed else ".") + (
+                f" Kodi didn’t take {count(lost, 'renamed item')}: their watched status is safe in muthur’s backup (Settings, Watched, Restore to Kodi)."
                 if lost else "")
             job.attention = bool(failed or lost)
 

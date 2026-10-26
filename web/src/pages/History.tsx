@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, type Op, type Run } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { libraryPath, middle, size, splitId, when } from '../labels';
+import { count, libraryPath, middle, size, splitId, when } from '../labels';
 
 const VERB: Record<Op['op'], string> = { move: 'Moved', write: 'Wrote', quarantine: 'Quarantined', mkdir: 'Made folder', update: 'New scores in' };
 
@@ -45,7 +45,7 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
           {run.undone ? <><Dot />Put back {when(run.undone)}</>
             : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
               : run.kind === 'library' ? <><Dot kind="dot-success" />Library edit</>
-              : run.kind === 'health' ? <><Dot kind="dot-success" />{fixed.toLocaleString('en-GB')} fixes{stopped.length ? `, ${stopped.length} not done` : ''}</>
+              : run.kind === 'health' ? <><Dot kind="dot-success" />{count(fixed, 'fix', 'fixes')}{stopped.length ? `, ${stopped.length} not done` : ''}</>
               : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
         </span>
       </div>
@@ -115,8 +115,8 @@ export function HistoryPage({ status, refresh }: StatusHook) {
     <div className="page">
       <header className="page-head">
         <div>
-          <p className="eyebrow">History</p>
-          <h1>What muthur did</h1>
+          <p className="eyebrow">What muthur did</p>
+          <h1>History</h1>
           <p className="lede">Every run and every file it touched. A run can be put back as a whole.</p>
         </div>
       </header>

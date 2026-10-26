@@ -44,14 +44,6 @@ export function JobBar({ job }: { job: Job | null | undefined }) {
   );
 }
 
-export function Footer() {
-  return (
-    <p className="foot">
-      Data and images from TMDB. This product uses the TMDB API but is not endorsed or certified by TMDB.
-    </p>
-  );
-}
-
 // Set-up instructions: read once, so they stay folded until asked for (DESIGN.md §1.11).
 export function HowTo({ children }: { children: ReactNode }) {
   return <details className="howto"><summary className="small">How to set this up</summary><p className="hint">{children}</p></details>;

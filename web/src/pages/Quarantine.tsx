@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../api';
-import { libraryPath, size } from '../labels';
+import { count, libraryPath, size } from '../labels';
 
 type Day = { day: string; files: number; size: number };
 
@@ -34,7 +34,7 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
     <section className="panel" aria-labelledby="q-h" style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div className="panel-head" style={{ marginBottom: 0 }}>
         <h2 id="q-h">Quarantine</h2>
-        <span className="small muted">{days ? `${(days ?? []).reduce((n, d) => n + d.files, 0)} files · ${size((days ?? []).reduce((n, d) => n + d.size, 0) || 1)}` : ''}</span>
+        <span className="small muted">{days ? `${count((days ?? []).reduce((n, d) => n + d.files, 0), 'file')} · ${size((days ?? []).reduce((n, d) => n + d.size, 0) || 1)}` : ''}</span>
       </div>
       {days && days.length === 0 && <p className="hint">Empty.</p>}
       {days && days.length > 0 && (
@@ -46,7 +46,7 @@ export function QuarantinePanel({ busy }: { busy: boolean }) {
                   <input type="checkbox" checked={chosen.has(d.day)} onChange={(e) => setChosen((s) => { const n = new Set(s); if (e.target.checked) n.add(d.day); else n.delete(d.day); return n; })} />
                   <span>{new Date(d.day).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                 </label>
-                <span className="small num">{d.files} files · {size(d.size || 1)} · <button type="button" className="btn-link small" onClick={() => show(d.day)}>{open === d.day ? 'Hide' : 'What and why'}</button></span>
+                <span className="small num">{count(d.files, 'file')} · {size(d.size || 1)} · <button type="button" className="btn-link small" onClick={() => show(d.day)}>{open === d.day ? 'Hide' : 'What and why'}</button></span>
               </span>
               {open === d.day && (notes.length ? (
                 <ul className="rows" style={{ paddingLeft: 26 }}>

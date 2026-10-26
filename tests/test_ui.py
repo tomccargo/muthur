@@ -2,7 +2,7 @@
 
 Fails on page or console errors, a page that scrolls sideways, more than one primary button (or none on
 a page that has an action), container paths or code words on screen, corners rounder than 12 px (pills
-excepted), a missing TMDB attribution, and animations while reduced motion is asked for.
+excepted), and animations while reduced motion is asked for.
 Skipped when Playwright or the built UI (web/dist) isn't there.
 """
 import os
@@ -30,7 +30,6 @@ PAGES = {  # path -> must it have exactly one primary button?
 }
 CODE_WORDS = re.compile(r"/data/|absolute-number|broken-episode-number|no-episode-number|looks-like-movie|other-episode"
                         r"|first_air_date|tmdb_id|\bundefined\b|\bNaN\b|\[object Object\]")
-ATTRIBUTION = "This product uses the TMDB API but is not endorsed or certified by TMDB."
 
 
 def wait_job(client_get):
@@ -144,8 +143,6 @@ def test_every_page(server, browser, width, theme):
             problems.append(f"{where}: {r['primaries']} primary buttons")
         if m := CODE_WORDS.search(r["text"]):
             problems.append(f"{where}: '{m.group(0)}' on screen")
-        if path == "/settings" and ATTRIBUTION not in r["text"]:  # TMDB's credit lives in Settings
-            problems.append(f"{where}: no TMDB attribution")
         if r["radius"]:
             problems.append(f"{where}: corners rounder than 12px: {r['radius']}")
         if r["animations"]:

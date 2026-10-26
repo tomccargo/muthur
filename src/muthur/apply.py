@@ -15,6 +15,7 @@ import time
 
 from . import nfo_write, quarantine, subtitles
 from .journal import Journal
+from .text import count
 
 SUBTITLE_EXTS = (".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sup")
 SUBS_DIR = re.compile(r"(?i)^(subs?|subtitles)$")
@@ -66,7 +67,7 @@ class Applier:
                 back = self.journal.undo(run, item["id"])
                 why = f"It went wrong halfway ({type(e).__name__}: {e}); muthur put back what it had changed."
                 if back["skipped"]:
-                    why += f" {len(back['skipped'])} change(s) could not be put back; see History."
+                    why += f" {count(len(back['skipped']), 'change')} could not be put back; see History."
                 results.append({"id": item["id"], "ok": False, "why": why})
             if job:
                 job.done += 1

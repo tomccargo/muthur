@@ -1,20 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { SIGNALS, middle, splitId } from '../labels';
+import { SIGNALS, hue, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
 const IMAGES = 'https://image.tmdb.org/t/p/w185';
 const code = (s: number, e: number[] | number) => `S${String(s).padStart(2, '0')}${(Array.isArray(e) ? e : [e]).map((n) => `E${String(n).padStart(2, '0')}`).join('')}`;
 const aired = (d: string | null) => (d ? new Date(d).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '');
 
-// A missing poster gets the title's initials on the poster background (DESIGN.md §8), never a broken image.
+// A missing poster gets the title's initials on the title's own tint (DESIGN.md §8), never a broken image.
 export function Poster({ path, title }: { path: string | null | undefined; title: string }) {
   const [failed, setFailed] = useState(false);
   if (!path || failed) {
     const initials = title.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
-    return <span className="poster" aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
+    return <span className="poster" style={{ '--hue': hue(title) } as CSSProperties} aria-hidden="true"><span className="poster-initials">{initials || '?'}</span></span>;
   }
   return <img className="poster" src={IMAGES + path} alt="" loading="lazy" onError={() => setFailed(true)} />;
 }

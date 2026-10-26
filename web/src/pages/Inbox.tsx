@@ -22,7 +22,9 @@ function Detail({ item, onChanged }: { item: Item; onChanged: (note: string | nu
     <aside className="panel narrow" aria-label="What would happen" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       <div>
         <p className="eyebrow">{s.label}</p>
-        <h2 style={{ margin: '2px 0 0', fontSize: '1.3rem', fontWeight: 650, overflowWrap: 'anywhere' }}>{item.title ? `${item.title}${item.year ? ` (${item.year})` : ''}` : splitId(item.id).name}</h2>
+        {item.title
+          ? <h2 style={{ margin: '2px 0 0', fontSize: '1.3rem', fontWeight: 650, overflowWrap: 'anywhere' }}>{item.title}{item.year ? ` (${item.year})` : ''}</h2>
+          : <h2 className="mono" style={{ margin: '2px 0 0', fontSize: '0.95rem', fontWeight: 600, overflowWrap: 'anywhere' }}>{splitId(item.id).name}</h2>}  {/* a file name is monospace (§8) */}
         <p className="hint" style={{ marginTop: 4 }}>{item.reason}</p>
       </div>
       {placed.length > 0 && (
@@ -85,6 +87,9 @@ export function InboxPage({ status, refresh }: StatusHook) {
     request().then(refresh).catch((e: Error) => setMessage(e.message)).finally(() => setStarting(null));
   };
   const scan = () => begin('scan', api.scan);
+  // A standing reason stays reachable: aria-disabled with the reason as its title, not a mute 'disabled' (DESIGN.md §3).
+  const noTmdb = !status?.tmdb.configured;
+  const needsTmdb = noTmdb ? { 'aria-disabled': true, title: 'Add the TMDB token in Settings first' } : {};
 
   const ready = (data?.items ?? []).filter((i) => i.status === 'ready');
   const [asking, setAsking] = useState(false);
@@ -109,13 +114,13 @@ export function InboxPage({ status, refresh }: StatusHook) {
         <div className="actions">
           {asking ? null : ready.length > 0 ? (
             <>
-              <button className="btn btn-secondary btn-sm" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Look again</button>
+              <button className="btn btn-secondary btn-sm" type="button" {...needsTmdb} aria-busy={starting === 'scan'} onClick={noTmdb ? undefined : scan}>Look again</button>
               <button className="btn btn-primary" type="button" aria-busy={starting === 'apply'} onClick={() => setAsking(true)}>
                 Apply {ready.length} ready {ready.length === 1 ? 'item' : 'items'}
               </button>
             </>
           ) : (
-            <button className="btn btn-primary" type="button" disabled={!status?.tmdb.configured} aria-busy={starting === 'scan'} onClick={scan}>Look for new downloads</button>
+            <button className="btn btn-primary" type="button" {...needsTmdb} aria-busy={starting === 'scan'} onClick={noTmdb ? undefined : scan}>Look for new downloads</button>
           )}
         </div>
       </header>

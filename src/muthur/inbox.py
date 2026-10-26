@@ -17,7 +17,7 @@ from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title, episode_path, movie_path
 from .parse import PART_NUMBER, SAMPLE, is_video
 from .store import Store
-from .text import similarity
+from .text import count, similarity
 
 SETTLE_SECONDS = 600  # a download is only handled once nothing in it changed for 10 minutes
 SEASON_DIR_NAMES = ("Season {n:02d}", "Season {n}", "S{n:02d}", "Series {n}")
@@ -235,7 +235,7 @@ class Inbox:
             return item
         programs = [p for p, _, _ in files if EXECUTABLE.search(p[-1])]
         if programs:
-            item.notes.append(f"Contains {len(programs)} program file(s) ({', '.join(p[-1] for p in programs[:2])}). "
+            item.notes.append(f"Contains {count(len(programs), 'program file')} ({', '.join(p[-1] for p in programs[:2])}). "
                               "They are never copied into the library.")
         videos = [(p, s) for p, s, _ in files if is_video(p[-1]) and not p[-1].lower().endswith(".iso")]
         main = [(p, s) for p, s in videos if not SAMPLE.search(p[-1]) and not any(x.lower() == "sample" for x in p[:-1])]
@@ -458,11 +458,11 @@ class Inbox:
 
 
 _PROBLEMS = {
-    "missing": lambda n: f"{n} episode(s) don't exist on TMDB under these numbers.",
-    "other-episode": lambda n: f"{n} file(s) are named after a different episode than their number.",
-    "unnumbered": lambda n: f"{n} file(s) have a damaged or missing episode number.",
-    "absolute": lambda n: f"{n} file(s) are numbered without a season; muthur's reading needs your check.",
-    "exists": lambda n: f"{n} file(s) have an episode number that is already in the library; muthur never overwrites.",
+    "missing": lambda n: f"{count(n, 'episode')} {'doesn’t' if n == 1 else 'don’t'} exist on TMDB under {'this number' if n == 1 else 'these numbers'}.",
+    "other-episode": lambda n: f"{count(n, 'file')} {'is' if n == 1 else 'are'} named after a different episode than {'its' if n == 1 else 'their'} number.",
+    "unnumbered": lambda n: f"{count(n, 'file')} {'has' if n == 1 else 'have'} a damaged or missing episode number.",
+    "absolute": lambda n: f"{count(n, 'file')} {'is' if n == 1 else 'are'} numbered without a season; muthur's reading needs your check.",
+    "exists": lambda n: f"{count(n, 'file')} {'has' if n == 1 else 'have'} an episode number that is already in the library; muthur never overwrites.",
 }
 
 

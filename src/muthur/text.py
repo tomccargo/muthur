@@ -33,5 +33,10 @@ def similarity(a: str, b: str) -> float:
     return fuzz.ratio(na, nb) / 100.0
 
 
+def count(n: int, one: str, many: str | None = None) -> str:
+    """'1 file', '3 files', '1,204 episodes': a number with its noun, never 'file(s)'."""
+    return f"{n:,} {one if n == 1 else many or one + 's'}"
+
+
 def best_similarity(query: str, titles) -> float:
     return max((similarity(query, t) for t in titles if t), default=0.0)

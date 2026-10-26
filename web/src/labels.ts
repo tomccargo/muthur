@@ -71,6 +71,12 @@ export function splitId(id: string): { name: string; folder: string | null } {
   return i === -1 ? { name: id, folder: null } : { name: id.slice(i + 1), folder: id.slice(0, i) };
 }
 
+// A missing poster's tint: a hue from the title, the same on every visit (DESIGN.md §8).
+export const hue = (title: string) => [...title].reduce((h, c) => (h * 31 + c.charCodeAt(0)) % 360, 7);
+
+// '1 show', '3 shows', '1,204 episodes': a number with its noun, never 'show(s)' or '1 shows'.
+export const count = (n: number, one: string, many = `${one}s`) => `${n.toLocaleString('en-GB')} ${n === 1 ? one : many}`;
+
 export function size(bytes: number): string {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   if (bytes >= 1e6) return `${Math.round(bytes / 1e6)} MB`;
