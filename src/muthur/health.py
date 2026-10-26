@@ -15,6 +15,7 @@ import os
 import time
 
 from . import nfo_write, quarantine, subtitles
+from .art import poster_problem
 from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
@@ -24,15 +25,15 @@ from .parse import is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
 from .text import similarity
 
-FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "imdb-scores")
+FIXES = ("imdb-data", "leftovers", "empty-films", "subtitles", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores")
 
 
 class Health:
     def __init__(self, store, journal, imdb, tmdb, index, tv_root: str, film_root: str, quarantine: str, backups: str):
         self.store, self.journal, self.imdb, self.tmdb, self.index = store, journal, imdb, tmdb, index
         self.roots = {"TV": tv_root, "Film": film_root}
-        self.quarantine = quarantine
-        self.scores = ScoreRefresh(store, journal, imdb, tmdb, tv_root, film_root, backups)
+        self.quarantine, self.backups = quarantine, backups
+        self.scores =ScoreRefresh(store, journal, imdb, tmdb, tv_root, film_root, backups)
         self._have: set[str] | None = None  # shows whose IMDb episodes are in the kept data
 
     def _full(self, path: str) -> str:
@@ -83,6 +84,8 @@ class Health:
         if imdb_id and imdb_id not in self._have:
             # Its IMDb ID came after the last download (a new show, an NFO written since): its scores aren't there yet.
             fixes["imdb-data"].append({"path": f"TV/{folder}", "label": title})
+        if show["nfo"]:  # a show without an NFO gets its poster with it ('show-nfos')
+            self._poster([f"TV/{folder}/poster.jpg"], "tv", tmdb_id, f"TV/{folder}/tvshow.nfo", title, fixes)
         if not show["nfo"]:
             fixes["show-nfos"].append({"path": f"TV/{folder}/tvshow.nfo", "tmdb": tmdb_id, "label": details.get("name") or folder})
         elif imdb_id and (info := self.index.nfo(self._full(f"TV/{folder}/tvshow.nfo"))) and "imdb" not in info.ratings:
@@ -140,9 +143,22 @@ class Health:
         fixes["subtitles"] += moves
         fixes["leftovers"] += orphans
 
+    def _poster(self, places: list[str], kind: str, tmdb_id: int, nfo: str, label: str, fixes: dict) -> None:
+        """places: the names Kodi takes as this item's poster, the one muthur would write first."""
+        have = next((p for p in places if os.path.isfile(self._full(p))), None)
+        why = "missing" if have is None else poster_problem(self._full(have))
+        if why:
+            fixes["posters"].append({"path": have or places[0], "kind": kind, "tmdb": tmdb_id, "nfo": nfo, "label": label, "why": why})
+
     def _film(self, f: dict, fixes: dict, manual: dict) -> None:
         if f["folder"] and f["file"]:
             self._subtitles_of("Film", f["key"], fixes)
+        if f["nfo"] and f["file"] and f.get("nfoFile") and str(f["ids"].get("tmdb", "")).isdigit():
+            stem = f"Film/{f['file'].rsplit('.', 1)[0]}"  # beside the video, where Kodi looks: 'poster.jpg' in its folder, else '<name>-poster.jpg'
+            folder = f"Film/{f['file'].rsplit('/', 1)[0]}"
+            places = ([f"{folder}/poster.jpg", f"{folder}/folder.jpg"] if f["folder"] and "/" in f["file"] else []) + [stem + "-poster.jpg"]
+            self._poster(places, "movie", int(f["ids"]["tmdb"]), f"Film/{f['nfoFile']}",
+                         f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}", fixes)
         if not f["file"]:
             if f["folder"]:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
@@ -184,12 +200,12 @@ class Health:
             if job:
                 job.done += 1
         summary = {"done": done, "failed": failed}
-        self.journal.finish(run, summary)
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
             summary["kodi"] = kodi.refresh_files([self._full(p) for p in nfos], self.roots,
                                                  (lambda d, t: setattr(job, "done", d)) if job else None)
+        self.journal.finish(run, summary)  # with what Kodi said: History shows whether it re-read them
         return {"run": run, **summary}
 
     def _quarantine(self, run: int, path: str, why: str) -> None:
@@ -274,6 +290,19 @@ class Health:
                 self._write(run, x["art"] + name, self.tmdb.image(movie[key], size))
         if logo := nfo_write.best_logo(movie):
             self._write(run, x["art"] + "clearlogo.png", self.tmdb.image(logo, "w500"))
+
+    def _posters(self, run, x, nfos):
+        """TMDB's poster where there is none or a poor one; the old one is kept (History can put it back). Kodi re-reads the item."""
+        d = (self.tmdb.tv(x["tmdb"]) if x["kind"] == "tv" else self.tmdb.movie(x["tmdb"])) or {}
+        data = self.tmdb.image(d["poster_path"], "w780") if d.get("poster_path") else None
+        if not data:
+            raise ValueError("TMDB has no poster for it")
+        full = self._full(x["path"])
+        if os.path.lexists(full):
+            self.journal.replace(run, x["path"], full, data, self.backups)
+        else:
+            self._write(run, x["path"], data)
+        nfos.append(x["nfo"])
 
     def _imdb_scores(self, run, x, nfos):
         full = self._full(x["path"])

@@ -7,7 +7,7 @@ export type Job = {
   queued?: boolean;  // waiting for the job before it
 };
 export type KodiState = ({ connected: true; version: string; sources?: { tv: boolean; film: boolean } } | { connected: false; problem: string; off?: boolean })
-  & { pendingScan?: number | null; canWake?: boolean };
+  & { pendingScan?: number | null; pendingRefresh?: number; canWake?: boolean };
 
 export type Names = { device: string; nas: string };  // what the reader calls the Kodi box and the NAS
 
@@ -29,7 +29,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
-  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; questions?: number };  // from the last library check
+  library: { imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -117,7 +117,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'imdb-scores';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 export type Question = { path: string; why: string; season?: number };
 export type Fixes = {

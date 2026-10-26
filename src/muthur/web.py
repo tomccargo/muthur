@@ -182,7 +182,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     JOB_NAMES = {"inbox": "Checking the downloads", "apply": "Filing downloads", "undo": "Putting a run back",
                  "memory": "Learning the shows", "scores": "Refreshing IMDb scores", "library": "Indexing the library",
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
-                 "health": "Checking the library", "fixes-apply": "Fixing the library"}
+                 "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -290,8 +290,16 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def kodi(timeout: float = 4) -> Kodi | None:
         k = store.get("kodi", {})
-        return Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout,
-                    device=names()["device"]) if k.get("host") else None
+        if not k.get("host"):
+            return None
+        client = Kodi(k["host"], int(k.get("port") or 8080), k.get("user"), k.get("password"), timeout, device=names()["device"])
+        client.on_away = remember_refresh
+        return client
+
+    def remember_refresh(paths: list[str]) -> None:
+        """NFOs and artwork Kodi didn't hear about because it was off: it is told when it answers again (kodi_back).
+        Until then it shows what it had, an old poster included."""
+        store.put("kodi.pendingRefresh", list(dict.fromkeys((store.get("kodi.pendingRefresh") or []) + paths)))
 
     # -- signing in (§14) -------------------------------------------------------
     def signed_in(request: Request, response: Response) -> dict:
@@ -378,7 +386,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "names": names(),
             "applying": not store.get("dryRun", False),
             "tmdb": {"configured": tmdb() is not None},
-            "kodi": {**kodi_state(k), "pendingScan": store.get("kodi.pendingScan"), "canWake": shield() is not None} if k else None,
+            "kodi": {**kodi_state(k), "pendingScan": store.get("kodi.pendingScan"), "pendingRefresh": len(store.get("kodi.pendingRefresh") or []),
+                     "canWake": shield() is not None} if k else None,
             "paths": {"downloads": _path_state(cfg.downloads), "tv": _path_state(cfg.tv), "film": _path_state(cfg.film)},
             "inbox": {"counts": counts, "scannedAt": scanned},
             "memory": {"shows": store.alias_count("tv")},
@@ -444,6 +453,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def kodi_back():
         if store.get("kodi.pendingScan"):
             _tell_kodi()
+        if store.get("kodi.pendingRefresh"):
+            jobs.start("kodi-refresh", refresh_waiting, by_user=False)
+
+    def refresh_waiting(job):
+        waiting = store.get("kodi.pendingRefresh") or []
+        k = kodi(timeout=30)
+        if not k or not waiting:
+            return
+        store.put("kodi.pendingRefresh", [])  # what Kodi misses again is remembered again (remember_refresh)
+        job.total = len(waiting)
+        r = k.refresh_files(waiting, {"TV": cfg.tv, "Film": cfg.film}, lambda d, t: setattr(job, "done", d))
+        job.result = f"Kodi re-read {r['refreshed']:,} changed item(s)" + (f"; {r['kodiAway']:,} wait for it again." if r.get("kodiAway") else ".")
 
     @app.post("/api/apply", status_code=202)
     def apply(body: dict | None = None):
@@ -715,10 +736,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         return LibraryEdit(store, journal, need_tmdb(), imdb, cfg.tv, cfg.film, os.path.join(cfg.config_dir, "backups"))
 
     def edited(result: dict) -> dict:
-        """After an edit: Kodi re-reads the item if it answers, and the index is built again."""
+        """After an edit: Kodi re-reads the item if it answers, or as soon as it does; the index is built again."""
         k = kodi()
-        if k and result.get("nfo") and k.check().get("connected"):
-            result["kodi"] = k.refresh_files([editor().full(result["nfo"])], {"TV": cfg.tv, "Film": cfg.film})
+        if k and result.get("nfo"):
+            full = editor().full(result["nfo"])
+            if k.check().get("connected"):
+                result["kodi"] = k.refresh_files([full], {"TV": cfg.tv, "Film": cfg.film})
+            else:
+                remember_refresh([full])
         start_library()
         return result
 
@@ -865,7 +890,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         store.put("health.counts", {
             "imdbData": len(f.get("imdb-data", [])), "scores": len(f.get("imdb-scores", [])),
             "nfos": sum(len(f.get(k, [])) for k in ("episode-nfos", "show-nfos", "film-nfos")),
-            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])),
+            "leftovers": len(f.get("leftovers", [])) + len(f.get("empty-films", [])), "subtitles": len(f.get("subtitles", [])), "posters": len(f.get("posters", [])),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
     def check_health(client, job):
@@ -1304,6 +1329,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     store.migrate()  # every module has created its tables by now
     app.state.store, app.state.jobs, app.state.started = store, jobs, time.time()
+    app.state.kodi_back = kodi_back  # what the listener runs when Kodi answers again (tests call it directly)
     return app
 
 

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 
 import requests
 
@@ -20,6 +21,7 @@ class Kodi:
         self.url = f"http://{host}:{port}/jsonrpc"
         self.auth = (user, password or "") if user else None
         self.timeout = timeout
+        self.on_away: Callable[[list[str]], None] | None = None  # on_away(paths): the NFOs Kodi wasn't told about because it went away, to tell it later
 
     def call(self, method: str, params: dict | None = None):
         r = self.session.post(self.url, json={"jsonrpc": "2.0", "id": 1, "method": method, "params": params or {}},
@@ -66,6 +68,8 @@ class Kodi:
                 done += self._refresh_one(path, roots, shows or [])
             except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
                 # Kodi went away (the box slept): the rest can't be told either, and they aren't 'not in Kodi'.
+                if self.on_away:
+                    self.on_away(paths[n - 1:])
                 return {"refreshed": done, "notInKodi": missing, "kodiAway": len(paths) - n + 1}
             except LookupError:
                 missing += 1

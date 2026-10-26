@@ -25,6 +25,7 @@ export const JOBS: Record<string, string> = {
   edit: 'Saving your change',
   review: 'Saving your choice',
   quarantine: 'Emptying the quarantine',
+  'kodi-refresh': 'Telling Kodi what changed',
 };
 
 // Container paths never reach the screen (DESIGN.md §1.6): '/data/TV/x' is shown as 'TV/x'.

@@ -110,4 +110,16 @@ class LibraryEdit:
         n = self._put(run, target, self.tmdb.image(image_path, "w780"))
         summary = {"label": f"New poster for {target.rsplit('/', 1)[0]}", "changed": n}
         self.journal.finish(run, summary)
-        return {"run": run, **summary}
+        return {"run": run, **summary, "nfo": self._nfo_of_poster(target)}
+
+    def _nfo_of_poster(self, target: str) -> str | None:
+        """The NFO of the item a poster belongs to, so Kodi can re-read it: Kodi keeps the old poster until then."""
+        folder, name = target.rsplit("/", 1)
+        if name != "poster.jpg":
+            nfo = target[: -len("-poster.jpg")] + ".nfo"  # 'Film/X (1999)-poster.jpg' beside a loose film
+        elif target.startswith("TV/"):
+            nfo = f"{folder}/tvshow.nfo"
+        else:
+            names = sorted(n for n in os.listdir(self.full(folder)) if n.lower().endswith(".nfo")) if os.path.isdir(self.full(folder)) else []
+            nfo = f"{folder}/{names[0]}" if names else ""
+        return nfo if nfo and os.path.isfile(self.full(nfo)) else None

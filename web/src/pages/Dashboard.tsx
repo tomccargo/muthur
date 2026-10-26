@@ -109,6 +109,7 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
             )}
           </div>
           {k?.pendingScan && <p className="hint" style={{ margin: '10px 0 0' }}>The last Apply waits for Kodi ({when(k.pendingScan)}).</p>}
+          {(k?.pendingRefresh ?? 0) > 0 && <p className="hint" style={{ margin: '10px 0 0' }}>{k!.pendingRefresh!.toLocaleString('en-GB')} changed items wait for Kodi to re-read them.</p>}
           {kodiNote && <div className={`banner banner-${kodiNote.kind}`} role="alert" style={{ marginTop: 10 }}>{kodiNote.text}</div>}
         </section>
 
@@ -196,6 +197,7 @@ function LibraryProblems({ status }: { status: Status | null }) {
     ['Scores to add', l.scores, '/health'],
     ['NFOs to write', l.nfos, '/health'],
     ['Duplicates', status?.duplicatesAt ? status.duplicates : undefined, '/duplicates'],
+    ['Posters to replace', l.posters, '/health'],
     ['Subtitles Kodi misses', l.subtitles, '/health'],
     ['Questions', l.questions, '/health'],
     ['Leftovers', l.leftovers, '/health'],
