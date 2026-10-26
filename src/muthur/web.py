@@ -827,7 +827,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     raise RuntimeError(f"Kodi is off, and renaming now would leave the watched status behind. Turn the {names()['device']} on and try again.")
             job.begin("Reading what Kodi knows", 0)
             roots = {"TV": cfg.tv}
-            before = renaming.read_before(k, roots)
+            before = renaming.read_before(k, roots, follow_watched)  # muthur's watched backup is current before the rename
             new = renaming.new_name(show["folder"], e["file"], s, [n] if other else e["episodes"], ep.get("name"))
             run = journal.start("library")
             try:
@@ -849,7 +849,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before)
             journal.finish(run, {"label": f"Renamed {label}", "kodi": followed})
             job.result = (f"Renamed {label} to {new}." + ("" if followed["followed"] else
-                          f" Kodi didn’t take it all: {followed['problems'][0]['why'] if followed['problems'] else 'unknown'}"))
+                          f" Kodi didn’t take it all ({followed['problems'][0]['why'] if followed['problems'] else 'unknown'}); its watched status is safe"
+                          " in muthur’s backup (Settings, Watched, Restore to Kodi)."))
             job.attention = not followed["followed"]
             start_library(by_user=False)
 
@@ -1123,14 +1124,17 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 store.save_snapshot("last-scores", summary)
                 extra["imdb-data"] = len(plan["fixes"].get("imdb-data", []))
             rest = [x for x in kinds if x != "imdb-data"]
-            result = health_tool(client).apply(plan, rest, k, job) if rest else {"run": None, "done": {}, "failed": []}
+            result = health_tool(client).apply(plan, rest, k, job, backup=follow_watched) if rest else {"run": None, "done": {}, "failed": []}
             result["done"].update(extra)
             store.save_snapshot("last-fixes", result)
             job.begin("Checking the library again", 0)
             check_health(client, job)
             failed = len(result["failed"])
-            job.result = f"{sum(result['done'].values()):,} fix(es) done" + (f", {failed} couldn't be: see Health." if failed else ".")
-            job.attention = bool(failed)
+            lost = len((result.get("kodiRenames") or {}).get("problems", []))
+            job.result = f"{sum(result['done'].values()):,} fix(es) done" + (f", {failed} couldn't be: see Health." if failed else ".") + (
+                f" Kodi didn’t take {lost} renamed item(s): their watched status is safe in muthur’s backup (Settings, Watched, Restore to Kodi)."
+                if lost else "")
+            job.attention = bool(failed or lost)
 
         job = jobs.start("fixes-apply", work)
         return job.as_dict()

@@ -100,7 +100,7 @@ def test_health_renames_only_while_kodi_answers(env):  # noqa: F811
     import muthur.rename as rename_mod
 
     before = {"tv/other show (2019)/season 01/other show - s01e01 - one.mkv": {"kodiid": 7, "playcount": 1, "lastplayed": None, "resume": 0, "total": 0}}
-    rename_mod.read_before, saved = (lambda kodi, roots: before), rename_mod.read_before
+    rename_mod.read_before, saved = (lambda kodi, roots, backup=None: before), rename_mod.read_before
     try:
         on = health.apply({"fixes": {"renames": [fix]}}, ["renames"], On())
     finally:
@@ -130,7 +130,7 @@ def test_films_get_title_and_year_and_a_folder_of_their_own(env, monkeypatch):  
         def check(self):
             return {"connected": True}
 
-    monkeypatch.setattr("muthur.rename.read_before", lambda kodi, roots: {})
+    monkeypatch.setattr("muthur.rename.read_before", lambda kodi, roots, backup=None: {})
     monkeypatch.setattr("muthur.rename.follow_in_kodi", lambda kodi, renamed, roots, before: {"followed": len(renamed), "problems": []})
     before = sorted(str(p.relative_to(film)) for p in film.rglob("*") if p.is_file())
     result = health.apply(plan, ["film-renames"], On())

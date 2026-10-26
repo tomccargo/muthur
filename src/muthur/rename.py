@@ -87,14 +87,18 @@ def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], 
     return {"followed": followed, "problems": problems}
 
 
-def read_before(kodi, roots: dict[str, str]) -> dict:
-    """Kodi's video items by lower-case library path ('tv/show/season 1/x.mkv'), with play count and resume point."""
+def read_before(kodi, roots: dict[str, str], backup=None) -> dict:
+    """Kodi's video items by lower-case library path ('tv/show/season 1/x.mkv'), with play count and resume point.
+    backup(items): muthur's watched backup taken from the same read, so it is current at the moment of a rename."""
     from .kodi import folder_name
     from .watched import Watched
 
     prefixes = {lib: kodi.source_prefix(folder_name(root)) for lib, root in roots.items()}
+    items = Watched.read_kodi(kodi)
+    if backup:
+        backup(items)
     out = {}
-    for i in Watched.read_kodi(kodi):
+    for i in items:
         for lib, pre in prefixes.items():
             if pre and (i["file"] or "").lower().startswith(pre.lower()):
                 out[f"{lib}/{i['file'][len(pre):]}".lower()] = i

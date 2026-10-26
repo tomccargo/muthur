@@ -204,14 +204,15 @@ class Health:
                                              "label": f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}"})
 
     # -- fixing ------------------------------------------------------------------------------
-    def apply(self, plan: dict, kinds: list[str], kodi=None, job=None) -> dict:
+    def apply(self, plan: dict, kinds: list[str], kodi=None, job=None, backup=None) -> dict:
+        """backup(items): muthur's watched backup, taken from Kodi right before any rename (rename.read_before)."""
         items = [(k, x) for k in FIXES if k in kinds for x in plan["fixes"].get(k, [])]
         self._renamed: list[tuple[str, str]] = []
         self._before: dict | None = None  # Kodi's items before the renames; None: Kodi is off, so nothing is renamed
         if {"renames", "film-renames"} & set(kinds) and kodi and kodi.check().get("connected"):
             if job:
                 job.begin("Reading what Kodi knows", 0)
-            self._before = renaming.read_before(kodi, self.roots)
+            self._before = renaming.read_before(kodi, self.roots, backup)
         if job:
             job.step, job.total, job.done = None, len(items), 0
         run = self.journal.start("health")
