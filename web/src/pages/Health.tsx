@@ -24,13 +24,14 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'kodi-entries': { title: 'Remove old entries from Kodi', what: 'Films and episodes Kodi lists twice: once where the video was before a rename, or twice for the same file. The entry that stays gets the watched status first. Only while Kodi is on; no files change.' },
   'subtitle-timing': { title: 'Stretch subtitles that are out of sync', what: 'Subtitle files from another release: too fast, too slow or shifted, measured against the subtitles inside the video. A stretched copy takes their place; the original goes to quarantine.' },
   'subtitle-misfit': { title: 'Move subtitles that don’t fit to quarantine', what: 'Subtitle files that match the video nowhere, even stretched (another cut of the film).' },
+  'show-rematch': { title: 'Match shows to the show their episodes are', what: 'A folder whose episode titles are another TMDB show’s (the US Shameless in a folder matched to the UK one). Its tvshow.nfo, episode NFOs, thumbnails and artwork become that show’s (the old ones are kept); episodes of the old show go to its own folder, or to quarantine when it has them already. Kodi re-reads each item.' },
   extras: { title: 'Move extras to the show’s Extras folder', what: 'Interviews, featurettes, openings and the like that sit between the episodes. Kodi doesn’t list them as episodes; in Extras its Extras add-on finds them. Nothing else changes.' },
 };
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
 // The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
   { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },  // shown first, then Missing in Kodi, the questions, Tidy up
-  { id: 'kodi', title: 'Missing in Kodi', kinds: ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
+  { id: 'kodi', title: 'Missing in Kodi', kinds: ['show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
   { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'subtitle-timing', 'subtitle-misfit', 'kodi-entries', 'extras', 'leftovers', 'empty-films'] },
 ];
 

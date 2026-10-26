@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 import re
 import time
+from collections import Counter
 
 from . import kodi_entries, nfo_write, quarantine, subfit, subtitles
 from . import rename as renaming
@@ -26,12 +27,14 @@ from .naming import LATIN_SCRIPT, display_title, movie_path
 from .nfo import read_nfo
 from .parse import EXTRAS_DIR, is_video, parse_show_folder
 from .scores import ScoreRefresh, with_imdb
-from .text import similarity
+from .text import best_similarity, normalize, similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
-FIXES = ("imdb-data", "leftovers", "empty-films", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
+FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
          "renames", "film-renames", "kodi-entries")
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
+OLD_ART = re.compile(r"(?i)^(season(\d+|-all|-specials)-(poster|banner|fanart|landscape)|banner|landscape|clearart|logo|characterart)\.(jpg|png)$")
+GENERIC_TITLE =re.compile(r"(?i)^(episode|ep|part|chapter|aflevering|deel|afl)\.?\s*\d+$")  # says nothing about the show
 
 
 class Health:
@@ -51,6 +54,11 @@ class Health:
         """kodi_items, prefixes: Kodi's films and episodes (Watched.read_kodi) and its source per library, when Kodi
         answered; then Kodi's old entries are checked too."""
         self._have = None
+        # Which folders each TMDB show is in: a folder found to be another show sends the old show's episodes to its own.
+        self._shows_of: dict[str, list[dict]] = {}
+        for sh in lib["shows"]:
+            if sh["ids"].get("tmdb"):
+                self._shows_of.setdefault(str(sh["ids"]["tmdb"]), []).append(sh)
         fixes: dict[str, list] = {k: [] for k in FIXES}
         manual: dict[str, list] = {"shows": [], "seasons": [], "numbers": [], "films": []}
         if job:
@@ -91,6 +99,9 @@ class Health:
                 manual["shows"].append({"path": f"TV/{folder}", "why": f"muthur can't place this show on TMDB with certainty.{guess}"})
         if not tmdb_id:
             return
+        if self.show_order(folder) is None and (rematch := self._rematch(folder, eps, tmdb_id)):
+            fixes["show-rematch"].append(rematch)
+            return  # everything else about this folder would be judged against the wrong show
         details = self.tmdb.tv(tmdb_id) or {}
         counts = {s["season_number"]: s.get("episode_count") or 0 for s in details.get("seasons", [])}
         title = show["title"] if show["nfo"] else details.get("name") or folder
@@ -303,6 +314,116 @@ class Health:
                 self._sized.add(s)  # its episodes up to TMDB's count are confirmed where they are
         return out
 
+    def _listing(self, tmdb_id: int, seasons=None) -> dict[tuple[int, int], dict]:
+        """A TMDB show's episodes, (season, episode) -> TMDB's episode: the seasons given, or all of them."""
+        if seasons is None:
+            seasons = [s["season_number"] for s in (self.tmdb.tv(tmdb_id) or {}).get("seasons", [])]
+        return {(s, int(x["episode_number"])): x for s in seasons for x in (self.tmdb.tv_season(tmdb_id, s) or {}).get("episodes", [])}
+
+    @staticmethod
+    def _fits(f: tuple, listing: dict[tuple[int, int], dict], anywhere: bool) -> bool:
+        """A file (episode, its title, the year in its name) is this show's: its title is TMDB's at its number (or
+        anywhere in the show), or, without a real title ('Episode 1'), the year in its name is the year that episode aired."""
+        e, named, year = f
+        at = listing.get((e["season"], e["episodes"][0]))
+        if named:
+            return bool(at and same_title(named, at.get("name") or "")) or anywhere and any(
+                same_title(named, x.get("name") or "") for x in listing.values())
+        return bool(year and at and (at.get("air_date") or "")[:4] == str(year))
+
+    def _rematch(self, folder: str, eps: list[dict], tmdb_id: int) -> dict | None:
+        """A folder matched to the wrong show (26 Oct: 'Shameless' held the US series, matched to the UK one): the
+        titles in its episodes' names are hardly the matched show's, and most are one other show's of that name.
+        Only when certain: at least 6 titled episodes, under 30% fit the matched show, 70% or more the other one.
+        The episodes that are the old show's ('strays') go to that show's folder, or to quarantine when it has them.
+
+        Without episode titles (Magi's '[AnimeRG] Magi - The Labyrinth of Magic - 01', matched to 'MaXi'): when the
+        folder's name is nothing like the matched show's names and TMDB places the folder's name with certainty on
+        another show, as for a download."""
+        files = []
+        for e in eps:
+            if e["season"] is None or not e["episodes"] or e["damaged"]:
+                continue
+            p = self.store.parsed("episode", [folder, *e["file"].split("/")])
+            t = _bare(p.episode_title) if p.episode_title else ""
+            files.append((e, t if len(t) >= 4 and not GENERIC_TITLE.match(t) else None, p.year))
+        # A 'title' in three names or more is the show's name or a release tag, not an episode's (two-parters share one).
+        seen = Counter(normalize(f[1]) for f in files if f[1])
+        files = [(e, t if t and seen[normalize(t)] <= 2 else None, y) for e, t, y in files]
+        titled = [f for f in files if f[1]]
+        old_details = self.tmdb.tv(tmdb_id) or {}
+        old_name = old_details.get("name") or "?"
+        if old_details.get("first_air_date"):
+            old_name += f" ({old_details['first_air_date'][:4]})"
+
+        def share(listing: dict, anywhere: bool) -> float:
+            return sum(self._fits(f, listing, anywhere) for f in titled) / len(titled)
+
+        if len(titled) < 6:
+            return self._rematch_by_name(folder, files, tmdb_id, old_details, old_name)
+        seasons = sorted({f[0]["season"] for f in files})
+        if share(self._listing(tmdb_id, seasons), False) >= 0.3:
+            return None  # the usual case, decided on the seasons Health reads anyway
+        old = self._listing(tmdb_id)
+        if share(old, True) >= 0.3:
+            return None  # another order or numbering, but this show's episodes
+        p = parse_show_folder(folder)
+        best, best_share, best_listing = None, 0.0, {}
+        for r in (self.tmdb.search_tv(p.title or folder) or [])[:6]:
+            if r.get("id") == tmdb_id:
+                continue
+            listing = self._listing(r["id"])
+            if (s := share(listing, True)) > best_share:
+                best, best_share, best_listing = r, s, listing
+        if not best or best_share < 0.7:
+            return None
+        new_id = int(best["id"])
+        name = best.get("name") or folder
+        year = (best.get("first_air_date") or "")[:4]
+        mine, strays = [], []
+        homes = [sh for sh in getattr(self, "_shows_of", {}).get(str(tmdb_id), []) if sh["folder"] != folder]
+        for f in files:
+            e = f[0]
+            if self._fits(f, best_listing, False) or not self._fits(f, old, True):
+                if (e["season"], e["episodes"][0]) in best_listing:
+                    mine.append([e["file"], e["season"], e["episodes"][0]])
+                continue
+            s, n = e["season"], e["episodes"][0]
+            home = homes[0] if homes else None
+            if not home:
+                continue  # the old show's, with no folder of its own: judged against the new match next time
+            if any(x["season"] == s and n in x["episodes"] for x in home["episodes"]):
+                strays.append({"file": e["file"], "to": None, "why": f"{home['folder']} has S{s:02d}E{n:02d} already"})
+            else:
+                where = next((x["file"].rsplit("/", 1)[0] for x in home["episodes"] if x["season"] == s and "/" in x["file"]), f"Season {s:02d}")
+                strays.append({"file": e["file"], "to": f"{home['folder']}/{where}/{e['file'].rsplit('/', 1)[-1]}",
+                               "why": f"{home['folder']} is that show's folder"})
+        return {"path": f"TV/{folder}", "from": tmdb_id, "to": new_id, "show": name,
+                "label": f"{folder}: {name}{f' ({year})' if year else ''}, not {old_name}",
+                "why": f"{round(best_share * len(titled))} of {len(titled)} episode titles are {name}'s; "
+                       f"{round(share(old, True) * len(titled))} are {old_name}'s",
+                "episodes": mine, "strays": strays}
+
+    def _rematch_by_name(self, folder: str, files: list[tuple], tmdb_id: int, old_details: dict, old_name: str) -> dict | None:
+        p = parse_show_folder(folder)
+        if not p.title or not files:
+            return None
+        names = [old_details.get("name") or "", old_details.get("original_name") or "",
+                 *[a.get("title") or "" for a in (old_details.get("alternative_titles") or {}).get("results", [])]]
+        if best_similarity(p.title, [n for n in names if n]) >= 0.6:
+            return None  # the folder is called (nearly) what it is matched to
+        wanted = {(f[0]["season"], n) for f in files for n in f[0]["episodes"]}
+        m = identify_show(self.tmdb, p.title, p.year, p.country, wanted)
+        if m.status != "auto" or not m.best or m.best.tmdb_id == tmdb_id:
+            return None
+        new_id = m.best.tmdb_id
+        listing = self._listing(new_id, sorted({s for s, _ in wanted}))
+        mine = [[f[0]["file"], f[0]["season"], f[0]["episodes"][0]] for f in files if (f[0]["season"], f[0]["episodes"][0]) in listing]
+        return {"path": f"TV/{folder}", "from": tmdb_id, "to": new_id, "show": m.best.title,
+                "label": f"{folder}: {m.best.title}{f' ({m.best.year})' if m.best.year else ''}, not {old_name}",
+                "why": f"the folder's name is {m.best.title}'s, by its name, year and episodes; nothing like {old_name}",
+                "episodes": mine, "strays": []}
+
     def order_map(self, group_id: str) -> dict[tuple[int, int], dict]:
         """One of TMDB's other orders for a show (DVD, production…; an 'episode group'): the library's (season,
         episode) → TMDB's episode, which keeps its own season_number and episode_number (the aired order)."""
@@ -467,6 +588,68 @@ class Health:
         self._quarantine(run, x["path"], "A leftover in the library: a download site's note or other junk." if x.get("why") == "junk"
                          else "Release notes named like the video’s NFO but for capitals; Kodi could read them instead of the NFO."
                          if x.get("why") == TWIN else "A leftover in the library: it belonged to a video that is gone.")
+
+    def _put(self, run: int, path: str, data: bytes | None) -> None:
+        """A file written over what is there (a copy of the old one kept), or a new one."""
+        if not data:
+            return
+        full = self._full(path)
+        if os.path.isfile(full):
+            self.journal.replace(run, path, full, data, self.backups)
+        else:
+            self.journal.create(run, path, full, data)
+
+    def _show_rematch(self, run, x, nfos):
+        """'This is another show': the folder's NFOs and artwork become the new show's (the old ones kept, so History
+        can put them back), the old show's season artwork goes to quarantine, and the old show's episodes in it go to
+        that show's folder, or to quarantine when it has them already."""
+        lib, _, folder = x["path"].partition("/")
+        show = self.tmdb.tv_full(x["to"])
+        if not show:
+            raise ValueError("TMDB didn't return the show")
+        if not os.path.isdir(self._full(x["path"])):
+            raise ValueError("the folder isn't there any more")
+        keep = set(self.store.get("titles.keepOriginal", sorted(LATIN_SCRIPT)))
+        title = display_title(show.get("name") or x["show"], show.get("original_name"), show.get("original_language"), keep)
+        imdb_id = (show.get("external_ids") or {}).get("imdb_id")
+        for s in x["strays"]:
+            path = f"{x['path']}/{s['file']}"
+            if not os.path.isfile(self._full(path)):
+                continue
+            d, stem = os.path.split(os.path.splitext(self._full(path))[0])
+            if s["to"]:
+                renaming.rename(self.journal, run, self.roots[lib], lib, f"{folder}/{s['file']}", s["to"])
+                continue
+            for n in [os.path.basename(self._full(path)), *renaming.sidecars(d, stem)]:
+                self._quarantine(run, f"{path.rsplit('/', 1)[0]}/{n}", f"An episode of another show in {folder} ({s['why']}).")
+        self._put(run, f"{x['path']}/tvshow.nfo", nfo_write.tvshow_nfo(show, title, self.imdb.rating(imdb_id)))
+        nfos.append(f"{x['path']}/tvshow.nfo")
+        for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
+            if show.get(key):
+                self._put(run, f"{x['path']}/{name}", self.tmdb.image(show[key], size))
+        if logo := nfo_write.best_logo(show):
+            self._put(run, f"{x['path']}/clearlogo.png", self.tmdb.image(logo, "w500"))
+        for n in sorted(os.listdir(self._full(x["path"]))):
+            if OLD_ART.match(n):
+                self._quarantine(run, f"{x['path']}/{n}", f"Artwork of the show {folder} was matched to before.")
+        seasons: dict[int, list] = {}
+        for file, s, ep in x["episodes"]:
+            video = f"{x['path']}/{file}"
+            if not os.path.isfile(self._full(video)):
+                continue
+            listed = seasons.setdefault(s, (self.tmdb.tv_season(x["to"], s) or {}).get("episodes", []))
+            tm = next((e for e in listed if e.get("episode_number") == ep), None)
+            if not tm:
+                continue
+            stem = video.rsplit(".", 1)[0]
+            self._put(run, stem + ".nfo", nfo_write.episode_nfo(title, s, tm, x["to"], number=ep,
+                                                                 imdb=self.imdb.episode(imdb_id, s, ep, len(listed))))
+            nfos.append(stem + ".nfo")
+            if tm.get("still_path"):
+                self._put(run, stem + "-thumb.jpg", self.tmdb.image(tm["still_path"], "original"))
+        year = int(show["first_air_date"][:4]) if (show.get("first_air_date") or "")[:4].isdigit() else None
+        self.store.remember("tv", title, x["to"], year, title, folder, "confirmed")
+        self.scores._shows.pop(folder, None)  # read from the new tvshow.nfo next time
 
     def _subtitle_timing(self, run, x, nfos):
         """A subtitle file at another speed or shifted (another release): stretched to fit the video, measured against

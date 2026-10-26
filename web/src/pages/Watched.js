@@ -1,0 +1,31 @@
+import { Fragment as _Fragment, jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { useState } from 'react';
+import { api } from '../api';
+import { Dot, Spinner } from '../components';
+import { when } from '../labels';
+// The watched-status backup on the Dashboard: Kodi is the master, muthur keeps the history (§11).
+export function WatchedPanel({ status, refresh }) {
+    const [message, setMessage] = useState(null);
+    const [working, setWorking] = useState(false); // which button's request runs
+    const [accepting, setAccepting] = useState(false);
+    const [preview, setPreview] = useState(null);
+    const w = status?.watched;
+    const kodiSet = Boolean(status?.kodi);
+    const run = (fn, done, key = 'run') => {
+        setMessage(null);
+        setWorking(key);
+        fn().then((r) => { setMessage({ kind: 'note', text: done(r) }); refresh(); })
+            .catch((e) => setMessage({ kind: 'error', text: e.message }))
+            .finally(() => setWorking(false));
+    };
+    const look = () => {
+        setMessage(null);
+        setWorking('look');
+        api.restorePreview().then(setPreview).catch((e) => setMessage({ kind: 'error', text: e.message })).finally(() => setWorking(false));
+    };
+    return (_jsxs("section", { className: "panel", "aria-labelledby": "watched-h", style: { display: 'flex', flexDirection: 'column', gap: 12 }, children: [_jsx("div", { className: "panel-head", style: { marginBottom: 0 }, children: _jsx("h2", { id: "watched-h", children: "Watched status" }) }), w?.paused ? (_jsxs("div", { className: "banner banner-error", role: "alert", style: { flexDirection: 'column', alignItems: 'stretch' }, children: [_jsx("strong", { children: "The backup stopped following Kodi." }), _jsxs("span", { children: [w.paused.why, " That is what a lost or replaced Kodi database looks like, so muthur kept the last good state", w.last ? ` from ${when(w.last.at)}` : '', "."] }), accepting ? (_jsxs(_Fragment, { children: [_jsx("span", { children: "Accept Kodi\u2019s state as it is now? The backup then follows it again, and the items that turned unwatched are recorded as unwatched. The older history stays, so a restore to an earlier moment stays possible." }), _jsxs("div", { className: "actions", style: { justifyContent: 'flex-end' }, children: [_jsx("button", { className: "btn btn-secondary btn-sm", type: "button", autoFocus: true, onClick: () => setAccepting(false), children: "Cancel" }), _jsx("button", { className: "btn btn-danger btn-sm", type: "button", disabled: Boolean(working), "aria-busy": working === 'accept', onClick: () => { setAccepting(false); run(api.acceptWatched, () => 'The backup follows Kodi again.', 'accept'); }, children: "Accept Kodi\u2019s state" })] })] })) : (_jsxs("div", { className: "actions", children: [_jsx("button", { className: "btn btn-danger-outline btn-sm", type: "button", onClick: () => setAccepting(true), children: "Kodi\u2019s state is right\u2026" }), _jsx("span", { className: "small", children: "If Kodi lost its database, restore below instead." })] }))] })) : w?.last ? (_jsxs("span", { className: "status num", children: [_jsx(Dot, { kind: "dot-success" }), "Backed up ", when(w.last.at), " \u00B7 ", w.last.watched.toLocaleString('en-GB'), " of ", w.last.items.toLocaleString('en-GB'), " watched \u00B7 ", w.live ? 'live' : 'hourly'] })) : (_jsxs("span", { className: "status", children: [_jsx(Dot, {}), kodiSet ? 'Not backed up yet' : 'Needs the Kodi connection'] })), preview && (_jsx("div", { className: "banner banner-warn", role: "group", "aria-label": "Restore watched status", style: { flexDirection: 'column', alignItems: 'stretch' }, children: preview.count === 0 ? (_jsxs(_Fragment, { children: [_jsx("span", { children: "Kodi already has everything the backup has. Nothing to restore." }), _jsx("div", { className: "actions", style: { justifyContent: 'flex-end' }, children: _jsx("button", { className: "btn btn-secondary btn-sm", type: "button", onClick: () => setPreview(null), children: "Close" }) })] })) : (_jsxs(_Fragment, { children: [_jsxs("strong", { children: ["Restore ", preview.count, " ", preview.count === 1 ? 'item' : 'items', " in Kodi?"] }), _jsxs("span", { children: [preview.watched > 0 && `${preview.watched} get their play count back. `, preview.resume > 0 && `${preview.resume} get their resume point back. `, "Nothing is lowered or marked unwatched."] }), _jsxs("span", { className: "small", children: [preview.sample.slice(0, 12).join(' · '), preview.count > 12 ? ` · and ${preview.count - 12} more` : ''] }), _jsxs("div", { className: "actions", style: { justifyContent: 'flex-end' }, children: [_jsx("button", { className: "btn btn-secondary btn-sm", type: "button", autoFocus: true, onClick: () => setPreview(null), children: "Cancel" }), _jsxs("button", { className: "btn btn-danger btn-sm", type: "button", disabled: Boolean(working), "aria-busy": working === 'restore', onClick: () => {
+                                        const check = preview.check;
+                                        setPreview(null);
+                                        run(() => api.restore(check), (r) => `Restored ${r.done} in Kodi${r.failed ? `; ${r.failed} didn’t take, try again` : ''}.`, 'restore');
+                                    }, children: ["Restore ", preview.count] })] })] })) })), message && _jsx("div", { className: `banner banner-${message.kind}`, role: "alert", children: message.text }), _jsxs("div", { className: "actions", children: [_jsx("button", { className: "btn btn-secondary btn-sm", type: "button", disabled: Boolean(working), "aria-busy": working === 'backup', ...(!kodiSet ? { 'aria-disabled': true, title: 'Set up Kodi in Settings first' } : {}), onClick: kodiSet ? () => run(api.backupWatched, () => 'Backed up just now.', 'backup') : undefined, children: "Back up now" }), _jsx("button", { className: "btn btn-danger-outline btn-sm", type: "button", disabled: Boolean(working), "aria-busy": working === 'look', ...(!kodiSet || !w?.last ? { 'aria-disabled': true, title: !kodiSet ? 'Set up Kodi in Settings first' : 'Nothing is backed up yet' } : {}), onClick: kodiSet && w?.last ? look : undefined, children: "Restore to Kodi\u2026" }), working === 'restore' && _jsxs("span", { className: "small", children: [_jsx(Spinner, {}), " Restoring in Kodi\u2026"] })] })] }));
+}
