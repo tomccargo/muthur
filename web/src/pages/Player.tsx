@@ -318,6 +318,8 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
     }
     let stop = false;
     setSubNote('Copying the subtitles out of the file…');
+    holding.current = true;  // the film waits for its subtitles, then starts by itself
+    video.current?.pause();
     setSubProgress(0);
     api.playerExtract(id).then(async () => {
       // ffmpeg reads the whole film: the job says how far (seconds read of the film), shown as a bar.
@@ -337,12 +339,30 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
           else if (job?.error) setSubNote(`The subtitles couldn’t be copied out: ${job.error}`);
           setSubProgress(null);
           if (!job?.error) setSubNote(null);
+          release();
         }
         return;
       }
-    }).catch((e: Error) => { if (!stop) { setSubProgress(null); setSubNote(`The subtitles couldn’t be copied out: ${e.message}`); } });
-    return () => { stop = true; };
+      if (!stop) release();
+    }).catch((e: Error) => {
+      if (!stop) { setSubProgress(null); setSubNote(`The subtitles couldn’t be copied out: ${e.message}`); release(); }
+    });
+    return () => { stop = true; holding.current = false; };
   }, [info, id]);
+  // While the subtitles are copied the film waits (autoplay is paused at once); then it starts by itself, with or
+  // without them (asked for on 26 Oct).
+  const holding = useRef(false);
+  const release = () => {
+    holding.current = false;
+    window.setTimeout(() => void video.current?.play().catch(() => undefined), 400);  // after the new tracks are in
+  };
+  useEffect(() => {
+    const v = video.current;
+    if (!v) return;
+    const hold = () => { if (holding.current) v.pause(); };
+    v.addEventListener('play', hold);
+    return () => v.removeEventListener('play', hold);
+  }, [info]);
   useEffect(() => {
     const onFull = () => setFull(document.fullscreenElement === box.current);
     document.addEventListener('fullscreenchange', onFull);
