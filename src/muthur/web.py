@@ -1375,6 +1375,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if job:
             job.begin("Looking for duplicates", 0)
         store.save_snapshot("duplicates", {"at": time.time(), "groups": dups.find(lib, job)})
+        # The player marks what plays in Kodi only from each video's codecs: read them for videos that are new since.
+        new = [full for full in (library_full(p) for p in player.catalogue(lib).values()) if play_facts.cached(full) is None]
+        if new and job:
+            job.begin("Reading how new videos play", len(new))
+        for n, full in enumerate(new, 1):
+            play_facts.get(full)
+            if job:
+                job.done = n
         plan["version"] = __version__
         store.save_snapshot("health", plan)
         health_counts(plan)
