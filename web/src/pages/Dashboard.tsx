@@ -3,7 +3,7 @@ import { WatchedPanel } from './Watched';
 import { api, type PathState, type Status } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, useElapsed } from '../components';
-import { when } from '../labels';
+import { count, when } from '../labels';
 import { Link } from '../nav';
 
 // The Dashboard is numbers and status: what each panel means is in the docs and Settings, not repeated here.
@@ -177,21 +177,20 @@ function SetupChecklist({ status }: { status: Status }) {
   );
 }
 
-// What's wrong in the library, each kind a tile that opens where it's fixed. Only kinds with something in them.
+// What's wrong in the library, in Health's four groups (DESIGN.md §1.11): a number per group and a line naming
+// what is in it. Only groups with something in them.
 function LibraryProblems({ status }: { status: Status | null }) {
   const l = status?.library ?? {};
-  const tiles: [string, number | undefined, string][] = [
-    ['Shows without IMDb scores', l.imdbData, '/health'],
-    ['Scores to add', l.scores, '/health'],
-    ['NFOs to write', l.nfos, '/health'],
-    ['Duplicates', status?.duplicatesAt ? status.duplicates : undefined, '/duplicates'],
-    ['Posters to replace', l.posters, '/health'],
-    ['Subtitles Kodi misses', l.subtitles, '/health'],
-    ['Names to fix', l.renames, '/health'],
-    ['Questions', l.questions, '/health'],
-    ['Leftovers', l.leftovers, '/health'],
+  const dups = status?.duplicatesAt ? status.duplicates : 0;
+  const parts = (...p: [number | undefined, string, string?][]) =>
+    p.filter(([n]) => (n ?? 0) > 0).map(([n, one, many]) => count(n ?? 0, one, many)).join(' · ');
+  const tiles: [string, number, string][] = [
+    ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer'],
+    ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to'])],
+    ['What Kodi shows', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles'])],
+    ['Tidy up', (l.renames ?? 0) + dups + (l.leftovers ?? 0), parts([l.renames, 'name'], [dups, 'duplicate'], [l.leftovers, 'leftover'])],
   ];
-  const shown = tiles.filter(([, n]) => (n ?? 0) > 0);
+  const shown = tiles.filter(([, n]) => n > 0);
   if (!shown.length && !l.at) {
     // Never counted (a new install, or kinds of fixes added by an update): not 'in order', just not known yet.
     return <span className="status"><Dot kind="dot-warning" />Not checked yet · <Link to="/health">Check in Health</Link></span>;
@@ -200,9 +199,11 @@ function LibraryProblems({ status }: { status: Status | null }) {
     return <span className="status"><Dot kind="dot-success" />{status?.duplicatesAt ? 'In order' : 'In order · duplicates not checked yet'}</span>;
   }
   return (
-    <div className="tiles inset">
-      {shown.map(([label, n, to]) => (
-        <Link key={label} className="tile" to={to}><span className="label">{label}</span><strong>{(n ?? 0).toLocaleString('en-GB')}</strong></Link>
+    <div className="tiles inset groups">
+      {shown.map(([label, n, what]) => (
+        <Link key={label} className="tile" to="/health">
+          <span className="label">{label}</span><strong>{n.toLocaleString('en-GB')}</strong><span className="sub">{what}</span>
+        </Link>
       ))}
     </div>
   );

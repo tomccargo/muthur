@@ -96,9 +96,12 @@ class Health:
                 fixes["imdb-scores"].append({"path": f"TV/{folder}/tvshow.nfo", "score": list(score), "label": title})
 
         numbered = [e for e in eps if e["season"] is not None and e["episodes"] and not e["damaged"]]
+        ask = {"tmdb": tmdb_id, "show": title}  # a question about an episode names its show, so it can be answered there
         for e in eps:
             if e not in numbered:
-                manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", "why": "The episode number in the name is damaged or missing."})
+                manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask, "noNumber": True,
+                                          "why": "The episode number in the name is damaged or missing."})
+        trusted = set(self.store.get("health.trusted") or [])  # "the number is right": the reader's word over muthur's doubt
         titles: dict[int, dict[int, str]] = {}
 
         def season(s: int) -> dict[int, str]:
@@ -112,23 +115,24 @@ class Health:
         # The season's own list is fresher than the show's episode counts, which TMDB caches longer.
         differs = {s for s, top in highest.items() if top > max(counts.get(s, 0), len(season(s)))}
         for s in sorted(differs):
-            manual["seasons"].append({"path": f"TV/{folder}", "season": s,
+            manual["seasons"].append({"path": f"TV/{folder}", "season": s, **ask,
                                       "why": f"Your library numbers season {s} up to episode {highest[s]}; TMDB has {len(season(s))}. "
                                              "Episodes whose name confirms TMDB's title at their number are still fixed; the others are listed."})
         for e in numbered:
             s, n = e["season"], e["episodes"][0]
             written = e["nfo"] and (e["imdb"] or len(e["episodes"]) > 1)  # nothing to write or score: only its name is checked
             named = self.store.parsed("episode", [folder, *e["file"].split("/")]).episode_title
-            if s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n])):
+            sure = f"TV/{folder}/{e['file']}" in trusted
+            if not sure and s in differs and not (named and season(s).get(n) and same_title(named, season(s)[n])):
                 if not written:
-                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
+                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask,
                                               "why": f"Season {s} is numbered differently from TMDB, and the name doesn't confirm this is "
                                                      f"TMDB's S{s:02d}E{n:02d} “{season(s).get(n) or 'nothing'}”."})
                 continue
-            if named and season(s).get(n) and similarity(_bare(named), _bare(titles[s][n])) < OTHER_EPISODE and any(
+            if not sure and named and season(s).get(n) and similarity(_bare(named), _bare(titles[s][n])) < OTHER_EPISODE and any(
                     similarity(_bare(named), _bare(t or "")) >= SAME_EPISODE for k, t in titles[s].items() if k != n):
                 if not written:
-                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}",
+                    manual["numbers"].append({"path": f"TV/{folder}/{e['file']}", **ask,
                                               "why": f"Named “{named}”, but TMDB’s S{s:02d}E{n:02d} is “{titles[s][n]}”."})
                 continue
             label = f"{title} S{s:02d}E{n:02d}"

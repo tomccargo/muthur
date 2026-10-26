@@ -120,7 +120,8 @@ export type DupResult = { applied: number; stopped: number; items: { id: string;
 
 export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
-export type Question = { path: string; why: string; season?: number };
+// A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
+export type Question = { path: string; why: string; season?: number; tmdb?: number; show?: string; noNumber?: boolean };
 export type Fixes = {
   at: number | null;
   fixes: Partial<Record<FixKind, { count: number; sample: FixItem[] }>>;
@@ -212,6 +213,7 @@ export const api = {
     call<{ changed: number }>('/api/fixes/leave', { method: 'POST', body: JSON.stringify(body) }),
   quarantineDownload: (id: string) => call<{ run: number }>('/api/inbox/quarantine', { method: 'POST', body: JSON.stringify({ id }) }),
   checkFixes: () => call<Job>('/api/fixes/check', { method: 'POST' }),
+  trustNumber: (path: string) => call<{ fixes: Record<string, number>; questions: number }>('/api/fixes/trust', { method: 'POST', body: JSON.stringify({ path }) }),
   applyFixes: (kinds: FixKind[]) => call<Job>('/api/fixes/apply', { method: 'POST', body: JSON.stringify({ kinds }) }),
   chooseForLibrary: (kind: Kind, path: string, tmdbId: number) =>
     call<{ fixes: Partial<Record<FixKind, number>>; questions: number }>('/api/fixes/choose', { method: 'POST', body: JSON.stringify({ kind, path, tmdbId }) }),

@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
 import { QuarantinePanel } from './Quarantine';
 import { TitleCard } from './Review';
-import type { Card, Kind } from '../api';
+import type { Card, Kind, Season } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
 import { count, libraryPath, middle, when } from '../labels';
+import { Link } from '../nav';
 
 // What each fix does to the reader's files (DESIGN.md §1.7: name what happens, not the record).
 const FIX: Record<FixKind, { title: string; what: string }> = {
@@ -22,6 +23,69 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
 };
 const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'renames', 'film-renames', 'leftovers', 'empty-films'];
+// The fixes in three groups, after "Questions for you" (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
+export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
+  { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },
+  { id: 'kodi', title: 'What Kodi shows', kinds: ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
+  { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'leftovers', 'empty-films'] },
+];
+
+// The answers to a question about an episode's number (or a season's): which episode it is, that its number is
+// right, or the show's page; leaving it as is stays possible.
+function EpisodeAnswers({ q, kind, onDone, leave }: { q: Question; kind: string; onDone: (text: string) => void; leave: () => void }) {
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [picker, setPicker] = useState<Season | null>(null);
+  const [season, setSeason] = useState<number>(Number((q.path.match(/S(\d{1,3})E\d/i) ?? [])[1] ?? q.season ?? 1));
+  const [episode, setEpisode] = useState<number | null>(null);
+  const folder = q.path.split('/')[1] ?? '';
+  const run = (key: string, request: () => Promise<unknown>, text: string) => {
+    setBusy(key);
+    setError(null);
+    request().then(() => onDone(text)).catch((e: Error) => setError(e.message)).finally(() => setBusy(null));
+  };
+  const load = (s: number) => {
+    if (!q.tmdb) return;
+    setSeason(s);
+    setEpisode(null);
+    api.season(q.tmdb, s).then(setPicker).catch((e: Error) => setError(e.message));
+  };
+  const picked = picker?.episodes.find((x) => x.episode === episode);
+  return (
+    <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <span className="actions">
+        {kind === 'numbers' && q.tmdb && !picker && <button type="button" className="btn btn-secondary btn-sm" onClick={() => load(season)}>Which episode is it?</button>}
+        {kind === 'numbers' && !q.noNumber && (
+          <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'trust'}
+            title="Its NFO and score are written by this number at the next fix; nothing is renamed by this"
+            onClick={() => run('trust', () => api.trustNumber(q.path), `${q.show ?? folder}: the number of ${q.path.split('/').pop()} is taken as right.`)}>The number is right</button>
+        )}
+        <Link to={`/library?${new URLSearchParams({ folder })}`} className="btn btn-ghost btn-sm">Open the show</Link>
+        <button type="button" className="btn-link small" onClick={leave}>Leave as is</button>
+      </span>
+      {picker && (
+        <span className="actions">
+          <select className="field" aria-label="Season" value={season} onChange={(e) => load(Number(e.target.value))} style={{ width: 'auto' }}>
+            {picker.seasons.map((s) => <option key={s.season} value={s.season}>{s.season === 0 ? 'Specials' : `Season ${s.season}`}</option>)}
+          </select>
+          <select className="field" aria-label="Episode" value={episode ?? ''} onChange={(e) => setEpisode(Number(e.target.value) || null)} style={{ width: 'auto', maxWidth: '100%' }}>
+            <option value="">Which episode?</option>
+            {picker.episodes.map((x) => <option key={x.episode} value={x.episode}>{`E${String(x.episode).padStart(2, '0')}`} · {x.title ?? '—'}</option>)}
+          </select>
+          {picked && (
+            <button type="button" className="btn btn-secondary btn-sm" aria-busy={busy === 'rename'}
+              onClick={() => run('rename', () => api.episodeRename(q.path, { season, episode: picked.episode }),
+                `Renaming to S${String(season).padStart(2, '0')}E${String(picked.episode).padStart(2, '0')} “${picked.title}”: the bar at the top shows it.`)}>
+              It’s S{String(season).padStart(2, '0')}E{String(picked.episode).padStart(2, '0')} “{picked.title}”
+            </button>
+          )}
+        </span>
+      )}
+      {picker && <span className="small muted">The file gets that number and title, and its NFO describes that episode. Kodi keeps the watched status (Kodi has to be on).</span>}
+      {error && <span className="banner banner-error" role="alert">{error}</span>}
+    </span>
+  );
+}
 // 'TV/The Office (US)' for a question inside a show's folder; null for anything else.
 const showOf = (q: Question | undefined) => (q && q.path.startsWith('TV/') && q.path.split('/').length > 1 ? q.path.split('/').slice(0, 2).join('/') : null);
 
@@ -91,6 +155,8 @@ export function HealthPage({ status, refresh }: StatusHook) {
     setError(null);
     request().then(refresh).catch((e: Error) => setError(e.message)).finally(() => setStarting(null));
   };
+  // An answered question: what happened shows at the top, and the plan is read again (the show was checked again).
+  const answered = (text: string) => { setNote(text); api.fixes(showLeft).then(setData).catch(() => undefined); refresh(); };
   const check = () => begin('check', api.checkFixes);
   const apply = () => { setAsking(false); begin('apply', () => api.applyFixes([...chosen])); };
 
@@ -133,39 +199,9 @@ export function HealthPage({ status, refresh }: StatusHook) {
         </div>
       )}
 
-      {data?.at && available.length === 0 && (
-        <section className="panel" style={{ textAlign: 'center', padding: '32px 16px' }}>
-          <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing muthur can fix on its own</h2>
-          <p className="hint">Anything left needs you; it’s listed below.</p>
-        </section>
-      )}
-      {available.map((k) => {
-        const f = data!.fixes[k]!;
-        return (
-          <section key={k} className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 8, borderColor: chosen.has(k) ? 'var(--mark)' : undefined }}>
-            <div className="panel-head" style={{ marginBottom: 0 }}>
-              <label className="choice" style={{ alignItems: 'center' }}>
-                <input type="checkbox" checked={chosen.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
-                <h2 style={{ fontSize: '1.1rem' }}>{FIX[k].title}</h2>
-              </label>
-              <span className="num">{f.count.toLocaleString('en-GB')}</span>
-            </div>
-            <ul className="rows">
-              {f.sample.map((x) => (
-                <li key={x.path}>
-                  <span className={x.label ? 'small' : 'mono small'} title={libraryPath(x.path)} style={{ minWidth: 0, wordBreak: 'break-all' }}>{x.label ?? middle(libraryPath(x.path), 90)}</span>
-                  <span className="small muted">{x.score ? `IMDb ${x.score[0].toFixed(1)}` : x.why ?? ''}</span>
-                </li>
-              ))}
-              {f.count > f.sample.length && <li><span className="small muted">and {(f.count - f.sample.length).toLocaleString('en-GB')} more</span></li>}
-            </ul>
-          </section>
-        );
-      })}
-
       {data?.at && (Object.entries(data.manual).some(([, v]) => (v?.count ?? 0) > 0) || data.left > 0) && (
         <section className="panel" aria-labelledby="manual-h" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Needs you'}</h2>
+          <div className="panel-head" style={{ marginBottom: 0 }}><h2 id="manual-h">{showLeft ? 'Left as is' : 'Questions for you'}</h2>
             {data.left > 0 || showLeft
               ? <button type="button" className="btn-link small" onClick={() => setShowLeft(!showLeft)}>{showLeft ? 'Show the open questions' : `Show the ${data.left} left as is`}</button>
               : null}
@@ -188,12 +224,15 @@ export function HealthPage({ status, refresh }: StatusHook) {
                     )}
                     <span className="mono small" style={{ wordBreak: 'break-all' }}>{libraryPath(q.path)}{q.season != null ? ` · season ${q.season}` : ''}</span>
                     <span className="small muted">{q.why}</span>
-                    <span className="actions">
-                      <button type="button" className="btn-link small" onClick={() => leave({ items: [q], back: showLeft })}>{showLeft ? 'Ask again' : 'Leave as is'}</button>
-                    </span>
+                    {(k === 'numbers' || k === 'seasons') && !showLeft
+                      ? <EpisodeAnswers q={q} kind={k} onDone={answered} leave={() => leave({ items: [q] })} />
+                      : (
+                        <span className="actions">
+                          <button type="button" className="btn-link small" onClick={() => leave({ items: [q], back: showLeft })}>{showLeft ? 'Ask again' : 'Leave as is'}</button>
+                        </span>
+                      )}
                     {(k === 'shows' || k === 'films') && (
-                      <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running}
-                        onDone={(text) => { setNote(text); api.fixes().then(setData).catch(() => undefined); refresh(); }} />
+                      <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running} onDone={answered} />
                     )}
                   </li>
                 ))}
@@ -203,6 +242,58 @@ export function HealthPage({ status, refresh }: StatusHook) {
           ))}
         </section>
       )}
+
+      {data?.at && available.length === 0 && (
+        <section className="panel" style={{ textAlign: 'center', padding: '32px 16px' }}>
+          <h2 style={{ margin: '0 0 6px', fontSize: '1.2rem' }}>Nothing muthur can fix on its own</h2>
+          <p className="hint">Anything left needs you; it’s listed above.</p>
+        </section>
+      )}
+      {GROUPS.map((g) => {
+        const kinds = g.kinds.filter((k) => available.includes(k));
+        const dups = g.id === 'tidy' && status?.duplicatesAt ? status.duplicates : 0;
+        if (!kinds.length && !dups) return null;
+        return (
+          <section key={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div className="panel-head" style={{ marginBottom: 4 }}><h2 id={`${g.id}-h`}>{g.title}</h2>
+              <span className="num">{(kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0) + dups).toLocaleString('en-GB')}</span>
+            </div>
+            <ul className="rows">
+              {kinds.map((k) => {
+                const f = data!.fixes[k]!;
+                return (
+                  <li key={k} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 4 }}>
+                    <span className="actions" style={{ justifyContent: 'space-between', flexWrap: 'nowrap' }}>
+                      <label className="choice" style={{ alignItems: 'center' }}>
+                        <input type="checkbox" checked={chosen.has(k)} onChange={(e) => toggle(k, e.target.checked)} />
+                        <strong>{FIX[k].title}</strong>
+                      </label>
+                      <span className="num">{f.count.toLocaleString('en-GB')}</span>
+                    </span>
+                    <span className="small muted">{FIX[k].what}</span>
+                    <details>
+                      <summary className="small" style={{ cursor: 'pointer' }}>Which</summary>
+                      <ul className="rows" style={{ marginTop: 4 }}>
+                        {f.sample.map((x) => (
+                          <li key={x.path}>
+                            <span className={x.label ? 'small' : 'mono small'} title={libraryPath(x.path)} style={{ minWidth: 0, wordBreak: 'break-all' }}>{x.label ?? middle(libraryPath(x.path), 90)}</span>
+                            <span className="small muted">{x.score ? `IMDb ${x.score[0].toFixed(1)}` : x.why ?? ''}</span>
+                          </li>
+                        ))}
+                        {f.count > f.sample.length && <li><span className="small muted">and {(f.count - f.sample.length).toLocaleString('en-GB')} more</span></li>}
+                      </ul>
+                    </details>
+                  </li>
+                );
+              })}
+              {dups > 0 && (
+                <li><strong>{count(dups, 'episode or film has', 'episodes and films have')} more than one copy</strong>
+                  <Link to="/duplicates" className="small">Choose in Duplicates</Link></li>
+              )}
+            </ul>
+          </section>
+        );
+      })}
       <QuarantinePanel busy={running} />
     </div>
   );

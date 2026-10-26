@@ -1217,8 +1217,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             for name in {parse_show_folder(folder).title, d.get("name")}:
                 if name:
                     store.remember("tv", name, int(tmdb_id), year, d.get("name") or name, folder, "confirmed")
-            tool._show(show, fixes_new, manual_new)
-            mine = lambda x: x["path"] == f"TV/{folder}" or x["path"].startswith(f"TV/{folder}/")  # noqa: E731
+            return replan_show(client, folder)
         else:
             film = next((f for f in lib["films"] if f.get("file") and f"Film/{f['file']}" == path), None)
             d = client.movie(int(tmdb_id)) or {}
@@ -1229,14 +1228,41 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             choices[path] = {"tmdbId": int(tmdb_id), "label": f"{d.get('title')} ({year})" if year else d.get("title")}
             store.put("library.films", choices)
             tool._film(film, fixes_new, manual_new)
-            mine = lambda x: x["path"] == path or x.get("video") == path  # noqa: E731
-        for k in plan["fixes"]:
-            plan["fixes"][k] = [x for x in plan["fixes"][k] if not mine(x)] + fixes_new.get(k, [])
+            return merge_plan(plan, lambda x: x["path"] == path or x.get("video") == path, fixes_new, manual_new)
+
+    def merge_plan(plan: dict, mine, fixes_new: dict, manual_new: dict) -> dict:
+        """One show or film checked again: its old fixes and questions make way for the new ones."""
+        for k in set(plan["fixes"]) | set(fixes_new):
+            plan["fixes"][k] = [x for x in plan["fixes"].get(k, []) if not mine(x)] + fixes_new.get(k, [])
         for k in plan["manual"]:
             plan["manual"][k] = [x for x in plan["manual"][k] if not mine(x)] + manual_new.get(k, [])
         store.save_snapshot("health", plan)
         health_counts(plan)
         return {"fixes": {k: len(v) for k, v in fixes_new.items() if v}, "questions": sum(len(v) for v in manual_new.values())}
+
+    def replan_show(client, folder: str) -> dict:
+        """Check one show folder again (after the reader answered a question about it) and update the plan."""
+        plan, _ = store.snapshot("health")
+        lib, _ = store.snapshot("library")
+        show = next((s for s in (lib or {}).get("shows", []) if s["folder"] == folder), None)
+        if not plan or not show:
+            raise HTTPException(409, "Check the library first.")
+        fixes_new: dict = {k: [] for k in FIXES}
+        manual_new: dict = {k: [] for k in plan["manual"]}
+        health_tool(client)._show(show, fixes_new, manual_new)
+        return merge_plan(plan, lambda x: x["path"] == f"TV/{folder}" or x["path"].startswith(f"TV/{folder}/"), fixes_new, manual_new)
+
+    @app.post("/api/fixes/trust")
+    def fixes_trust(body: dict):
+        """'The number is right': the reader confirms an episode's own number. muthur then writes its NFO and score
+        (and can name it) like any episode it is sure about. The show is checked again right away."""
+        client = need_tmdb()
+        path = str(body.get("path") or "")
+        if not path.startswith("TV/") or path.count("/") < 2:
+            raise HTTPException(422, "That isn't an episode in the library.")
+        with alone("edit"):
+            store.put("health.trusted", sorted(set(store.get("health.trusted") or []) | {path}))
+            return replan_show(client, path.split("/")[1])
 
     @app.get("/api/fixes/last")
     def fixes_last():

@@ -160,3 +160,13 @@ def test_choosing_a_film_turns_the_question_into_a_fix(env, monkeypatch):
     assert r.json()["fixes"] == {"film-nfos": 1}
     after = client.get("/api/fixes").json()
     assert after["manual"]["films"]["count"] == 0 and after["fixes"]["film-nfos"]["count"] == 2
+
+    # "The number is right": the episode named after TMDB's S01E02 is taken as S01E03 and gets its NFO.
+    path = "TV/Some Show/Season 01/Some Show - S01E03 - Two.mkv"
+    q = next(x for x in after["manual"]["numbers"]["items"] if x["path"] == path)
+    assert q["tmdb"] == 7 and q["show"] == "Some Show" and not q.get("noNumber")
+    r = client.post("/api/fixes/trust", json={"path": path})
+    assert r.status_code == 200, r.text
+    now = client.get("/api/fixes").json()
+    assert path not in [x["path"] for x in now["manual"]["numbers"]["items"]]
+    assert "TV/Some Show/Season 01/Some Show - S01E03 - Two.nfo" in [x["path"] for x in now["fixes"]["episode-nfos"]["sample"]]
