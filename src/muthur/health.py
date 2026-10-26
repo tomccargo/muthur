@@ -34,7 +34,8 @@ FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "sub
          "renames", "film-renames", "kodi-entries")
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 OLD_ART = re.compile(r"(?i)^(season(\d+|-all|-specials)-(poster|banner|fanart|landscape)|banner|landscape|clearart|logo|characterart)\.(jpg|png)$")
-GENERIC_TITLE =re.compile(r"(?i)^(episode|ep|part|chapter|aflevering|deel|afl)\.?\s*\d+$")  # says nothing about the show
+SPECIAL_NAME = re.compile(r"(?i)\bspecial\b")
+GENERIC_TITLE = re.compile(r"(?i)^(episode|ep|part|chapter|aflevering|deel|afl)\.?\s*\d+$")  # says nothing about the show
 
 
 class Health:
@@ -166,8 +167,8 @@ class Health:
         # The season's own list is fresher than the show's episode counts, which TMDB caches longer.
         differs = {s for s, top in highest.items() if top > (len(season(s)) if mapped is not None else max(counts.get(s, 0), len(season(s))))}
         for s in sorted(differs):
-            if all(e["file"] in placed for e in numbered if e["season"] == s and max(e["episodes"]) > len(season(s))):
-                continue  # muthur placed every episode beyond TMDB's count itself: nothing to ask
+            if s in self._sized or all(e["file"] in placed for e in numbered if e["season"] == s and max(e["episodes"]) > len(season(s))):
+                continue  # muthur placed every episode beyond TMDB's count itself, or the specials beyond it are asked alone
             manual["seasons"].append({"path": f"TV/{folder}", "season": s, **ask,
                                       "why": f"Your library numbers season {s} up to episode {highest[s]}; TMDB has {len(season(s))}. "
                                              "Episodes whose name confirms TMDB's title at their number are still fixed; the others are listed."})
@@ -312,6 +313,16 @@ class Health:
             if plan is not None:
                 out.update({f: v for f, v in plan.items() if f not in out})
                 self._sized.add(s)  # its episodes up to TMDB's count are confirmed where they are
+        # 3. a season numbered 1..N whose only episodes beyond TMDB's count are specials by their name (Shameless UK's
+        #    "S02E11 Christmas Special"): the numbers up to the count are TMDB's; only the specials stay questions.
+        for s in sorted({e["season"] for e in numbered}):
+            if s not in counts or s in self._sized or not (size := len(season(s))):
+                continue
+            mine = [(n, e) for e in numbered if e["season"] == s for n in e["episodes"]]
+            over = [e for n, e in mine if n > size]
+            if over and all(SPECIAL_NAME.search(e["file"].rsplit("/", 1)[-1]) for e in over) and \
+                    sorted(n for n, _ in mine if n <= size) == list(range(1, size + 1)):
+                self._sized.add(s)
         return out
 
     def _listing(self, tmdb_id: int, seasons=None) -> dict[tuple[int, int], dict]:

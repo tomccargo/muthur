@@ -69,6 +69,22 @@ def test_extras_go_to_the_extras_folder(env):  # noqa: F811
     assert (tmp / "TV" / "Some Show" / "Season 01" / "Hugh Laurie Interview.mkv").exists()
 
 
+def test_a_special_beyond_the_count_leaves_the_season_alone(env):  # noqa: F811
+    """Shameless UK's 'S02E11 Christmas Special' after TMDB's ten: episodes 1-10 are fixed, only the special is asked."""
+    tmp, health, _ = env
+    health.tmdb = health.scores.tmdb = MoreTmdb()
+    show = tmp / "TV" / "Long Show"
+    write(show / "tvshow.nfo", '<tvshow><title>Long Show</title><uniqueid type="tmdb">9</uniqueid></tvshow>')
+    write(show / "Season 2" / "Long Show S02E01 720p.mkv")
+    write(show / "Season 2" / "Long Show S02E02 720p.mkv")
+    write(show / "Season 2" / "Long Show S02E03 Christmas Special 720p.mkv")
+    plan = health.check(health.index.build())
+    asked = [q["path"].rsplit("/", 1)[-1] for q in plan["manual"]["numbers"] if "Long Show" in q["path"]]
+    assert asked == ["Long Show S02E03 Christmas Special 720p.mkv"]
+    assert not [q for q in plan["manual"]["seasons"] if q["path"] == "TV/Long Show"]
+    assert {x["episode"] for x in plan["fixes"]["episode-nfos"] if "Long Show" in x["path"]} == {1, 2}
+
+
 def test_a_renumbered_episode_gets_its_nfo_rewritten(env):  # noqa: F811
     tmp, health, _ = env
     health.tmdb = health.scores.tmdb = MoreTmdb()
