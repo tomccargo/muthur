@@ -28,6 +28,8 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'show-rematch': { title: 'Match shows to the show their episodes are', what: 'A folder whose episode titles belong to another TMDB show than the one it is matched to, for example another country’s version of the same show. Its tvshow.nfo, episode NFOs, thumbnails and artwork become that show’s (the old ones are kept); episodes of the old show go to its own folder, or to quarantine when it has them already. Kodi re-reads each item.' },
   extras: { title: 'Move extras to the show’s Extras folder', what: 'Interviews, featurettes, openings and the like that sit between the episodes. Kodi doesn’t list them as episodes; in Extras its Extras add-on finds them. Nothing else changes.' },
 };
+// "Download everything missing" (27 Oct): the files muthur fetches for beside the videos, in one go: NFOs, posters, artwork.
+const MISSING: FixKind[] = ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork'];
 const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
 // The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
@@ -254,6 +256,10 @@ export function HealthPage({ status, refresh }: StatusHook) {
   const answered = (text: string) => { setNote(text); api.fixes(showLeft).then(setData).catch(() => undefined); refresh(); };
   const check = () => begin('check', api.checkFixes);
   const apply = () => { setAsking(false); begin('apply', () => api.applyFixes([...chosen])); };
+  const missing = MISSING.filter((k) => available.includes(k));
+  const missingCount = missing.reduce((n, k) => n + (data?.fixes[k]?.count ?? 0), 0);
+  // Chooses exactly those and asks, as for any choice (the question shows at the top).
+  const everythingMissing = () => { setChosen(new Set(missing)); setAsking(true); window.scrollTo({ top: 0, behavior: 'smooth' }); };
 
   // One group of fixes, as a panel (DESIGN.md §1.11).
   const group = (g: (typeof GROUPS)[number]) => {
@@ -262,7 +268,14 @@ export function HealthPage({ status, refresh }: StatusHook) {
     return (
       <section key={g.id} id={g.id} className="panel" aria-labelledby={`${g.id}-h`} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="panel-head" style={{ marginBottom: 4 }}><h2 id={`${g.id}-h`}>{g.title}</h2>
-          <span className="num">{kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0).toLocaleString('en-GB')}</span>
+          <span className="actions">
+            {g.id === 'kodi' && missingCount > 0 && (
+              <button className="btn btn-secondary btn-sm" type="button" disabled={running || asking} onClick={everythingMissing}
+                title="Every missing NFO, poster and artwork file at once; you confirm first">
+                Download everything missing ({missingCount.toLocaleString('en-GB')})</button>
+            )}
+            <span className="num">{kinds.reduce((n, k) => n + (data!.fixes[k]?.count ?? 0), 0).toLocaleString('en-GB')}</span>
+          </span>
         </div>
         <ul className="rows">
           {kinds.map((k) => {
