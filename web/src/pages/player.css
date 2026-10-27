@@ -1,17 +1,31 @@
-/* The player (docs/PLAYER.md): muthur's Watch section, in muthur's frame, panels and fields (app.css). */
-.pl-empty, .pl-count { color: var(--muted); font-size: 14px; margin: 8px 0 14px; }
-.pl-recent h2, .pl-all h2 { margin: 0 0 14px; font-size: 1.15rem; }
+/* The player (docs/PLAYER.md): muthur's front door, in muthur's frame, fields and page head (app.css); the grids sit
+   on the page like Library's posters. */
+.pl-empty, .pl-count { color: var(--muted); font-size: 14px; margin: 0 0 14px; }
+.pl-recent h2, .pl-all h2 { margin: 0; font-size: 1.15rem; }
+.pl-all h2 { margin-bottom: 4px; }
 
-/* Recently added: one row of covers that scrolls sideways. */
+/* Recently added: one row of covers that scrolls sideways, with arrows beside the heading instead of a scroll bar
+   (27 Oct: "the scroll bar is annoying"). */
+.pl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.pl-arrows { display: flex; gap: 6px; }
+.pl-arrow { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 1px solid var(--border-strong); background: var(--surface);
+  color: var(--text); cursor: pointer; transition: background 0.15s, opacity 0.15s; }
+.pl-arrow:hover:not(:disabled) { background: var(--surface-muted); }
+.pl-arrow:disabled { opacity: 0.35; cursor: default; }
+.pl-arrow:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 /* A scrolling row clips what sticks out: room around the covers for the lift and the ring on hover (26 Oct: the ring
    was cut off at the top), taken back with a negative margin so the row still lines up with the heading. */
-.pl-row { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 16px; overflow-x: auto; padding: 10px 8px 14px; margin: -10px -8px 0; scroll-snap-type: x proximity; scroll-padding-inline: 8px; }
+.pl-row { display: grid; grid-auto-flow: column; grid-auto-columns: 150px; gap: 16px; overflow-x: auto; padding: 10px 8px 14px; margin: -10px -8px 0;
+  scroll-snap-type: x proximity; scroll-padding-inline: 8px; scrollbar-width: none; }
+.pl-row::-webkit-scrollbar { display: none; }  /* Safari before 18.2 */
 .pl-row > * { scroll-snap-align: start; }
 
+/* Library's top (27 Oct): TV or films, find a title, then genre, watched and sort. */
 .pl-filters { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .pl-filters .field { width: auto; min-height: 40px; padding: 6px 10px; }
 .pl-filters input.field { flex: 1 1 220px; min-width: 0; }
 .pl-filters .seg { align-self: center; }
+@media (max-width: 760px) { .pl-filters select.field { flex: 1 1 140px; min-width: 0; } }
 
 .pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 16px; }
 .pl-tile { display: flex; flex-direction: column; gap: 4px; min-width: 0; color: var(--text); text-decoration: none; border-radius: var(--radius-sm); }

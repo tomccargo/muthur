@@ -30,10 +30,12 @@ function countUp(el: HTMLElement, delay = 0, duration = 1200) {
 }
 
 // ---- Panels and tiles ease in as they come into view --------------------------------------------
-const REVEAL = '.panel, .tiles, .posters, .page-head';
+// The player's grid and its Recently added row drop in like Library's posters (27 Oct).
+const DROP = '.tiles, .posters, .pl-grid, .pl-row';
+const REVEAL = `.panel, .page-head, ${DROP}`;
 
 function reveal(el: HTMLElement) {
-  if (el.matches('.tiles, .posters')) {
+  if (el.matches(DROP)) {
     [...el.children].slice(0, 30).forEach((c, i) => (c as HTMLElement).style.setProperty('--i', String(i)));
     if (el.matches('.tiles')) el.querySelectorAll<HTMLElement>('strong').forEach((s, i) => countUp(s, 200 + i * 60));
   } else {

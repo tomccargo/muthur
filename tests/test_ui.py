@@ -25,8 +25,8 @@ from muthur.web import Config, create_app  # noqa: E402
 from test_review import FakeTmdb, _old  # noqa: E402
 
 PAGES = {  # path -> must it have exactly one primary button?
-    "/": True, "/inbox": True, "/review": True, "/library": None, "/library?folder=The+Office+%28US%29": False,
-    "/duplicates": True, "/health": True, "/history": False, "/settings": True, "/player": None, "/player/films": None,
+    "/dashboard": True, "/inbox": True, "/review": True, "/library": None, "/library?folder=The+Office+%28US%29": False,
+    "/duplicates": True, "/health": True, "/history": False, "/settings": True, "/": None, "/?kind=film": None,
 }
 CODE_WORDS = re.compile(r"/data/|absolute-number|broken-episode-number|no-episode-number|looks-like-movie|other-episode"
                         r"|first_air_date|tmdb_id|\bundefined\b|\bNaN\b|\[object Object\]")
@@ -173,10 +173,30 @@ def test_clicking_from_the_list_into_a_show_and_back(server, browser):
     page.wait_for_selector("h1:has-text('Health')")
     page.set_viewport_size({"width": 375, "height": 800})
     tabs = page.evaluate("[...document.querySelectorAll('.tabbar .tab')].map((t) => [t.innerText.trim(), t.scrollWidth - t.clientWidth])")
-    assert [t for t, _ in tabs] == ["Dashboard", "Downloads", "Library", "Watch", "Health", "History", "Settings"]
-    assert all(over <= 0 for _, over in tabs), tabs  # seven tabs fit on a phone
+    assert [t for t, _ in tabs] == ["Dashboard", "Downloads", "Library", "Health", "History", "Settings"]  # the player: its own mode (0.54)
+    assert all(over <= 0 for _, over in tabs), tabs  # the tabs fit on a phone
+    assert page.evaluate("document.querySelector('.topbar').scrollWidth - document.querySelector('.topbar').clientWidth") <= 0  # with the Player switch
     page.close()
     assert not errors, errors
+
+
+def test_the_player_is_the_front_door(server, browser):
+    """0.54: / opens the player in its own mode; Dashboard and Player switch at the foot of the rail; old addresses lead on."""
+    page = browser.new_page()
+    page.route("**/*", lambda r: r.continue_() if r.request.url.startswith(server) else r.abort())
+    page.goto(server + "/")
+    page.wait_for_selector(".rail h1, .pl-filters, .pl-empty")
+    rail = page.inner_text(".rail-nav")
+    assert "TV" in rail and "Films" in rail and "Health" not in rail
+    page.click(".rail .rail-switch")
+    page.wait_for_selector("h1:has-text('Dashboard')")
+    assert page.evaluate("location.pathname") == "/dashboard"
+    assert "Watch" not in page.inner_text(".rail-nav")
+    page.click(".rail .rail-switch")
+    page.wait_for_function("location.pathname === '/'")
+    page.goto(server + "/player/films")
+    page.wait_for_function("location.pathname + location.search === '/?kind=film'")
+    page.close()
 
 
 def test_duplicates_have_their_own_panel_and_tile(server, browser):
@@ -187,10 +207,10 @@ def test_duplicates_have_their_own_panel_and_tile(server, browser):
     page.wait_for_selector("#duplicates")
     assert "The Office S04E14" in page.inner_text("#duplicates")
     assert "#duplicates" not in page.inner_text("#tidy") if page.query_selector("#tidy") else True
-    page.goto(server + "/")
+    page.goto(server + "/dashboard")
     page.click(".tile:has-text('Duplicates')")
     page.wait_for_selector("h1:has-text('Duplicates')")
-    page.goto(server + "/")
+    page.goto(server + "/dashboard")
     target = page.get_attribute(".tile[href^='/health#']", "href")  # every other tile opens its own panel
     page.click(f".tile[href='{target}']")
     page.wait_for_selector(target.replace("/health", ""))

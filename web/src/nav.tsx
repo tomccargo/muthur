@@ -5,8 +5,9 @@ import { transition } from './motion';
 
 const listeners = new Set<() => void>();
 
-export function navigate(to: string) {
-  if (to !== location.pathname + location.search) history.pushState(null, '', to);
+export function navigate(to: string, { replace = false } = {}) {
+  if (replace) history.replaceState(null, '', to);
+  else if (to !== location.pathname + location.search) history.pushState(null, '', to);
   // The new page is drawn inside the view transition, so it fades and rises in (motion.ts).
   transition(() => flushSync(() => {
     listeners.forEach((l) => l());

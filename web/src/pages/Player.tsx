@@ -1,19 +1,23 @@
-// The player (docs/PLAYER.md): muthur's Watch section at /player, with TV and Films as tabs (TV first), each a row of
-// what was added last and a visual grid with filters; a show's seasons and episodes; and the watch view, which fits
-// the tab and goes full screen. Read-only: the files are played as they are, and nothing about watching is written.
+// The player (docs/PLAYER.md): muthur's front door at /, TV or films (TV first), each a row of what was added last and
+// a visual grid, with a search and filters on top as on Library's page; a show's seasons and episodes; and the watch
+// view, which fits the tab and goes full screen. Read-only: the files are played as they are, nothing about watching is
+// written.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerAbout, type PlayerEpisode, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
 import { Loading } from '../components';
-import { hue } from '../labels';
+import { Icon } from '../icons';
+import { count, hue } from '../labels';
+import { motionOn } from '../motion';
 import { Link, navigate, useLocation } from '../nav';
 import { art } from './Library';
 import { SubtitleSearch } from './Subtitles';
 import './player.css';
 
-type View = 'films' | 'tv' | 'test';
-type Sort = 'added' | 'title' | 'year' | 'rating';
+type Kind = 'tv' | 'film';
+type Sort = 'title' | 'year' | 'rating' | 'added';
 type Seen = 'all' | 'unwatched' | 'watched';
-const SORTS: [Sort, string][] = [['added', 'Recently added'], ['title', 'Title'], ['year', 'Year'], ['rating', 'Rating']];
+// The four the reader asked for (27 Oct).
+const SORTS: [Sort, string][] = [['title', 'Title'], ['year', 'Year'], ['rating', 'Rating'], ['added', 'Recently added']];
 type Way = 'native' | 'sound' | 'kodi' | 'unknown';
 // H.264 in 10-bit plays in Chrome and Edge but not in Firefox (measured 26 Oct, docs/PLAYER.md §3): decided here, by the browser.
 const HI10 = !/firefox/i.test(navigator.userAgent);
@@ -44,48 +48,59 @@ function PlayMark() {
 }
 
 // ---- browsing -------------------------------------------------------------------------------
-function useFilters(genres: string[]) {
-  const [text, setText] = useState('');
-  const [genre, setGenre] = useState('');
-  const [seen, setSeen] = useState<Seen>('all');
-  const [decade, setDecade] = useState('');
-  const [minRating, setMinRating] = useState(0);
-  const [sort, setSort] = useState<Sort>('title');  // what was added last has its own row above the grid
-  const keep = <T extends { title: string; year: number | null; genres: string[]; rating: number | null }>(x: T, watched: boolean, partly = false) =>
-    (!text || x.title.toLowerCase().includes(text.toLowerCase()))
-    && (!genre || x.genres.includes(genre))
-    && (seen === 'all' || (seen === 'watched' ? watched : !watched || partly))
-    && (!decade || (x.year != null && String(Math.floor(x.year / 10) * 10) === decade))
-    && (!minRating || (x.rating ?? 0) >= minRating);
-  const order = <T extends { title: string; year: number | null; rating: number | null; added: number }>(list: T[]) => [...list].sort((a, b) =>
-    sort === 'title' ? a.title.localeCompare(b.title) : sort === 'year' ? (b.year ?? 0) - (a.year ?? 0)
-      : sort === 'rating' ? (b.rating ?? 0) - (a.rating ?? 0) : b.added - a.added);
-  const bar = (
-    <div className="pl-filters" role="search">
-      <input className="field" type="search" placeholder="Search titles" value={text} onChange={(e) => setText(e.target.value)} aria-label="Search titles" />
-      <select className="field" value={genre} onChange={(e) => setGenre(e.target.value)} aria-label="Genre">
-        <option value="">All genres</option>
-        {genres.map((g) => <option key={g} value={g}>{g}</option>)}
-      </select>
-      <select className="field" value={decade} onChange={(e) => setDecade(e.target.value)} aria-label="Decade">
-        <option value="">Any year</option>
-        {['2020', '2010', '2000', '1990', '1980', '1970', '1960', '1950'].map((d) => <option key={d} value={d}>{d}s</option>)}
-      </select>
-      <select className="field" value={minRating} onChange={(e) => setMinRating(Number(e.target.value))} aria-label="Rating">
-        <option value={0}>Any rating</option>
-        {[6, 7, 8].map((r) => <option key={r} value={r}>{r}+</option>)}
-      </select>
-      <span className="seg" role="group" aria-label="Watched">
-        {(['all', 'unwatched', 'watched'] as Seen[]).map((s) => (
-          <button key={s} type="button" aria-pressed={seen === s} onClick={() => setSeen(s)}>{s === 'all' ? 'All' : s === 'watched' ? 'Watched' : 'Unwatched'}</button>
-        ))}
-      </span>
-      <select className="field" value={sort} onChange={(e) => setSort(e.target.value as Sort)} aria-label="Sort">
-        {SORTS.map(([k, l]) => <option key={k} value={k}>{l}</option>)}
-      </select>
-    </div>
+type Filters = { text: string; genre: string; seen: Seen; sort: Sort };
+const NO_FILTERS: Filters = { text: '', genre: '', seen: 'all', sort: 'title' };
+const FILTERS_KEY = 'muthur.player.filters';
+
+// The search and filters outlive a visit to a show or a film (this tab only).
+function useFilters() {
+  const [f, setF] = useState<Filters>(() => {
+    try { return { ...NO_FILTERS, ...JSON.parse(sessionStorage.getItem(FILTERS_KEY) ?? '{}') as Partial<Filters> }; } catch { return NO_FILTERS; }
+  });
+  const set = useCallback((patch: Partial<Filters>) => setF((old) => {
+    const next = { ...old, ...patch };
+    try { sessionStorage.setItem(FILTERS_KEY, JSON.stringify(next)); } catch { /* not remembered, still applied */ }
+    return next;
+  }), []);
+  return [f, set] as const;
+}
+
+// A row that scrolls sideways with arrow buttons beside its heading instead of a scroll bar (27 Oct). Touch, a trackpad
+// and the keyboard (Tab through the covers) still scroll it.
+function Row({ title, children }: { title: string; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [ends, setEnds] = useState({ start: true, end: true });
+  const measure = useCallback(() => {
+    const el = ref.current;
+    if (el) setEnds({ start: el.scrollLeft <= 2, end: el.scrollLeft + el.clientWidth >= el.scrollWidth - 2 });
+  }, []);
+  useEffect(() => {
+    measure();
+    const el = ref.current;
+    if (!el || typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  // A page of covers at a time, keeping the last one in view.
+  const by = (dir: 1 | -1) => {
+    const el = ref.current;
+    if (el) el.scrollBy({ left: dir * Math.max(160, el.clientWidth - 170), behavior: motionOn() ? 'smooth' : 'auto' });
+  };
+  return (
+    <section className="pl-recent" aria-labelledby="pl-recent-h">
+      <div className="pl-head">
+        <h2 id="pl-recent-h">{title}</h2>
+        {!(ends.start && ends.end) && (
+          <span className="pl-arrows">
+            <button type="button" className="pl-arrow" onClick={() => by(-1)} disabled={ends.start} aria-label="Scroll back"><Icon name="left" /></button>
+            <button type="button" className="pl-arrow" onClick={() => by(1)} disabled={ends.end} aria-label="Scroll on"><Icon name="right" /></button>
+          </span>
+        )}
+      </div>
+      <div className="pl-row" ref={ref} onScroll={measure}>{children}</div>
+    </section>
   );
-  return { keep, order, bar };
 }
 
 function FilmTile({ f }: { f: PlayerFilm }) {
@@ -106,7 +121,7 @@ function FilmTile({ f }: { f: PlayerFilm }) {
 
 function ShowTile({ s }: { s: PlayerShowTile }) {
   return (
-    <Link className="pl-tile" to={`/player?${new URLSearchParams({ show: s.folder })}`} title={s.title}>
+    <Link className="pl-tile" to={`/?${new URLSearchParams({ show: s.folder })}`} title={s.title}>
       <span className="pl-cover"><Art path={s.poster} title={s.title} />
         {s.watched === s.episodes && <span className="pl-tick" title="All watched" aria-label="All watched">✓</span>}</span>
       <span className="pl-name">{s.title}</span>
@@ -115,42 +130,81 @@ function ShowTile({ s }: { s: PlayerShowTile }) {
   );
 }
 
-function Grid({ items, view }: { items: PlayerItems; view: 'films' | 'tv' }) {
-  const list = view === 'films' ? items.films : items.shows;
+// The top as on Library's page (27 Oct): TV or films and a title search, then genre, watched and sort; no problem
+// filters, no buttons that work on the library. Recently added sits above everything until a filter narrows the list:
+// then the grid alone answers.
+function Browse({ items, kind, f, set }: { items: PlayerItems; kind: Kind; f: Filters; set: (patch: Partial<Filters>) => void }) {
+  const list = kind === 'film' ? items.films : items.shows;
   const genres = useMemo(() => [...new Set(list.flatMap((x) => x.genres))].sort(), [list]);
-  const { keep, order, bar } = useFilters(genres);
-  const films = order(items.films.filter((f) => keep(f, f.watched)));
-  const shows = order(items.shows.filter((s) => keep(s, s.watched === s.episodes, s.watched < s.episodes)));
-  const shown = view === 'films' ? films.length : shows.length;
-  // Recently added, per tab (26 Oct): the newest first, in one row that scrolls sideways.
-  const newest = <T extends { added: number }>(xs: T[]) => [...xs].sort((a, b) => b.added - a.added).slice(0, 14);
+  const genre = genres.includes(f.genre) ? f.genre : '';  // a genre only the other kind has
+  const q = f.text.trim().toLowerCase();
+  const keep = (x: { title: string; genres: string[] }, watched: boolean, partly = false) =>
+    (!q || x.title.toLowerCase().includes(q))
+    && (!genre || x.genres.includes(genre))
+    && (f.seen === 'all' || (f.seen === 'watched' ? watched : !watched || partly));
+  const order = <T extends { title: string; year: number | null; rating: number | null; added: number }>(xs: T[]) => [...xs].sort((a, b) =>
+    f.sort === 'title' ? a.title.localeCompare(b.title) : f.sort === 'year' ? (b.year ?? 0) - (a.year ?? 0)
+      : f.sort === 'rating' ? (b.rating ?? 0) - (a.rating ?? 0) : b.added - a.added);
+  const films = kind === 'film' ? order(items.films.filter((x) => keep(x, x.watched))) : [];
+  const shows = kind === 'tv' ? order(items.shows.filter((s) => keep(s, s.watched === s.episodes, s.watched < s.episodes))) : [];
+  const shown = kind === 'film' ? films.length : shows.length;
+  const filtered = Boolean(q || genre || f.seen !== 'all');
+  const newest = <T extends { added: number }>(xs: T[]) => [...xs].sort((a, b) => b.added - a.added).slice(0, 20);
+  const episodes = items.shows.reduce((n, s) => n + s.episodes, 0);
   return (
     <>
-      <section className="panel pl-recent" aria-labelledby="pl-recent-h">
-        <h2 id="pl-recent-h">Recently added</h2>
-        <div className="pl-row">
-          {view === 'films' ? newest(items.films).map((f) => <FilmTile key={f.id} f={f} />) : newest(items.shows).map((s) => <ShowTile key={s.folder} s={s} />)}
+      <header className="page-head">
+        <div>
+          <p className="eyebrow">Player</p>
+          <h1>Shows and films</h1>
+          <p className="lede">{count(items.shows.length, 'show')} · {count(episodes, 'episode')} · {count(items.films.length, 'film')}</p>
         </div>
-      </section>
-      <section className="panel pl-all" aria-labelledby="pl-all-h">
-        <h2 id="pl-all-h">{view === 'films' ? 'All films' : 'All shows'}</h2>
-        {bar}
-        <p className="pl-count">{shown.toLocaleString('en-GB')} {view === 'films' ? (shown === 1 ? 'film' : 'films') : (shown === 1 ? 'show' : 'shows')}</p>
+      </header>
+      <div className="pl-filters" role="search">
+        <div className="seg" role="group" aria-label="TV or films">
+          <button type="button" aria-pressed={kind === 'tv'} onClick={() => navigate('/')}>TV</button>
+          <button type="button" aria-pressed={kind === 'film'} onClick={() => navigate('/?kind=film')}>Films</button>
+        </div>
+        <input className="field" type="search" aria-label="Find a title" placeholder="Find a title" value={f.text} onChange={(e) => set({ text: e.target.value })} />
+        <select className="field" value={genre} onChange={(e) => set({ genre: e.target.value })} aria-label="Genre">
+          <option value="">All genres</option>
+          {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+        </select>
+        <select className="field" value={f.seen} onChange={(e) => set({ seen: e.target.value as Seen })} aria-label="Watched or not">
+          <option value="all">Watched and unwatched</option>
+          <option value="unwatched">Unwatched</option>
+          <option value="watched">Watched</option>
+        </select>
+        <select className="field" value={f.sort} onChange={(e) => set({ sort: e.target.value as Sort })} aria-label="Sort by">
+          {SORTS.map(([k, l]) => <option key={k} value={k}>Sort: {l}</option>)}
+        </select>
+      </div>
+      {/* Keyed by kind: switching TV and films builds the page up again, cover after cover (motion.ts). */}
+      {!filtered && (
+        <Row key={`recent-${kind}`} title="Recently added">
+          {kind === 'film' ? newest(items.films).map((x) => <FilmTile key={x.id} f={x} />) : newest(items.shows).map((s) => <ShowTile key={s.folder} s={s} />)}
+        </Row>
+      )}
+      <section key={`all-${kind}`} className="pl-all" aria-labelledby="pl-all-h">
+        <h2 id="pl-all-h">{kind === 'film' ? 'All films' : 'All shows'}</h2>
+        <p className="pl-count">{filtered ? `${count(shown, kind === 'film' ? 'film' : 'show')} found` : count(shown, kind === 'film' ? 'film' : 'show')}</p>
+        {filtered && !shown && <p className="pl-empty">Nothing with this search and these filters.</p>}
         <div className="pl-grid">
-          {view === 'films' ? films.map((f) => <FilmTile key={f.id} f={f} />) : shows.map((s) => <ShowTile key={s.folder} s={s} />)}
+          {kind === 'film' ? films.map((x) => <FilmTile key={x.id} f={x} />) : shows.map((s) => <ShowTile key={s.folder} s={s} />)}
         </div>
       </section>
     </>
   );
 }
 
-function TestSet() {
+// One real file per kind, to try in each browser: under Library in the dashboard (27 Oct: the player is for watching).
+export function PlayerTestSet() {
   const [items, setItems] = useState<PlayerTest[] | null>(null);
   useEffect(() => { api.playerTestSet().then((r) => setItems(r.items)).catch(() => setItems([])); }, []);
-  if (!items) return <Loading label="Loading the test set" />;
-  if (!items.length) return <p className="pl-empty">No test set yet.</p>;
+  if (!items) return <div className="page"><Loading label="Loading the test set" /></div>;
+  if (!items.length) return <div className="page"><p className="pl-empty">No test set yet.</p></div>;
   return (
-    <>
+    <div className="page pl-page">
       <p className="pl-count">One real file per kind (docs/PLAYER.md). Play each in Firefox, Chrome and Edge.</p>
       <div className="pl-grid">
         {items.map((t) => (
@@ -161,7 +215,7 @@ function TestSet() {
           </Link>
         ))}
       </div>
-    </>
+    </div>
   );
 }
 
@@ -266,22 +320,20 @@ function EpisodePanel({ e, show, onClose }: { e: PlayerEpisode; show: PlayerShow
   );
 }
 
-// Inside muthur's frame (App.tsx: the Watch section, its tabs TV · Films · Test set): /player is TV, /player/films the
-// films, /player?show=… a show.
+// Inside muthur's frame in its player mode (App.tsx): / is TV, /?kind=film the films, /?show=… a show.
 export function PlayerBrowse() {
-  const { path, search } = useLocation();
-  const show = new URLSearchParams(search).get('show');
-  const view: View = path === '/player/films' ? 'films' : path === '/player/test' ? 'test' : 'tv';
+  const { search } = useLocation();
+  const params = new URLSearchParams(search);
+  const show = params.get('show');
+  const kind: Kind = params.get('kind') === 'film' ? 'film' : 'tv';
   const [items, setItems] = useState<PlayerItems | null>(null);
   const [error, setError] = useState<string | null>(null);
-  useEffect(() => {
-    document.title = 'Watch · muthur';
-    api.playerItems().then(setItems).catch((e: Error) => setError(e.message));
-  }, []);
+  const [filters, setFilters] = useFilters();
+  useEffect(() => { api.playerItems().then(setItems).catch((e: Error) => setError(e.message)); }, []);
   return (
     <div className="page pl-page">
       {error && <p className="pl-empty">{error}</p>}
-      {show ? <ShowView folder={show} /> : view === 'test' ? <TestSet /> : items ? <Grid items={items} view={view} /> : !error && <Loading label="Loading the library" />}
+      {show ? <ShowView folder={show} /> : items ? <Browse items={items} kind={kind} f={filters} set={setFilters} /> : !error && <Loading label="Loading the library" />}
     </div>
   );
 }
@@ -472,7 +524,7 @@ function Watch({ id, title, mute = false }: { id: string; title: string; mute?: 
     document.addEventListener('fullscreenchange', onFull);
     return () => document.removeEventListener('fullscreenchange', onFull);
   }, []);
-  const back = () => (history.length > 1 ? history.back() : navigate('/player'));
+  const back = () => (history.length > 1 ? history.back() : navigate('/'));
   const toggleFull = () => (document.fullscreenElement ? document.exitFullscreen() : box.current?.requestFullscreen());
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -587,6 +639,6 @@ export default function PlayerApp() {
   const { path, search } = useLocation();
   const q = new URLSearchParams(search);
   const id = path === '/player/watch' ? q.get('id') : null;
-  useEffect(() => { if (!id) navigate('/player'); }, [id]);  // a watch link without a video: back to browsing
+  useEffect(() => { if (!id) navigate('/', { replace: true }); }, [id]);  // a watch link without a video: back to browsing
   return id ? <Watch id={id} title={q.get('t') ?? 'Video'} mute={q.get('mute') === '1'} /> : null;
 }

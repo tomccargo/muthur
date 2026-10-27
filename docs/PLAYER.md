@@ -112,7 +112,7 @@ Considered and not chosen:
 
 ### Pages
 
-- **`/player`**: side bar with *TV* and *Films* (and *Test set* during the trial). The main area is a grid of posters, very visual, with filters and sorting above it. A film's poster plays it (large play button on hover/focus). A show opens its seasons and episodes, each episode with its thumbnail and a play button.
+- **`/`** (0.54, the player is muthur's front door): its own mode, a side bar with *TV* and *Films* and at its foot a *Dashboard* button to the rest of muthur (which has a *Player* button in the same place). On top, as on Library's page: TV or films, *Find a title*, genre, watched or not, and sort (title, year, rating, recently added). Then a *Recently added* row with arrows (hidden while a search or filter narrows the list) and the grid of posters, dropping in one after another. `/?kind=film` is the films, `/?show=…` a show; the old `/player` addresses lead there. The test set is under Library, at `/player/test`. A film's poster plays it (large play button on hover/focus). A show opens its seasons and episodes, each episode with its thumbnail and a play button.
 - **The player**: fills the tab (the video at the largest size that fits), controls over the picture, a full-screen button (the Fullscreen API on the player's own box, so subtitles and controls stay visible), keyboard: space, ←/→ 10 s, F, M, Esc. A back button returns to where you were in the grid.
 - **Kodi-only items**: dimmed, marked *Plays in Kodi only*, no play button.
 

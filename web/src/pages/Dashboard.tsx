@@ -49,7 +49,6 @@ export function Dashboard({ status, error, refresh }: StatusHook) {
           <p className="lede">{scanned ? `${waiting} to file · checked ${when(scanned)}` : 'Downloads not checked yet'}</p>
         </div>
         <div className="actions">
-          <Link to="/player" className="btn btn-secondary" title="Watch films and episodes in the browser">Watch</Link>
           {tmdb
             ? <button className="btn btn-primary" type="button" aria-busy={starting === 'scan'} onClick={() => start('scan', api.scan)} title="Looks in the downloads folder and works out what each one is. Nothing moves.">Look for new downloads</button>
             : <button className="btn btn-primary" type="button" aria-disabled="true" title="Add the TMDB token in Settings first">Look for new downloads</button>}
