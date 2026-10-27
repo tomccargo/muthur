@@ -25,6 +25,7 @@ from .imdb import REFRESH_DAYS, Imdb
 from .downloadstation import DownloadStation, DownloadStationError
 from .opensubs import OpenSubtitles, OpenSubtitlesError
 from .duplicates import Duplicates, apply_groups
+from .fanart import FanartTv
 from .health import FIXES, Health
 from .inbox import Inbox
 from .library_edit import LibraryEdit
@@ -236,6 +237,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         client = tmdb_cache["client"]
         client.language = store.get("tmdb.language") or "en-US"  # cached answers are kept per language
         return client
+
+    fanart_cache: dict = {}
+
+    def fanart() -> FanartTv | None:
+        """fanart.tv, once its project key is in Settings (the personal key is optional)."""
+        f = store.get("fanart") or {}
+        if not f.get("apiKey"):
+            return None
+        keys = (f["apiKey"], f.get("clientKey") or None)
+        if fanart_cache.get("keys") != keys:
+            fanart_cache.update(keys=keys, client=FanartTv(*keys, os.path.join(cfg.config_dir, "fanart-cache.sqlite")))
+        return fanart_cache["client"]
 
     def names() -> dict:
         """What the reader calls their NAS and the box Kodi runs on (Settings, Names); neutral until set."""
@@ -546,7 +559,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             inbox = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film)
             # Look again right before acting: the plan must match what is on disk now.
             fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
-            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb).apply(fresh, job)
+            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb,
+                             os.path.join(cfg.config_dir, "tmp", "subtitles")).apply(fresh, job)
             ds = download_station()
             moved = {i["id"].rsplit("/", 1)[-1] for i in result["items"] if i["ok"]}
             if ds and moved:
@@ -919,6 +933,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     journal.replace(run, moved, nfo, data, os.path.join(cfg.config_dir, "backups"))
                 else:
                     journal.create(run, moved, nfo, data)
+                # And its thumbnail (27 Oct: renamed episodes had none, or kept the old number's picture).
+                thumb = nfo[:-len(".nfo")] + "-thumb.jpg"
+                if picture := client.image(ep.get("still_path"), "original"):
+                    if os.path.lexists(thumb):
+                        journal.replace(run, moved, thumb, picture, os.path.join(cfg.config_dir, "backups"))
+                    else:
+                        journal.create(run, moved, thumb, picture)
             job.begin("Kodi takes the new name", 0)
             renaming.remember(store, [(path, moved)])  # until Kodi took it, even across a restart
             followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before, done=lambda old: renaming.forget(store, old))
@@ -1385,7 +1406,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     # -- health: problems in the library and safe fixes --------------------------
     def health_tool(client) -> Health:
-        return Health(store, journal, imdb, client, index, cfg.tv, cfg.film, cfg.quarantine, os.path.join(cfg.config_dir, "backups"))
+        return Health(store, journal, imdb, client, index, cfg.tv, cfg.film, cfg.quarantine, os.path.join(cfg.config_dir, "backups"), fanart())
 
     def health_counts(plan: dict) -> None:
         """What the Dashboard shows of the library's problems, kept small so the status poll stays cheap."""
@@ -1396,7 +1417,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             # 'at' only for a check that knew every kind of fix: one from before an update isn't 'in order'.
             **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
             "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("show-rematch", "episode-nfos", "show-nfos", "film-nfos"),
-            "leftovers": n("leftovers", "empty-films", "extras"), "subtitles": n("subtitles"), "posters": n("posters"), "renames": n("renames", "film-renames"),
+            "leftovers": n("leftovers", "empty-films", "extras"), "subtitles": n("subtitles"), "posters": n("posters"), "artwork": n("artwork"),
+            "renames": n("renames", "film-renames"),
             "kodiEntries": n("kodi-entries"), "subTiming": n("subtitle-timing", "subtitle-misfit"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})
 
@@ -1880,6 +1902,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             "openSubtitles": {"user": (store.get("opensubtitles") or {}).get("user", ""),
                               "apiKeySet": bool((store.get("opensubtitles") or {}).get("apiKey")),
                               "passwordSet": bool((store.get("opensubtitles") or {}).get("password"))},
+            "fanart": {"apiKeySet": bool((store.get("fanart") or {}).get("apiKey")), "clientKeySet": bool((store.get("fanart") or {}).get("clientKey"))},
             "dryRun": bool(store.get("dryRun", False)),
             "shield": {"enabled": bool((store.get("shield") or {}).get("enabled")), "port": int((store.get("shield") or {}).get("port") or 5555),
                        "app": (store.get("shield") or {}).get("app") or ""},
@@ -1952,6 +1975,13 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                     o[key] = str(new[key]).strip() if key == "apiKey" else new[key]
             store.put("opensubtitles", o)
             store.put("opensubtitles.session", None)
+        if isinstance(body.get("fanart"), dict):
+            new = body["fanart"]
+            fa = {} if new.get("forget") else dict(store.get("fanart") or {})
+            for key in ("apiKey", "clientKey"):
+                if new.get(key):
+                    fa[key] = str(new[key]).strip()
+            store.put("fanart", fa)
         t = body.get("tmdb") or {}
         if t.get("forget"):
             store.put("tmdb.token", None)
@@ -1974,6 +2004,11 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     @app.post("/api/opensubtitles/test")
     def opensubtitles_test():
         return opensubtitles().check()
+
+    @app.post("/api/fanart/test")
+    def fanart_test():
+        client = fanart()
+        return client.check() if client else {"ok": False, "problem": "Enter fanart.tv's project key first."}
 
     def subtitle_target(path: str) -> tuple[str, dict]:
         """A library video's full path, and what OpenSubtitles is searched by: the film's IMDb ID, or the show's with

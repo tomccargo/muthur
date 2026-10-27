@@ -189,7 +189,8 @@ function LibraryProblems({ status }: { status: Status | null }) {
     p.filter(([n]) => (n ?? 0) > 0).map(([n, one, many]) => count(n ?? 0, one, many)).join(' · ');
   const tiles: [string, number, string, string][] = [
     ['IMDb scores', (l.imdbData ?? 0) + (l.scores ?? 0), parts([l.imdbData, 'show to download', 'shows to download'], [l.scores, 'NFO to add to', 'NFOs to add to']), '/health#scores'],
-    ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.subtitles ?? 0), parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles']), '/health#kodi'],
+    ['Missing in Kodi', (l.nfos ?? 0) + (l.posters ?? 0) + (l.artwork ?? 0) + (l.subtitles ?? 0),
+      parts([l.nfos, 'NFO'], [l.posters, 'poster'], [l.artwork, 'artwork file', 'artwork files'], [l.subtitles, 'video’s subtitles', 'videos’ subtitles']), '/health#kodi'],
     ['Questions for you', l.questions ?? 0, 'muthur isn’t sure: only you can answer', '/health#questions'],
     ['Duplicates', dups, `${parts([dupFilms, 'film'], [dups - dupFilms, 'episode'])}: choose which copy to keep`, '/duplicates'],
     ['Tidy up', (l.renames ?? 0) + (l.subTiming ?? 0) + (l.kodiEntries ?? 0) + (l.leftovers ?? 0),

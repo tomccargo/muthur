@@ -30,7 +30,7 @@ export type Status = {
   duplicatesAt: number | null;  // null: never checked
   fixes: number;
   queue: Job[];  // jobs waiting for the current one
-  library: { at?: number; imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; renames?: number; kodiEntries?: number; subTiming?: number; questions?: number };  // from the last library check
+  library: { at?: number; imdbData?: number; scores?: number; nfos?: number; leftovers?: number; subtitles?: number; posters?: number; artwork?: number; renames?: number; kodiEntries?: number; subTiming?: number; questions?: number };  // from the last library check
   scores: { refreshed: number | null; next: number | null; episodes: number; ratings: number; updated: number | null; checked: number | null };
   job: Job | null;
 };
@@ -70,6 +70,7 @@ export type Settings = {
   titles: { keepOriginal: string[] };
   downloadStation: { url: string; user: string; passwordSet: boolean };
   openSubtitles: { user: string; apiKeySet: boolean; passwordSet: boolean };
+  fanart: { apiKeySet: boolean; clientKeySet: boolean };
   dryRun: boolean;
   shield: { enabled: boolean; port: number; app: string };
   quality: { preferHdr: boolean };
@@ -127,7 +128,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit' | 'extras' | 'show-rematch';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit' | 'extras' | 'show-rematch' | 'artwork';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 // A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
 export type Question = {
@@ -181,6 +182,7 @@ export const api = {
   job: () => call<Job | null>('/api/jobs/current'),
   settings: () => call<Settings>('/api/settings'),
   saveSettings: (body: unknown) => call<Settings>('/api/settings', { method: 'PUT', body: JSON.stringify(body) }),
+  testFanart: () => call<{ ok: true } | { ok: false; problem: string }>('/api/fanart/test', { method: 'POST' }),
   testOpenSubtitles: () => call<{ ok: true; level: string | null; allowed: number | null; vip: boolean } | { ok: false; problem: string }>('/api/opensubtitles/test', { method: 'POST' }),
   subtitleSearch: (path: string) => call<{ file: string; results: SubResult[]; count: number; allowed: number | null }>(`/api/library/subtitles?${new URLSearchParams({ path })}`),
   subtitleSave: (path: string, fileId: number, language: string) =>

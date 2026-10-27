@@ -223,14 +223,11 @@ function ShowView({ folder }: { folder: string }) {
 
 const epName = (e: PlayerEpisode) => `${code(e.season, e.episodes)}${e.title ? ` · ${e.title}` : ''}`;
 
-// The episode's thumbnail; without one on the share, or one that doesn't load (26 Oct: big coloured blocks with
-// initials looked broken), the show's backdrop, dimmed, with the episode's number on it.
+// The episode's thumbnail. Health writes the missing ones from TMDB (27 Oct); where TMDB has none either, a quiet empty
+// frame: the number and title are already under it (26 Oct: coloured initials looked broken; 27 Oct: the show's
+// backdrop on every episode, with the number in large type, "wtf").
 function EpisodeArt({ e, show }: { e: PlayerEpisode; show: PlayerShow }) {
-  return (
-    <Art path={e.thumb} title={e.title ?? show.title} wide fallback={
-      <span className="pl-art wide pl-art-show" style={show.fanart ? { backgroundImage: `url("${art(show.fanart)}")` } : undefined}>
-        <span>{code(e.season, e.episodes)}</span></span>} />
-  );
+  return <Art path={e.thumb} title={e.title ?? show.title} wide fallback={<span className="pl-art wide pl-art-none" aria-hidden="true" />} />;
 }
 
 const DATE = new Intl.DateTimeFormat('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });

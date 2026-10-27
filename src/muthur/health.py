@@ -19,6 +19,7 @@ from collections import Counter
 from . import kodi_entries, nfo_write, quarantine, subfit, subtitles
 from . import rename as renaming
 from .art import poster_problem
+from .artwork import Artwork
 from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
@@ -30,8 +31,8 @@ from .scores import ScoreRefresh, with_imdb
 from .text import best_similarity, normalize, similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
-FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "imdb-scores",
-         "renames", "film-renames", "kodi-entries")
+FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "artwork",
+         "imdb-scores", "renames", "film-renames", "kodi-entries")
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 OLD_ART = re.compile(r"(?i)^(season(\d+|-all|-specials)-(poster|banner|fanart|landscape)|banner|landscape|clearart|logo|characterart)\.(jpg|png)$")
 SPECIAL_NAME = re.compile(r"(?i)\bspecial\b")
@@ -58,9 +59,12 @@ def _within(words: list[str], title: list[str]) -> bool:
 
 
 class Health:
-    def __init__(self, store, journal, imdb, tmdb, index, tv_root: str, film_root: str, quarantine: str, backups: str):
+    def __init__(self, store, journal, imdb, tmdb, index, tv_root: str, film_root: str, quarantine: str, backups: str, fanart=None):
+        """fanart: a FanartTv when its keys are in Settings, for the artwork TMDB doesn't have."""
         self.store, self.journal, self.imdb, self.tmdb, self.index = store, journal, imdb, tmdb, index
         self.roots = {"TV": tv_root, "Film": film_root}
+        self.fanart = fanart
+        self.art = Artwork(tmdb, fanart, lambda p: os.path.isfile(self._full(p)))
         self.quarantine, self.backups = quarantine, backups
         self.scores =ScoreRefresh(store, journal, imdb, tmdb, tv_root, film_root, backups)
         self._have: set[str] | None = None  # shows whose IMDb episodes are in the kept data
@@ -158,6 +162,9 @@ class Health:
         # doesn't have, too). Its other seasons are read like any show's.
         mapped = self._order_seasons(folder, numbered, self.show_order(folder), tmdb_id)
         ordered = {s for s, _ in mapped} if mapped else set()
+        if show["nfo"]:  # a show without an NFO gets its poster, fanart and logo with it ('show-nfos'), the rest next time
+            # Seasons a chosen order rules are numbered unlike TMDB's: their art would be another season's.
+            fixes["artwork"] += self.art.show(folder, tmdb_id, title, {e["season"] for e in numbered if e["season"] not in ordered})
 
         def season(s: int) -> dict[int, str | None]:
             if s not in titles:
@@ -219,10 +226,13 @@ class Health:
                 info = self.index.nfo(self._full(stem + ".nfo")) if e["nfo"] else None
                 if not (info and (info.season, info.episode) == (ps, pn) and len(e["episodes"]) == 1
                         and (not part or f"(Part {part})" in (info.title or ""))):  # a double-episode NFO becomes one episode's
+                    # Its thumbnail too: one that is there shows the episode its old number was (replaced with the NFO).
                     fixes["episode-nfos"].append({"path": stem + ".nfo", "video": f"TV/{folder}/{e['file']}", "tmdb": tmdb_id,
                                                   "season": ps, "episode": pn, "show": title, "imdbShow": imdb_id,
-                                                  "thumb": None if e["thumb"] else stem + "-thumb.jpg", "label": label,
+                                                  "thumb": stem + "-thumb.jpg", "label": label,
                                                   **({"replace": True} if e["nfo"] else {}), **({"title": pt} if part else {})})
+                elif not e["thumb"] and (thumb := self.art.thumb(stem, tmdb_id, ps, pn, label)):
+                    fixes["artwork"].append(thumb)
                 new = renaming.new_name(folder, e["file"], ps, [pn], pt)
                 if new != e["file"].rsplit("/", 1)[-1]:
                     fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": label,
@@ -251,6 +261,9 @@ class Health:
                 new = renaming.new_name(folder, e["file"], s, e["episodes"], season(s)[n])
                 if new != e["file"].rsplit("/", 1)[-1]:
                     fixes["renames"].append({"path": f"TV/{folder}/{e['file']}", "to": new, "label": label, "why": new})
+            # Any NFO, muthur's or another tool's: its thumbnail on its own (27 Oct: only a new NFO brought one along).
+            if e["nfo"] and not e["thumb"] and (thumb := self.art.thumb(stem, tmdb_id, *aired(s, n), label)):
+                fixes["artwork"].append(thumb)
             if written:
                 continue
             if not e["nfo"]:
@@ -699,12 +712,18 @@ class Health:
             if want != f["file"] and not taken:
                 fixes["film-renames"].append({"path": f"Film/{f['file']}", "to": want, "folder": f["key"] if f["folder"] else None,
                                               "label": new_folder, "why": f"from {f['file'].split('/')[0]}"})
-        if f["nfo"] and f["file"] and f.get("nfoFile") and str(f["ids"].get("tmdb", "")).isdigit() and int(f["ids"]["tmdb"]) > 0:
+        film_id = int(f["ids"]["tmdb"]) if str(f["ids"].get("tmdb", "")).isdigit() and int(f["ids"]["tmdb"]) > 0 else None
+        if not film_id and f["nfo"] and f["ids"].get("imdb"):  # an NFO with only IMDb's ID: TMDB's mapping of it
+            found = (self.tmdb.find(f["ids"]["imdb"], "imdb_id") or {}).get("movie_results") or []
+            film_id = int(found[0]["id"]) if len(found) == 1 else None
+        if f["nfo"] and f["file"] and f.get("nfoFile") and film_id:
             stem = f"Film/{f['file'].rsplit('.', 1)[0]}"  # beside the video, where Kodi looks: 'poster.jpg' in its folder, else '<name>-poster.jpg'
             folder = f"Film/{f['file'].rsplit('/', 1)[0]}"
             places = ([f"{folder}/poster.jpg", f"{folder}/folder.jpg"] if f["folder"] and "/" in f["file"] else []) + [stem + "-poster.jpg"]
-            self._poster(places, "movie", int(f["ids"]["tmdb"]), f"Film/{f['nfoFile']}",
-                         f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}", fixes)
+            label = f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}"
+            self._poster(places, "movie", film_id, f"Film/{f['nfoFile']}", label, fixes)
+            prefixes = ([f"{folder}/"] if f["folder"] and "/" in f["file"] else []) + [stem + "-"]
+            fixes["artwork"] += self.art.film(prefixes, film_id, label, f"Film/{f['nfoFile']}")
         if not f["file"]:
             if f["folder"]:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
@@ -776,6 +795,7 @@ class Health:
             r = kodi_entries.remove(kodi, entries, backup, (lambda d: setattr(job, "done", d)) if job else None)
             done["kodi-entries"] = r["done"]
             failed += r["failed"]
+        nfos = list(dict.fromkeys(nfos))  # one re-read per item, however many files it got
         if kodi and nfos:
             if job:
                 job.begin(f"Asking Kodi to re-read {len(nfos):,} changed NFOs", len(nfos))
@@ -943,7 +963,11 @@ class Health:
             self._nfo(run, x["path"], data)
         nfos.append(x["path"])
         if x.get("thumb") and ep.get("still_path"):
-            self._write(run, x["thumb"], self.tmdb.image(ep["still_path"], "original"))
+            data = self.tmdb.image(ep["still_path"], "original")
+            if data and x.get("replace") and os.path.isfile(self._full(x["thumb"])):  # the old number's picture
+                self.journal.replace(run, x["thumb"], self._full(x["thumb"]), data, self.backups)
+            else:
+                self._write(run, x["thumb"], data)
 
     def _show_nfos(self, run, x, nfos):
         show = self.tmdb.tv_full(x["tmdb"])
@@ -976,6 +1000,20 @@ class Health:
                 self._write(run, x["art"] + name, self.tmdb.image(movie[key], size))
         if logo := nfo_write.best_logo(movie):
             self._write(run, x["art"] + "clearlogo.png", self.tmdb.image(logo, "w500"))
+
+    def _artwork(self, run, x, nfos):
+        """One missing artwork file, from TMDB or fanart.tv; never over a file that is there. Kodi re-reads the item."""
+        if x["from"] == "fanart.tv":
+            if not self.fanart:
+                raise ValueError("fanart.tv's keys aren't in Settings any more")
+            data = self.fanart.image(x["src"])
+        else:
+            data = self.tmdb.image(x["src"], x["size"])
+        if not data:
+            raise ValueError(f"{x['from']} didn't send the picture")
+        if not self._write(run, x["path"], data):
+            raise ValueError("a file is there already; check the library again")
+        nfos.append(x["nfo"])
 
     def _posters(self, run, x, nfos):
         """TMDB's poster where there is none or a poor one; the old one is kept (History can put it back). Kodi re-reads the item."""

@@ -9,7 +9,7 @@ import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLangu
 type Draft = {
   host: string; port: string; tcpPort: string; user: string; password: string; token: string; tmdbLanguage: string; keepOriginal: string[];
   dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean; device: string; nas: string;
-  osKey: string; osUser: string; osPassword: string;
+  osKey: string; osUser: string; osPassword: string; faKey: string; faClient: string;
 } & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
 type OsState = { ok: true; level: string | null; allowed: number | null; vip: boolean } | { ok: false; problem: string };
@@ -20,7 +20,7 @@ function toDraft(s: Settings): Draft {
     tmdbLanguage: s.tmdb.language, keepOriginal: s.titles.keepOriginal,
     dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
     shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app, device: s.names.device, nas: s.names.nas,
-    osKey: '', osUser: s.openSubtitles.user, osPassword: '',
+    osKey: '', osUser: s.openSubtitles.user, osPassword: '', faKey: '', faClient: '',
   };
 }
 
@@ -33,6 +33,7 @@ export function SettingsPage({ refresh }: StatusHook) {
   const [testing, setTesting] = useState(false);
   const [ds, setDs] = useState<DsState | null>(null);
   const [os, setOs] = useState<OsState | null>(null);
+  const [fa, setFa] = useState<{ ok: true } | { ok: false; problem: string } | null>(null);
 
   useEffect(() => {
     api.settings().then((s) => { setSaved(s); setDraft(toDraft(s)); }).catch((e: Error) => setMessage({ kind: 'error', text: e.message }));
@@ -51,6 +52,7 @@ export function SettingsPage({ refresh }: StatusHook) {
       titles: { keepOriginal: draft.keepOriginal },
       downloadStation: dsBody(),
       openSubtitles: osBody(),
+      fanart: faBody(),
       dryRun: draft.dryRun,
       shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
@@ -69,6 +71,15 @@ export function SettingsPage({ refresh }: StatusHook) {
     setOs(null);
     const go = dirty ? api.saveSettings({ openSubtitles: osBody() }) : Promise.resolve(saved);
     go.then(() => api.testOpenSubtitles()).then(setOs).catch((e: Error) => setOs({ ok: false, problem: e.message }));
+  };
+
+  function faBody() {
+    return { ...(draft!.faKey ? { apiKey: draft!.faKey } : {}), ...(draft!.faClient ? { clientKey: draft!.faClient } : {}) };
+  }
+  const testFa = () => {
+    setFa(null);
+    const go = dirty ? api.saveSettings({ fanart: faBody() }) : Promise.resolve(saved);
+    go.then(() => api.testFanart()).then(setFa).catch((e: Error) => setFa({ ok: false, problem: e.message }));
   };
 
   function dsBody() {
@@ -221,6 +232,32 @@ export function SettingsPage({ refresh }: StatusHook) {
           {os && (os.ok
             ? <span className="status small"><Dot kind="dot-success" />Signed in · {os.level ?? 'account'}{os.allowed != null ? ` · ${os.allowed} downloads a day` : ''}</span>
             : <span className="status small"><Dot kind="dot-danger" />{os.problem}</span>)}
+        </div>
+      </section>
+
+      <section className="panel form" aria-labelledby="fa-h">
+        <h2 id="fa-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Artwork from fanart.tv</h2>
+        <HowTo>
+          For the artwork TMDB doesn’t have: banners, landscapes, clear art, character art and disc art. Health writes them where they’re
+          missing. Make a free account on fanart.tv and request a project API key; your personal API key (in your profile) is optional and
+          gets new artwork after 2 days instead of 7.
+        </HowTo>
+        <div className="pair">
+          <label className="field-label">{saved.fanart.apiKeySet ? 'Project API key (saved)' : 'Project API key'}
+            <input className="field" type="password" autoComplete="off" value={draft.faKey} onChange={(e) => edit({ faKey: e.target.value })} />
+          </label>
+          <label className="field-label">{saved.fanart.clientKeySet ? 'Personal API key (saved)' : 'Personal API key (optional)'}
+            <input className="field" type="password" autoComplete="off" value={draft.faClient} onChange={(e) => edit({ faClient: e.target.value })} />
+          </label>
+        </div>
+        <div className="actions">
+          <button className="btn btn-secondary btn-sm" type="button" onClick={draft.faKey || saved.fanart.apiKeySet ? testFa : undefined}
+            {...(!(draft.faKey || saved.fanart.apiKeySet) ? { 'aria-disabled': true, title: 'Enter the project API key first' } : {})}>Test the keys</button>
+          {saved.fanart.apiKeySet && !dirty && (
+            <button className="btn btn-secondary btn-sm" type="button" onClick={() => forget({ fanart: { forget: true } })}>Forget the keys</button>
+          )}
+          {fa && (fa.ok ? <span className="status small"><Dot kind="dot-success" />fanart.tv accepts the keys</span>
+            : <span className="status small"><Dot kind="dot-danger" />{fa.problem}</span>)}
         </div>
       </section>
 

@@ -19,9 +19,8 @@
 .pl-cover { position: relative; display: block; border-radius: var(--radius-sm); overflow: hidden; box-shadow: var(--shadow); transition: transform 0.2s, box-shadow 0.2s; }
 .pl-art { display: grid; place-items: center; width: 100%; aspect-ratio: 2 / 3; object-fit: cover; background: var(--poster-bg); }
 .pl-art.wide { aspect-ratio: 16 / 9; }
-.pl-art-show { position: relative; background: var(--surface-muted) center / cover no-repeat; }
-.pl-art-show::before { content: ''; position: absolute; inset: 0; background: rgb(0 0 0 / 0.55); }
-.pl-art-show > span { position: relative; color: rgb(255 255 255 / 0.85); font-family: var(--font-display); font-size: 22px; font-weight: 700; letter-spacing: 0.02em; }
+/* An episode without a picture anywhere: an empty frame, a shade off the page. */
+.pl-art-none { background: var(--surface-muted); border: 1px solid var(--border); }
 .pl-art-empty { background: hsl(var(--hue) var(--tint-s) var(--tint-l)); color: rgb(255 255 255 / 0.8); font-family: var(--font-display); font-size: 28px; font-weight: 700; }
 .pl-play {
   position: absolute; inset: 0; display: grid; place-items: center; color: #fff; opacity: 0; transition: opacity 0.2s;

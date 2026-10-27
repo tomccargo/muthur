@@ -18,6 +18,7 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   renames: { title: 'Rename episodes to the library’s naming', what: 'Show - S01E02 - TMDB’s title, with the NFO, thumbnail and subtitles. Only while Kodi is on: it keeps each episode’s watched status.' },
   'film-renames': { title: 'Rename films to the library’s naming', what: 'Title (Year)/Title (Year), from the NFO, with the artwork and subtitles; download-site notes go to quarantine. Only while Kodi is on.' },
   posters: { title: 'Replace missing and poor posters', what: 'TMDB’s poster where there is none, or one under 500 pixels wide or not poster-shaped. The old one is kept; Kodi re-reads each item.' },
+  artwork: { title: 'Add missing artwork', what: 'Episode thumbnails, fanart, logos and season posters from TMDB; banners, landscapes, clear art, character art and disc art from fanart.tv once its key is in Settings. Only where none is there; NFOs stay as they are. Kodi re-reads each item.' },
   subtitles: { title: 'Put subtitles where Kodi finds them', what: 'English goes beside the video under its name (Dutch only when there is no English); other languages, extra copies and Dutch next to English go to quarantine.' },
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db, and NFOs, thumbnails or subtitles of videos that are gone.' },
   'empty-films': { title: 'Move film folders without a video to quarantine', what: 'Folders that only hold an NFO or artwork.' },
@@ -27,11 +28,11 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   'show-rematch': { title: 'Match shows to the show their episodes are', what: 'A folder whose episode titles belong to another TMDB show than the one it is matched to, for example another country’s version of the same show. Its tvshow.nfo, episode NFOs, thumbnails and artwork become that show’s (the old ones are kept); episodes of the old show go to its own folder, or to quarantine when it has them already. Kodi re-reads each item.' },
   extras: { title: 'Move extras to the show’s Extras folder', what: 'Interviews, featurettes, openings and the like that sit between the episodes. Kodi doesn’t list them as episodes; in Extras its Extras add-on finds them. Nothing else changes.' },
 };
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
 // The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
   { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },  // shown first, then Missing in Kodi, the questions, Tidy up
-  { id: 'kodi', title: 'Missing in Kodi', kinds: ['show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'subtitles'] },
+  { id: 'kodi', title: 'Missing in Kodi', kinds: ['show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles'] },
   { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'subtitle-timing', 'subtitle-misfit', 'kodi-entries', 'extras', 'leftovers', 'empty-films'] },
 ];
 

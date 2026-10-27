@@ -11,9 +11,10 @@ from __future__ import annotations
 
 import os
 import re
+import subprocess
 import time
 
-from . import nfo_write, quarantine, subtitles
+from . import nfo_write, player, quarantine, subtitles
 from .journal import Journal
 from .text import count
 
@@ -46,13 +47,17 @@ class Stop(Exception):
 
 
 class Applier:
-    def __init__(self, tmdb, journal: Journal, downloads: str, tv_root: str, film_root: str, quarantine: str, imdb=None):
-        """imdb: an Imdb (imdb.py) for IMDb scores in the NFOs; without it they carry TMDB's only."""
+    def __init__(self, tmdb, journal: Journal, downloads: str, tv_root: str, film_root: str, quarantine: str, imdb=None,
+                 tmp: str | None = None):
+        """imdb: an Imdb (imdb.py) for IMDb scores in the NFOs; without it they carry TMDB's only. tmp: a folder for
+        the subtitles copied out of a video; without it they stay inside."""
         self.tmdb, self.journal, self.imdb = tmdb, journal, imdb
         self.downloads, self.roots, self.quarantine = downloads, {"TV": tv_root, "Film": film_root}, quarantine
+        self.tmp, self.job = tmp, None
 
     # -- one run --------------------------------------------------------------------
     def apply(self, items: list[dict], job=None) -> dict:
+        self.job = job
         run = self.journal.start("apply")
         results = []
         if job:
@@ -120,6 +125,7 @@ class Applier:
             self._move(run, item["id"], src, dst, "move")
             count += 1
             count += self._subtitles(run, item["id"], src, dst, single=len(moves) == 1)
+            count += self._inside(run, item["id"], dst)
             stem = os.path.splitext(dst)[0]
             if item["kind"] == "tv":
                 ts, te = _tmdb_numbers(f)
@@ -221,6 +227,25 @@ class Applier:
                 self._move(run, item, os.path.join(source, name), target, "move")
                 n += 1
         return n
+
+    def _inside(self, run: int, item: str, video: str) -> int:
+        """The video's own text subtitles, copied out beside it as .srt (27 Oct: "when importing the download, also
+        extract the English srt from the file"): muthur's subtitle rule, English, Dutch only without English, never
+        over a file that came with the download. Pictures (PGS, VobSub) can't become .srt. A file ffmpeg can't read
+        is imported without; the player can still copy them out later."""
+        if not self.tmp:
+            return 0
+        chosen = player.to_extract(video, player.embedded(video))
+        if not chosen:
+            return 0
+        if self.job:
+            self.job.step = f"Copying the subtitles out of {os.path.basename(video)}"
+        try:
+            data = player.extract(video, chosen, self.tmp)
+        except (OSError, ValueError, subprocess.SubprocessError):
+            return 0
+        folder = os.path.dirname(video)
+        return sum(self._write(run, item, os.path.join(folder, name), body) for name, body in data.items())
 
     def _leftovers(self, run: int, item: dict) -> int:
         path = os.path.join(self.downloads, *item["id"].split("/"))

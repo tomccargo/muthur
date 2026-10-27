@@ -19,7 +19,7 @@ class MoreTmdb(FakeTmdb):
     def tv_season(self, i, n):
         if i == 9:
             names = {1: ["Arrival", "Bargain"], 2: ["Crossing", "Departure"]}[n]
-            return {"episodes": [{"id": 900 + 10 * n + k, "episode_number": k, "name": t} for k, t in enumerate(names, 1)]}
+            return {"episodes": [{"id": 900 + 10 * n + k, "episode_number": k, "name": t, "still_path": f"/l{n}{k}.jpg"} for k, t in enumerate(names, 1)]}
         if i == 7 and n == 0:
             return {"episodes": [{"id": 700, "episode_number": 1, "name": "The Christmas Special"}]}
         return super().tv_season(i, n)
@@ -213,16 +213,19 @@ def test_a_renumbered_episode_gets_its_nfo_rewritten(env):  # noqa: F811
     for n in range(1, 5):
         write(show / "Season 1" / f"Long Show - 1x{n:02d}.mkv")
     write(show / "Season 1" / "Long Show - 1x03.nfo", "<episodedetails><title>Old</title><season>1</season><episode>3</episode></episodedetails>")
+    write(show / "Season 1" / "Long Show - 1x03-thumb.jpg", "old")  # the picture of the episode its old number was
     plan = health.check(health.index.build())
     fix = next(x for x in plan["fixes"]["episode-nfos"] if x["path"].endswith("1x03.nfo"))
     assert fix["replace"] and (fix["season"], fix["episode"]) == (2, 1)
     result = health.apply({"fixes": {"episode-nfos": [fix]}}, ["episode-nfos"])
     assert result["failed"] == [] and "<season>2</season>" in (show / "Season 1" / "Long Show - 1x03.nfo").read_text(encoding="utf-8")
+    assert (show / "Season 1" / "Long Show - 1x03-thumb.jpg").read_bytes() == b"img"  # TMDB's S02E01 still
     again = health.check(health.index.build())  # its NFO says TMDB's number now: only the rename is left
     assert not [x for x in again["fixes"]["episode-nfos"] if x["path"].endswith("1x03.nfo")]
     assert [x for x in again["fixes"]["renames"] if x["path"].endswith("1x03.mkv")]
     health.journal.undo(result["run"])
     assert "<title>Old</title>" in (show / "Season 1" / "Long Show - 1x03.nfo").read_text(encoding="utf-8")
+    assert (show / "Season 1" / "Long Show - 1x03-thumb.jpg").read_text() == "old"
 
 
 def test_broken_names_get_the_seasons_gaps_as_suggestions(env):  # noqa: F811

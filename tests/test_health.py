@@ -53,6 +53,9 @@ class FakeTmdb:
     def image(self, path, size):
         return b"img" if path else None
 
+    def find(self, external_id, source):
+        return {}
+
 
 def write(p, data="x"):
     p.parent.mkdir(parents=True, exist_ok=True)
