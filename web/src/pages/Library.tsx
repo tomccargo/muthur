@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api, type Film, type LibEpisode, type LibProblems, type Library, type Season, type ShowDetail, type ShowSummary } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobError, Loading } from '../components';
+import { ClearField, Dot, JobError, Loading } from '../components';
 import { count, hue, middle, score, size, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 import { LibraryEditor } from './LibraryEdit';
@@ -335,7 +335,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
           <button type="button" aria-pressed={kind === 'tv'} onClick={() => go('tv', filter)}>TV</button>
           <button type="button" aria-pressed={kind === 'film'} onClick={() => go('film', filter)}>Film</button>
         </div>
-        <input className="field" type="search" aria-label="Find a title" placeholder="Find a title" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <ClearField type="search" aria-label="Find a title" placeholder="Find a title" value={query} onChange={setQuery} />
       </div>
       <div className="seg filters" role="group" aria-label="Show">
         {FILTERS.map(([k, label]) => (

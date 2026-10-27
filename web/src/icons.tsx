@@ -5,6 +5,7 @@ const PATHS: Record<string, string[]> = {
   film: ['M4 3h16v18H4z', 'M8 3v18', 'M16 3v18', 'M4 8h4', 'M4 12h4', 'M4 16h4', 'M16 8h4', 'M16 12h4', 'M16 16h4'],
   left: ['M15 18l-6-6 6-6'],
   right: ['M9 18l6-6-6-6'],
+  x: ['M18 6L6 18', 'M6 6l12 12'],
   inbox: ['M3 13h5l2 3h4l2-3h5', 'M5.5 5h13L21 13v6H3v-6z'],
   review: ['M9 11l3 3 8-8', 'M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9'],
   library: ['M4 4h4v16H4z', 'M10 4h4v16h-4z', 'M16.2 4.6l3.8-1 3 15.6-3.8 1z'],

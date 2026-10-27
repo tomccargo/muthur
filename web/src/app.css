@@ -32,7 +32,7 @@
   .topbar .brand { min-width: 0; padding-right: 0; }
 }
 @media (max-width: 400px) { .topbar .brand-name { display: none; } }  /* the mark alone, with the switch beside it */
-.main { min-width: 0; }
+.main { min-width: 0; overflow-x: clip; }  /* a cover tilted as it falls in never makes the page scroll sideways */
 .topbar, .tabbar { display: none; }
 
 @media (min-width: 961px) { .main { margin-left: var(--rail-w); } }
@@ -195,6 +195,15 @@ a.tile:hover { border-color: var(--accent); }
 .inline { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .inline .field { flex: 1 1 200px; width: auto; }
 .inline .field.year { flex: 0 0 96px; }
+/* A field with a cross at its end that empties it (ClearField, 27 Oct); the browser's own cross is hidden. */
+.clear-field { position: relative; display: flex; align-items: center; min-width: 0; }
+.clear-field > .field { flex: 1 1 auto; min-width: 0; padding-right: 40px; }
+.inline .clear-field { flex: 1 1 200px; }
+.clear-field > .field::-webkit-search-cancel-button { appearance: none; -webkit-appearance: none; display: none; }
+.clear-btn { position: absolute; right: 5px; display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+  background: none; color: var(--muted); cursor: pointer; transition: background 0.15s, color 0.15s; }
+.clear-btn:hover { background: var(--surface-muted); color: var(--text); }
+.clear-btn:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
 
 /* ---- Library: poster grid (§8) ------------------------------------------------- */
 .posters { display: grid; grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 16px 14px; }
@@ -294,12 +303,21 @@ input[type='checkbox'], input[type='radio'] { width: 18px; height: 18px; accent-
   a.tile:hover, .poster-tile:hover { transform: translateY(-3px); box-shadow: 0 8px 22px rgb(0 0 0 / 0.28); }
   a.tile:active, .poster-tile:active { transform: translateY(-1px) scale(0.97); }
   [data-reveal='in']:not(.tiles, .posters, .pl-grid, .pl-row) { animation: rise-in 650ms cubic-bezier(0.34, 1.3, 0.64, 1) both; }
-  :is(.tiles, .posters, .pl-grid, .pl-row)[data-reveal='in'] > * { animation: pop-in 620ms cubic-bezier(0.34, 1.7, 0.64, 1) both; }
+  .tiles[data-reveal='in'] > * { animation: pop-in 620ms cubic-bezier(0.34, 1.7, 0.64, 1) both; animation-delay: calc(min(var(--i, 0), 30) * 60ms); }
+  /* Covers (Library's posters, the player's grid and row) fall from above, each a little tilted, and bounce as they land:
+     Playlist Parser's cascade (27 Oct: "dropped from top to bottom"), GSAP's bounce.out drawn with linear(). */
+  :is(.posters, .pl-grid, .pl-row)[data-reveal='in'] > * {
+    animation: cascade 700ms linear(0, 0.008 3.3%, 0.052 8.3%, 0.134 13.3%, 0.21 16.7%, 0.355 21.7%, 0.538 26.7%, 0.681 30%, 0.84 33.3%,
+      1 36.4%, 0.91 40%, 0.845 43.3%, 0.779 48.3%, 0.756 51.7%, 0.75 55%, 0.772 60%, 0.808 63.3%, 0.861 66.7%, 1 72.7%, 0.958 76.7%,
+      0.94 80%, 0.939 83.3%, 0.955 86.7%, 1 90.9%, 0.985 95%, 1) both;
+    animation-delay: calc(min(var(--i, 0), 30) * 50ms);
+  }
   .counter { animation: counter-pop 420ms cubic-bezier(0.34, 1.8, 0.64, 1); }
   .fill:not(.indeterminate) { background-image: linear-gradient(100deg, transparent 30%, var(--sheen) 50%, transparent 70%);
     background-size: 200% 100%; background-repeat: no-repeat; animation: sheen 1.6s linear infinite; }
 }
 @keyframes rise-in { from { opacity: 0; transform: translateY(28px) scale(0.985); } }
 @keyframes pop-in { from { opacity: 0; transform: translateY(18px) scale(0.92); } }
+@keyframes cascade { from { opacity: 0; transform: translateY(-40px) rotate(var(--r, 0deg)); } }
 @keyframes counter-pop { 0% { transform: scale(0.6); } 100% { transform: scale(1); } }
 @keyframes sheen { from { background-position: 150% 0; } to { background-position: -50% 0; } }

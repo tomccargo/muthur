@@ -4,7 +4,7 @@ import { TitleCard } from './Review';
 import type { Card, DupGroup, Kind, Season } from '../api';
 import { api, type FixKind, type FixResult, type Fixes, type Question } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobError, Loading } from '../components';
+import { ClearField, Dot, JobError, Loading } from '../components';
 import { count, libraryPath, middle, when } from '../labels';
 import { Link } from '../nav';
 
@@ -168,7 +168,7 @@ function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy:
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 6 }}>
       <form className="inline" onSubmit={(e) => { e.preventDefault(); search(); }}>
-        <input className="field" aria-label="Title" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <ClearField aria-label="Title" value={query} onChange={setQuery} />
         <button className="btn btn-secondary btn-sm" type="submit" disabled={!query.trim()}>Search TMDB</button>
       </form>
       {cards && (cards.length ? (

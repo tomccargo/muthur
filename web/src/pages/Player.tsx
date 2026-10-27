@@ -4,7 +4,7 @@
 // written.
 import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api, type Playback, type PlayerFilm, type PlayerInfo, type PlayerItems, type PlayerLinks, type PlayerAbout, type PlayerEpisode, type PlayerShow, type PlayerShowTile, type PlayerSub, type PlayerTest } from '../api';
-import { Loading } from '../components';
+import { ClearField, Loading } from '../components';
 import { Icon } from '../icons';
 import { count, hue } from '../labels';
 import { motionOn } from '../motion';
@@ -165,7 +165,7 @@ function Browse({ items, kind, f, set }: { items: PlayerItems; kind: Kind; f: Fi
           <button type="button" aria-pressed={kind === 'tv'} onClick={() => navigate('/')}>TV</button>
           <button type="button" aria-pressed={kind === 'film'} onClick={() => navigate('/?kind=film')}>Films</button>
         </div>
-        <input className="field" type="search" aria-label="Find a title" placeholder="Find a title" value={f.text} onChange={(e) => set({ text: e.target.value })} />
+        <ClearField type="search" aria-label="Find a title" placeholder="Find a title" value={f.text} onChange={(v) => set({ text: v })} />
         <select className="field" value={genre} onChange={(e) => set({ genre: e.target.value })} aria-label="Genre">
           <option value="">All genres</option>
           {genres.map((g) => <option key={g} value={g}>{g}</option>)}

@@ -30,13 +30,19 @@ function countUp(el: HTMLElement, delay = 0, duration = 1200) {
 }
 
 // ---- Panels and tiles ease in as they come into view --------------------------------------------
-// The player's grid and its Recently added row drop in like Library's posters (27 Oct).
-const DROP = '.tiles, .posters, .pl-grid, .pl-row';
+// Tiles pop in one after another; covers (Library's posters, the player's grid and row) fall in like Playlist Parser's
+// cascade, each with its own tilt of up to 8° (27 Oct).
+const COVERS = '.posters, .pl-grid, .pl-row';
+const DROP = `.tiles, ${COVERS}`;
 const REVEAL = `.panel, .page-head, ${DROP}`;
 
 function reveal(el: HTMLElement) {
   if (el.matches(DROP)) {
-    [...el.children].slice(0, 30).forEach((c, i) => (c as HTMLElement).style.setProperty('--i', String(i)));
+    const tilt = el.matches(COVERS);
+    [...el.children].slice(0, 30).forEach((c, i) => {
+      (c as HTMLElement).style.setProperty('--i', String(i));
+      if (tilt) (c as HTMLElement).style.setProperty('--r', `${(Math.random() * 16 - 8).toFixed(1)}deg`);
+    });
     if (el.matches('.tiles')) el.querySelectorAll<HTMLElement>('strong').forEach((s, i) => countUp(s, 200 + i * 60));
   } else {
     el.querySelectorAll<HTMLElement>('strong.num').forEach((s) => countUp(s, 150));

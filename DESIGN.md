@@ -207,7 +207,9 @@ Playlist Parser's normal mode (0.26), in `web/src/motion.ts` and `app.css`; not 
 
 - **Pages** change inside a view transition: the old page fades and settles (220 ms, slight blur), the new one fades in rising 28 px (420 ms). The rail, top bar and tab bar stay still. Browsers without view transitions switch instantly.
 - **Panels and page heads** rise 28 px and fade in as they come into view (700 ms, soft ease-out), once per page visit.
-- **Tiles and posters** drop in one after another, 60 ms apart, with a slight overshoot (600 ms).
+- **Tiles** pop in one after another, 60 ms apart, with a slight overshoot (600 ms).
+- **Covers** (Library's posters, the player's grid and Recently added) fall in from 40 px above, each tilted at random up to 8°, and bounce as they land, 50 ms apart (700 ms): Playlist Parser's cascade, its GSAP `bounce.out` drawn with CSS `linear()` (0.54.1). The page never scrolls sideways while they fall.
+- **Text fields** that find or name something carry a cross at their end while they hold text; it, or Escape, empties the field (0.54.1).
 - **Numbers** in tiles and panels count up from 0 (1.2 s, ease-out) and always end on the real value; a newer value from the server wins at once.
 - **A poster flies** into its show or film page (560 ms); the page change waits at most 400 ms for the cover.
 - **Hover and press:** background, border and colour in 150 ms; buttons, tiles and posters press in to 97 %. A button's border lights up in the accent and a soft glow (`--glow`) rises around it in 200 ms (0.37); links underline, segments brighten, tiles get an accent edge. Never on a button that can't be pressed.

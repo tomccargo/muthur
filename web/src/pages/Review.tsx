@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type CSSProperties } from 'react';
 import { api, type Card, type Choice, type EpisodeChoice, type Item, type Kind, type Planned, type Season } from '../api';
 import type { StatusHook } from '../App';
-import { Dot, JobError, Loading } from '../components';
+import { ClearField, Dot, JobError, Loading } from '../components';
 import { SIGNALS, hue, middle, splitId } from '../labels';
 import { Link } from '../nav';
 
@@ -88,12 +88,12 @@ function IdentityQuestion({ item, busy, onChosen }: { item: Item; busy: boolean;
             <button type="button" aria-pressed={kind === 'tv'} onClick={() => setKind('tv')}>Show</button>
             <button type="button" aria-pressed={kind === 'movie'} onClick={() => setKind('movie')}>Film</button>
           </div>
-          <input className="field" aria-label="Title" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <ClearField aria-label="Title" value={query} onChange={setQuery} />
           <input className="field year" aria-label="Year" inputMode="numeric" placeholder="Year" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} />
           <button className="btn btn-secondary btn-sm" type="submit" disabled={!query.trim()}>Search TMDB</button>
         </form>
         <form className="inline" onSubmit={(e) => { e.preventDefault(); useLink(); }}>
-          <input className="field" aria-label="A TMDB or IMDb link" placeholder="Or paste a TMDB or IMDb link" value={link} onChange={(e) => setLink(e.target.value)} />
+          <ClearField aria-label="A TMDB or IMDb link" placeholder="Or paste a TMDB or IMDb link" value={link} onChange={setLink} />
           <button className="btn btn-secondary btn-sm" type="submit" disabled={!link.trim()}>Use this link</button>
         </form>
       </div>

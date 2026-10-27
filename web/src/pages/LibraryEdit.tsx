@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api, type Card, type Kind } from '../api';
+import { ClearField } from '../components';
 import { TitleCard } from './Review';
 
 const IMAGES = 'https://image.tmdb.org/t/p/w185';
@@ -42,7 +43,7 @@ export function LibraryEditor({ kind, path, nfo, posterTarget, tmdbId, title, on
         <section className="panel question" aria-label="Change the match">
           <p className="hint">Which {kind === 'tv' ? 'show' : 'film'} is this? muthur writes its NFO and artwork from the one you pick; the old files are kept for putting back.</p>
           <form className="inline" onSubmit={(e) => { e.preventDefault(); api.search(kind, query).then((r) => { setCards(r.results); setPicked(null); }).catch((x: Error) => setError(x.message)); }}>
-            <input className="field" aria-label="Title" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <ClearField aria-label="Title" value={query} onChange={setQuery} />
             <button className="btn btn-secondary btn-sm" type="submit" disabled={!query.trim()}>Search TMDB</button>
           </form>
           {cards && (cards.length
@@ -57,7 +58,7 @@ export function LibraryEditor({ kind, path, nfo, posterTarget, tmdbId, title, on
       {mode === 'title' && nfo && (
         <section className="panel question" aria-label="Change the title">
           <form className="inline" onSubmit={(e) => { e.preventDefault(); run(api.libraryTitle(nfo, newTitle)); }}>
-            <input className="field" aria-label="Title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} />
+            <ClearField aria-label="Title" value={newTitle} onChange={setNewTitle} />
             <button className="btn btn-secondary btn-sm" type="submit" disabled={busy || !newTitle.trim() || newTitle === title} aria-busy={busy}>Save the title</button>
           </form>
           <p className="hint">Changes the title Kodi shows; muthur asks Kodi to re-read it. History can put it back.</p>

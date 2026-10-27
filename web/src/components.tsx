@@ -1,7 +1,22 @@
 // Small pieces shared by the pages.
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from 'react';
 import type { Job } from './api';
+import { Icon } from './icons';
 import { JOBS } from './labels';
+
+// A text field with a cross at its end that empties it, shown while there is text (27 Oct). Escape empties it too.
+type ClearFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange'> & { value: string; onChange: (v: string) => void };
+export function ClearField({ value, onChange, className = 'field', onKeyDown, ...rest }: ClearFieldProps) {
+  const ref = useRef<HTMLInputElement>(null);
+  const clear = () => { onChange(''); ref.current?.focus(); };
+  return (
+    <span className="clear-field">
+      <input ref={ref} className={className} value={value} onChange={(e) => onChange(e.target.value)} {...rest}
+        onKeyDown={(e) => { if (e.key === 'Escape' && value) { e.preventDefault(); clear(); } onKeyDown?.(e); }} />
+      {value && <button type="button" className="clear-btn" aria-label="Clear" title="Clear" onClick={clear}><Icon name="x" size={16} /></button>}
+    </span>
+  );
+}
 
 export function Dot({ kind = '' }: { kind?: string }) {
   return <span className={`dot ${kind}`} aria-hidden="true" />;
