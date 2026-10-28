@@ -36,6 +36,8 @@ Give muthur's user the config folder (over SSH): `sudo chown -R <user>:users /vo
 
 Open `http://<nas>:8580`. The first visit asks you to **choose a password**: do that right away, because until then anyone who opens the page can choose it. Then, in **Settings**: the TMDB token (unless it's in `.env`), the Kodi address, and whether to start in **dry run** (plans only, changes nothing).
 
+**Short addresses (Synology, optional).** `http://<nas>/kodi` and `http://<nas>/player` open the player and `http://<nas>/muthur` the dashboard, so nobody has to remember the port. They are redirects in DSM's own web server, next to its `/download` alias; muthur stays on 8580. Over SSH, as root: copy `scripts/nas/short-paths.conf` and `install-short-paths.sh` to `/volume1/docker/muthur/nas/` and run the script. DSM gives no promise to keep a file it didn't write through an update, so add a **Task Scheduler → Create → Triggered Task → User-defined script**, user root, event **Boot-up**, running that script: it puts the addresses back when they are missing and does nothing otherwise.
+
 ## 4. Kodi
 
 In Kodi, **Settings → Services → Control**:
