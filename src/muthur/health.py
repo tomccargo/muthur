@@ -725,19 +725,21 @@ class Health:
         own = bool(f["file"]) and "/" in f["file"]  # in a folder of its own, where a plain 'poster.jpg' may be
         stem = f"Film/{f['file'].rsplit('.', 1)[0]}" if f["file"] else ""
         folder = f"Film/{f['file'].rsplit('/', 1)[0]}" if own else ""
+        renaming: dict[str, str] = {}  # {name after the video: plain name}, as 'film-art' renames them
         if own:  # Kodi reads only art named after the video (artwork.py), so the plain names get its name
             try:
                 names = set(os.listdir(self._full(folder)))
             except OSError:
                 names = set()
             for was, named in plain_film_art(names, stem.rsplit("/", 1)[1]):
+                renaming[f"{folder}/{named}"] = f"{folder}/{was}"
                 fixes["film-art"].append({"path": f"{folder}/{was}", "to": f"{folder}/{named}", "label": label, "why": f"to {named}",
                                           "nfo": f"Film/{f['nfoFile']}" if f.get("nfoFile") else None})
         if f["nfo"] and f["file"] and f.get("nfoFile") and film_id:
             # A plain name counts as there: 'film-art' renames it, before these fixes run.
-            plain = [f"{folder}/poster.jpg", f"{folder}/poster.png", f"{folder}/folder.jpg"] if own else []
+            plain = [was for named, was in renaming.items() if named.startswith(stem + "-poster.")]
             self._poster([stem + "-poster.jpg", stem + "-poster.png"], "movie", film_id, f"Film/{f['nfoFile']}", label, fixes, plain)
-            fixes["artwork"] += self.art.film([stem + "-"] + ([f"{folder}/"] if own else []), film_id, label, f"Film/{f['nfoFile']}")
+            fixes["artwork"] += self.art.film(stem + "-", film_id, label, f"Film/{f['nfoFile']}", set(renaming))
         if not f["file"]:
             if f["folder"]:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})

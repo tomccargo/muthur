@@ -116,7 +116,7 @@ class FakeKodi:
 
     def scan_and_wait(self, directory=None, limit=300, waited=None):
         folder = self.root / directory[len(self.prefix):]
-        for f in folder.iterdir():
+        for f in sorted(folder.iterdir()):  # the order Windows lists them in; Linux's would change the new IDs
             path = directory + f.name
             if f.suffix in (".mkv", ".mp4") and not any(e["file"] == path for e in self.eps):
                 self.eps.append({"episodeid": 10 + len(self.eps), "tvshowid": 1, "season": 1, "episode": 1, "playcount": 0,

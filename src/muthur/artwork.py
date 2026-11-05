@@ -105,15 +105,16 @@ class Artwork:
         return {"path": stem + "-thumb.jpg", "nfo": stem + ".nfo", "label": f"{label}: thumbnail", "from": "tmdb",
                 "src": ep["still_path"], "size": "original"}
 
-    def film(self, prefixes: list[str], tmdb_id: int, label: str, nfo: str) -> list[dict]:
-        """prefixes: 'Film/…/X (1999)-', the video's name, where muthur writes; then 'Film/X (1999)/', its folder, whose
-        plain names Health renames ('film-art'), so a file there counts as there."""
+    def film(self, prefix: str, tmdb_id: int, label: str, nfo: str, soon: set[str] | None = None) -> list[dict]:
+        """prefix: 'Film/…/X (1999)-', the video's name. soon: the names Health's 'film-art' gives plain ones in the
+        film's folder before this runs, which count as there."""
         d = self.tmdb.movie_full(tmdb_id) or {}
         fan = self._fan("movies", tmdb_id)
         out = []
         for name, field, size, key in FILM:
-            if any(self.exists(p + name) for p in prefixes):
+            kind = name.split(".")[0]
+            if any(self.exists(prefix + kind + e) or prefix + kind + e in (soon or set()) for e in (".jpg", ".png")):
                 continue
             if src := self._source(d, field, size, fan, key):
-                out.append({"path": prefixes[0] + name, "nfo": nfo, "label": f"{label}: {WHAT[name.split('.')[0]]}", **src})
+                out.append({"path": prefix + name, "nfo": nfo, "label": f"{label}: {WHAT[kind]}", **src})
         return out
