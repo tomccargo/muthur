@@ -18,6 +18,7 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   renames: { title: 'Rename episodes to the library’s naming', what: 'Show - S01E02 - TMDB’s title, with the NFO, thumbnail and subtitles. Only while Kodi is on: it keeps each episode’s watched status.' },
   'film-renames': { title: 'Rename films to the library’s naming', what: 'Title (Year)/Title (Year), from the NFO, with the artwork and subtitles; download-site notes go to quarantine. Only while Kodi is on.' },
   posters: { title: 'Replace missing and poor posters', what: 'TMDB’s poster where there is none, or one under 500 pixels wide or not poster-shaped. The old one is kept; Kodi re-reads each item.' },
+  'film-art': { title: 'Name film artwork so Kodi shows it', what: 'A film’s poster.jpg, fanart.jpg, logo and other art in its folder get the video’s name (Title (Year)-poster.jpg): Kodi reads only those, and shows a frame of the video instead. Nothing is downloaded; Kodi re-reads each film.' },
   artwork: { title: 'Add missing artwork', what: 'Episode thumbnails, fanart, logos and season posters from TMDB; banners, landscapes, clear art, character art and disc art from fanart.tv once its key is in Settings. Only where none is there; NFOs stay as they are. Kodi re-reads each item.' },
   subtitles: { title: 'Put subtitles where Kodi finds them', what: 'English goes beside the video under its name (Dutch only when there is no English); other languages, extra copies and Dutch next to English go to quarantine.' },
   leftovers: { title: 'Move leftover files to quarantine', what: 'Tracker notes, Thumbs.db, and NFOs, thumbnails or subtitles of videos that are gone.' },
@@ -29,12 +30,12 @@ const FIX: Record<FixKind, { title: string; what: string }> = {
   extras: { title: 'Move extras to the show’s Extras folder', what: 'Interviews, featurettes, openings and the like that sit between the episodes. Kodi doesn’t list them as episodes; in Extras its Extras add-on finds them. Nothing else changes.' },
 };
 // "Download everything missing" (27 Oct): the files muthur fetches for beside the videos, in one go: NFOs, posters, artwork.
-const MISSING: FixKind[] = ['episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork'];
-const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
+const MISSING: FixKind[] = ['film-art', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork'];
+const ORDER: FixKind[] = ['imdb-data', 'imdb-scores', 'show-rematch', 'film-art', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles', 'subtitle-timing', 'subtitle-misfit', 'renames', 'film-renames', 'kodi-entries', 'extras', 'leftovers', 'empty-films'];
 // The fixes in three groups, with "Questions for you" between the second and third (DESIGN.md §1.11): a few titled groups read better than eleven tiles.
 export const GROUPS: { id: string; title: string; kinds: FixKind[] }[] = [
   { id: 'scores', title: 'IMDb scores', kinds: ['imdb-data', 'imdb-scores'] },  // shown first, then Missing in Kodi, the questions, Tidy up
-  { id: 'kodi', title: 'Missing in Kodi', kinds: ['show-rematch', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles'] },
+  { id: 'kodi', title: 'Missing in Kodi', kinds: ['show-rematch', 'film-art', 'episode-nfos', 'show-nfos', 'film-nfos', 'posters', 'artwork', 'subtitles'] },
   { id: 'tidy', title: 'Tidy up', kinds: ['renames', 'film-renames', 'subtitle-timing', 'subtitle-misfit', 'kodi-entries', 'extras', 'leftovers', 'empty-films'] },
 ];
 

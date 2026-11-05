@@ -195,12 +195,13 @@ Film/
   Aguirre, der Zorn Gottes (1972)/
     Aguirre, der Zorn Gottes (1972).mkv
     Aguirre, der Zorn Gottes (1972).nfo
-    poster.jpg  fanart.jpg  clearlogo.png
+    Aguirre, der Zorn Gottes (1972)-poster.jpg  …-fanart.jpg  …-clearlogo.png
     Aguirre, der Zorn Gottes (1972).en.srt
     Extras/
       Making of.mkv
 ```
 - Always one movie per folder. The 41 loose movies in the root get folders.
+- A film's artwork is named after its video (since 0.55.0). Kodi reads a plain `poster.jpg` in a film's folder only when the source has "Movies are in separate folders that match the movie title" on. Without that setting, it shows a frame of the video ([Kodi 21 `VideoInfoScanner::GetArtwork`](https://github.com/xbmc/xbmc/blob/Omega/xbmc/video/VideoInfoScanner.cpp): the folder is searched only with the source's `useFolderNames`). Health's "film-art" fix renames plain names that are already there.
 - `Extras/` uses Kodi's video extras feature (v21+, needs movie folders). It also needs the `advancedsettings.xml` exclusion in §10 so extras aren't listed as movies ([Kodi wiki: Video extras](https://kodi.wiki/view/Video_extras)).
 - Discs split into parts: `… (2004) - cd1.avi`, `- cd2.avi` (Kodi stacks these).
 

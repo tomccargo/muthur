@@ -169,34 +169,38 @@ class Index:
         for unit in scan_film(self.film_root):
             info = self.nfo(unit.nfo) if unit.nfo else None
             ids = info.ids if info else {}
+            art = _art_of(self.film_root, unit.main.parts) if unit.main else {"poster": None, "fanart": None}
             out.append({
                 "key": unit.key, "folder": unit.folder, "file": "/".join(unit.main.parts) if unit.main else None,
                 "size": unit.main.size if unit.main else 0, "others": ["/".join(o.parts) for o in unit.others],
                 "title": info.title if info and info.title else unit.key, "year": info.year if info else None,
                 "ids": ids, "nfo": bool(info and info.readable), "muthur": bool(info and info.muthur), "rating": _shown(info),
                 "imdb": list(info.ratings["imdb"]) if info and "imdb" in info.ratings else None,
-                "poster": bool(unit.folder and unit.main and os.path.isfile(os.path.join(self.film_root, *unit.main.parts[:-1], "poster.jpg"))),
+                "poster": art["poster"] is not None,
                 "flags": unit.flags, "watched": _was_played(played, ids, None, []),
                 "nfoFile": os.path.relpath(unit.nfo, self.film_root).replace(os.sep, "/") if unit.nfo else None,
                 "twins": _twins_of(unit.nfo),
                 "genres": info.genres if info else [], "plot": info.plot if info else None,
                 "added": _mtime(os.path.join(self.film_root, *unit.main.parts)) if unit.main else 0,
-                "posterFile": _poster_of(self.film_root, unit.main.parts) if unit.main else None,
+                "posterFile": art["poster"], "fanartFile": art["fanart"],
             })
         return out
 
 
-def _poster_of(root: str, parts: list[str]) -> str | None:
-    """The image Kodi takes as a film's poster, relative to the Film folder: 'poster.jpg' or 'folder.jpg' in a film's own
-    folder, else '<video name>-poster.jpg' beside it."""
+def _art_of(root: str, parts: list[str]) -> dict[str, str | None]:
+    """A film's poster and fanart, relative to the Film folder: '<video name>-poster.jpg' beside it, the name Kodi reads;
+    else a plain 'poster.jpg' (or 'folder.jpg') in its own folder, which muthur shows until Health renames it."""
     stem = os.path.splitext(parts[-1])[0]
     try:
         names = set(os.listdir(os.path.join(root, *parts[:-1])))
     except OSError:
-        return None
-    own = ["poster.jpg", "poster.png", "folder.jpg"] if len(parts) > 1 else []
-    found = next((n for n in [*own, f"{stem}-poster.jpg", f"{stem}-poster.png"] if n in names), None)
-    return "/".join([*parts[:-1], found]) if found else None
+        return {"poster": None, "fanart": None}
+    out: dict[str, str | None] = {}
+    for kind in ("poster", "fanart"):
+        plain = ([f"{kind}.jpg", f"{kind}.png"] + (["folder.jpg"] if kind == "poster" else [])) if len(parts) > 1 else []
+        found = next((n for n in [f"{stem}-{kind}.jpg", f"{stem}-{kind}.png", *plain] if n in names), None)
+        out[kind] = "/".join([*parts[:-1], found]) if found else None
+    return out
 
 
 def _mtime(path: str) -> int:

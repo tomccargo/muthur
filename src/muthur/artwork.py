@@ -6,8 +6,15 @@ disc art), and where TMDB has none.
 Decided 27 Oct: muthur only wrote artwork together with a new NFO, so whatever came with another tool's NFO never got
 any (on the NAS: 138 episodes without a thumbnail, 461 films without fanart). Now each missing file is a fix of its
 own. A file that is there is never replaced here; a poor poster is the 'posters' fix.
+
+Found 5 Nov: a film's art is named after its video ('X (1999)-poster.jpg'). Kodi takes a plain 'poster.jpg' in a
+film's folder only when the source has "Movies are in separate folders that match the movie title" on (Kodi 21,
+VideoInfoScanner::GetArtwork: the folder is searched only with the source's useFolderNames); without it 58 films
+showed a frame of the video. Plain names muthur wrote before are renamed by Health ('film-art').
 """
 from __future__ import annotations
+
+import os
 
 import requests
 
@@ -25,6 +32,21 @@ FILM = (("fanart.jpg", "backdrop_path", "w1280", "moviebackground"), ("clearlogo
         ("clearart.png", None, None, "hdmovieclearart"), ("discart.png", None, None, "moviedisc"))
 WHAT = {"fanart": "fanart", "clearlogo": "clear logo", "banner": "banner", "landscape": "landscape", "clearart": "clear art",
         "characterart": "character art", "discart": "disc art", "poster": "poster"}
+
+
+def plain_film_art(names: set[str], stem: str) -> list[tuple[str, str]]:
+    """[(plain name, name after the video)] for the art in a film's folder that Kodi doesn't read: 'poster.jpg' to
+    'X (1999)-poster.jpg', 'folder.jpg' to its poster when there is no other. One that has its named twin stays."""
+    have = {n.lower() for n in names}
+    out: list[tuple[str, str]] = []
+    for kind in (*WHAT, "keyart", "folder"):
+        to = "poster" if kind == "folder" else kind
+        if any(f"{stem}-{to}{e}".lower() in have for e in (".jpg", ".png")) or any(t == to for _, t in out):
+            continue
+        plain = next((n for n in sorted(names) if n.lower() in (f"{kind}.jpg", f"{kind}.png")), None)
+        if plain:
+            out.append((plain, to))
+    return [(n, f"{stem}-{to}{os.path.splitext(n)[1].lower()}") for n, to in out]
 
 
 def season_names(s: int, kind: str) -> list[str]:
@@ -84,8 +106,8 @@ class Artwork:
                 "src": ep["still_path"], "size": "original"}
 
     def film(self, prefixes: list[str], tmdb_id: int, label: str, nfo: str) -> list[dict]:
-        """prefixes: where Kodi takes a film's artwork, 'Film/X (1999)/' in its own folder, then 'Film/…/X (1999)-'
-        beside the video; muthur writes to the first."""
+        """prefixes: 'Film/…/X (1999)-', the video's name, where muthur writes; then 'Film/X (1999)/', its folder, whose
+        plain names Health renames ('film-art'), so a file there counts as there."""
         d = self.tmdb.movie_full(tmdb_id) or {}
         fan = self._fan("movies", tmdb_id)
         out = []

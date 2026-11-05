@@ -78,12 +78,13 @@ def test_show_season_and_film_art_from_tmdb_then_fanart(art_env):
         "TV/Some Show/clearlogo.png": ("tmdb", "/l.png"),  # TMDB first...
         "TV/Some Show/banner.jpg": ("fanart.tv", "https://assets.fanart.tv/b-en.jpg"),  # ...fanart.tv for what TMDB lacks, English first
         "TV/Some Show/season01-poster.jpg": ("tmdb", "/s1.jpg"),  # season 2's banner isn't asked: the library has no season 2
-        "Film/A Film (1999)/fanart.jpg": ("fanart.tv", "https://assets.fanart.tv/bg.jpg"),  # TMDB has no backdrop for it
-        "Film/A Film (1999)/discart.png": ("fanart.tv", "https://assets.fanart.tv/disc.png"),
+        # named after the video, the only name Kodi reads for a film (5 Nov); TMDB has no backdrop for it
+        "Film/A Film (1999)/A Film (1999)-fanart.jpg": ("fanart.tv", "https://assets.fanart.tv/bg.jpg"),
+        "Film/A Film (1999)/A Film (1999)-discart.png": ("fanart.tv", "https://assets.fanart.tv/disc.png"),
     }
     result = health.apply(plan, ["artwork"])
     assert result["failed"] == [] and result["done"]["artwork"] == 5
-    assert (tmp / "Film" / "A Film (1999)" / "discart.png").read_bytes() == b"fan https://assets.fanart.tv/disc.png"
+    assert (tmp / "Film" / "A Film (1999)" / "A Film (1999)-discart.png").read_bytes() == b"fan https://assets.fanart.tv/disc.png"
     assert (tmp / "TV" / "Some Show" / "season01-poster.jpg").read_bytes() == b"img"
     assert (tmp / "TV" / "Some Show" / "fanart.jpg").read_text() == "x"  # left as it was
 
@@ -107,7 +108,33 @@ def test_a_film_known_only_by_its_imdb_id_gets_its_artwork(art_env):
     found = Health(health.store, health.journal, health.imdb, FindTmdb(), health.index, *health.roots.values(), health.quarantine,
                    health.backups, FakeFanart())
     paths = {x["path"] for x in found.check(health.index.build())["fixes"]["artwork"]}
-    assert {"Film/A Film (1999)/fanart.jpg", "Film/A Film (1999)/discart.png"} <= paths
+    assert {"Film/A Film (1999)/A Film (1999)-fanart.jpg", "Film/A Film (1999)/A Film (1999)-discart.png"} <= paths
+
+
+def test_plain_film_art_gets_the_videos_name(art_env):
+    """5 Nov: Kodi read none of a film's plain 'poster.jpg', 'fanart.jpg' … (only with a source setting); Health
+    names them after the video, counts them as there meanwhile, and History can put them back."""
+    tmp, health, _ = art_env
+    folder = tmp / "Film" / "A Film (1999)"
+    write(folder / "poster.jpg", "p")
+    write(folder / "Fanart.JPG", "f")
+    write(folder / "discart.png", "d")
+    write(folder / "A Film (1999)-discart.png", "named")  # its named twin is there: the plain one stays
+    plan = health.check(health.index.build())
+    moves = {x["path"]: x["to"] for x in plan["fixes"]["film-art"]}
+    assert moves == {"Film/A Film (1999)/poster.jpg": "Film/A Film (1999)/A Film (1999)-poster.jpg",
+                     "Film/A Film (1999)/Fanart.JPG": "Film/A Film (1999)/A Film (1999)-fanart.jpg"}
+    assert not any(p.startswith("Film/") for p in (x["path"] for x in plan["fixes"]["artwork"] if "fanart" in x["path"]))
+    # a poor one is replaced where 'film-art' puts it (this one is no picture at all)
+    assert [x["path"] for x in plan["fixes"]["posters"] if x["path"].startswith("Film/")] == ["Film/A Film (1999)/A Film (1999)-poster.jpg"]
+    lib = health.index.build()
+    assert next(f for f in lib["films"] if f["key"] == "A Film (1999)")["posterFile"] == "A Film (1999)/poster.jpg"  # shown meanwhile
+    result = health.apply(plan, ["film-art"])
+    assert result["failed"] == [] and result["done"]["film-art"] == 2
+    assert (folder / "A Film (1999)-poster.jpg").read_text() == "p" and not (folder / "poster.jpg").exists()
+    assert next(f for f in health.index.build()["films"] if f["key"] == "A Film (1999)")["posterFile"] == "A Film (1999)/A Film (1999)-poster.jpg"
+    health.journal.undo(result["run"])
+    assert (folder / "poster.jpg").read_text() == "p" and (folder / "Fanart.JPG").read_text() == "f"
 
 
 def test_best_fanart_image():

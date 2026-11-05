@@ -146,12 +146,12 @@ class Applier:
         if item["kind"] == "tv":
             score = imdb.rating(show_imdb) if imdb else None
             count += self._write(run, item["id"], os.path.join(top, "tvshow.nfo"), nfo_write.tvshow_nfo(show, item["title"], score))
-            count += self._artwork(run, item["id"], top, show)
+            count += self._artwork(run, item["id"], top + os.sep, show)
             for s, data in seasons.items():
                 name = "season-specials-poster.jpg" if s == 0 else f"season{s:02d}-poster.jpg"
                 count += self._image(run, item["id"], os.path.join(top, name), data.get("poster_path"), "w780")
-        else:
-            count += self._artwork(run, item["id"], top, movie)
+        else:  # named after the video: Kodi reads a film's plain 'poster.jpg' only with a source setting (artwork.py)
+            count += self._artwork(run, item["id"], os.path.splitext(moves[0][2])[0] + "-", movie)
 
         # 3. What's left of the download: junk only goes to quarantine; anything with video stays.
         count += self._leftovers(run, item)
@@ -172,10 +172,11 @@ class Applier:
             return 0
         return self._write(run, item, path, self.tmdb.image(tmdb_path, size))
 
-    def _artwork(self, run: int, item: str, folder: str, details: dict) -> int:
-        n = self._image(run, item, os.path.join(folder, "poster.jpg"), details.get("poster_path"), "w780")
-        n += self._image(run, item, os.path.join(folder, "fanart.jpg"), details.get("backdrop_path"), "w1280")
-        n += self._image(run, item, os.path.join(folder, "clearlogo.png"), nfo_write.best_logo(details), "w500")
+    def _artwork(self, run: int, item: str, prefix: str, details: dict) -> int:
+        """prefix: the show's folder ('…/Show (2019)/'), or a film's video without its extension ('…/X (1999)-')."""
+        n = self._image(run, item, prefix + "poster.jpg", details.get("poster_path"), "w780")
+        n += self._image(run, item, prefix + "fanart.jpg", details.get("backdrop_path"), "w1280")
+        n += self._image(run, item, prefix + "clearlogo.png", nfo_write.best_logo(details), "w500")
         return n
 
     def _subtitles(self, run: int, item: str, src: str, dst: str, single: bool = True) -> int:

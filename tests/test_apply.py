@@ -80,8 +80,9 @@ def test_apply_moves_and_writes_kodi_files(env):
 
     movie = ET.parse(tmp / "Film" / "Een Film (1999)" / "Een Film (1999).nfo").getroot()
     assert movie.findtext("title") == "Een Film" and movie.findtext("director") == "D"
-    assert (tmp / "Film" / "Een Film (1999)" / "poster.jpg").exists()
-    assert not (tmp / "Film" / "Een Film (1999)" / "fanart.jpg").exists()  # TMDB had none
+    assert (tmp / "Film" / "Een Film (1999)" / "Een Film (1999)-poster.jpg").exists()  # named after the video: Kodi reads only that
+    assert not (tmp / "Film" / "Een Film (1999)" / "poster.jpg").exists()
+    assert not (tmp / "Film" / "Een Film (1999)" / "Een Film (1999)-fanart.jpg").exists()  # TMDB had none
 
     # The emptied download folder (only junk left) went to quarantine; the downloads folder is empty.
     assert os.listdir(tmp / "complete") == []

@@ -113,6 +113,7 @@ export type Film = {
   key: string; folder: boolean; file: string | null; size: number; others: string[]; title: string; year: number | null;
   ids: Record<string, string>; nfo: boolean; muthur: boolean; rating: Score; imdb: [number, number] | null; poster: boolean;
   flags: string[]; watched: number | null; problems: LibProblems; nfoFile?: string | null;
+  posterFile?: string | null;  // relative to Film: '<video name>-poster.jpg', or a plain 'poster.jpg' not yet renamed
 };
 export type Library = { at: number | null; shows: ShowSummary[]; films: Film[] };
 
@@ -128,7 +129,7 @@ export type DupGroup = {
 };
 export type DupResult = { applied: number; stopped: number; items: { id: string; label: string; ok: boolean; why?: string; kodi?: { ok: boolean; why?: string } }[] };
 
-export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit' | 'extras' | 'show-rematch' | 'artwork';
+export type FixKind = 'imdb-data' | 'leftovers' | 'empty-films' | 'subtitles' | 'episode-nfos' | 'show-nfos' | 'film-nfos' | 'posters' | 'imdb-scores' | 'renames' | 'film-renames' | 'kodi-entries' | 'subtitle-timing' | 'subtitle-misfit' | 'extras' | 'show-rematch' | 'artwork' | 'film-art';
 export type FixItem = { path: string; label?: string; why?: string; score?: [number, number] };
 // A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
 export type Question = {

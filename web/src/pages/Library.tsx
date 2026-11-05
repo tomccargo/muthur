@@ -10,8 +10,8 @@ import { hero, heroClick, heroLanded, motionOn } from '../motion';
 
 // The page a poster was clicked for: its cover takes over the flying poster (motion.ts).
 const isFlying = () => motionOn() && hero.to === location.pathname + location.search;
-// A film's own folder: where its video is, which may be a folder deeper than the film's top folder.
-const filmDir = (f: Film) => (f.file && f.file.includes('/') ? f.file.split('/').slice(0, -1).join('/') : f.key);
+// A film's poster as the index found it: named after the video, or a plain one in its folder (5 Nov).
+const filmPoster = (f: Film) => (f.posterFile ? art(`Film/${f.posterFile}`) : null);
 
 type Filter = 'all' | keyof LibProblems;
 // Each problem filter says where it's fixed.
@@ -232,7 +232,7 @@ function FilmPage({ film }: { film: Film }) {
     <div className="page">
       <Link to="/library?kind=film" className="btn btn-ghost btn-sm" style={{ alignSelf: 'flex-start' }}>← Library</Link>
       <header style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 120px) minmax(0, 1fr)', gap: 20, alignItems: 'start' }}>
-        <Cover src={film.poster ? art(`Film/${filmDir(film)}/poster.jpg`) : null} title={film.title} hero={flying} />
+        <Cover src={filmPoster(film)} title={film.title} hero={flying} />
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, minWidth: 0 }}>
           <p className="eyebrow">Film</p>
           <h1 style={{ margin: 0, fontSize: '2rem', overflowWrap: 'anywhere' }}>{film.title}{film.year ? ` (${film.year})` : ''}</h1>
@@ -244,7 +244,7 @@ function FilmPage({ film }: { film: Film }) {
       {note && <div className="banner banner-note" role="status">{note}</div>}
       {film.file && (
         <LibraryEditor kind="movie" path={`Film/${film.file}`} nfo={film.nfoFile ? `Film/${film.nfoFile}` : null}
-          posterTarget={film.folder ? `Film/${film.key}/poster.jpg` : `${stem}-poster.jpg`} tmdbId={film.ids.tmdb ? Number(film.ids.tmdb) : null}
+          posterTarget={`${stem}-poster.jpg`} tmdbId={film.ids.tmdb ? Number(film.ids.tmdb) : null}
           title={film.title} onDone={setNote} />
       )}
       <section className="panel" aria-labelledby="files-h">
@@ -359,7 +359,7 @@ export function LibraryPage({ status, refresh }: StatusHook) {
         )) : films.map((f) => (
           <Link key={f.key} className="poster-tile" to={`/library?${new URLSearchParams({ kind: 'film', film: f.key })}`} title={f.title}
             onClick={(e) => heroClick(e, `/library?${new URLSearchParams({ kind: 'film', film: f.key })}`)}>
-            <Cover src={f.poster ? art(`Film/${filmDir(f)}/poster.jpg`) : null} title={f.title} />
+            <Cover src={filmPoster(f)} title={f.title} />
             <span className="poster-title">{f.title}</span>
             <span className="small muted">{f.year ?? '—'}{f.imdb ? ` · IMDb ${f.imdb[0].toFixed(1)}` : ''}{f.watched ? ' · watched' : ''}</span>
           </Link>

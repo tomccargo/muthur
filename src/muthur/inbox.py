@@ -449,7 +449,7 @@ class Inbox:
         item.title, item.year = shown, year
         planned.target = movie_path(shown, year, os.path.splitext(parts[-1])[1], p.part)
         stem = os.path.splitext(planned.target.rsplit("/", 1)[1])[0]
-        planned.writes = [f"{stem}.nfo", "poster.jpg", "fanart.jpg", "clearlogo.png"]
+        planned.writes = [f"{stem}.nfo", f"{stem}-poster.jpg", f"{stem}-fanart.jpg", f"{stem}-clearlogo.png"]
         if self.film_root and os.path.lexists(os.path.join(self.film_root, *planned.target.split("/"))):
             planned.problem = "exists"
             if item.status == "ready":

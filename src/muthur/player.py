@@ -174,8 +174,9 @@ def items(lib: dict, play_of) -> dict:
         path = f"Film/{f['file']}"
         films.append({"id": file_id(path), "key": f["key"], "title": f["title"], "year": f["year"], "genres": genres(f),
                       "rating": _score(f), "plot": f.get("plot"), "watched": bool(f["watched"]), "added": f.get("added", 0),
-                      "poster": f"Film/{f['posterFile']}" if f.get("posterFile") else f"Film/{d}/poster.jpg" if d and f["poster"] else None,
-                      "fanart": f"Film/{d}/fanart.jpg" if d else None, "play": play_of(path)})
+                      "poster": f"Film/{f['posterFile']}" if f.get("posterFile") else None,
+                      "fanart": f"Film/{f['fanartFile']}" if f.get("fanartFile") else f"Film/{d}/fanart.jpg" if d and "fanartFile" not in f else None,
+                      "play": play_of(path)})
     return {"at": lib.get("at"), "shows": shows, "films": films}
 
 

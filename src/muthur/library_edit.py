@@ -42,7 +42,7 @@ class LibraryEdit:
         return display_title(name or orig or "", orig, d.get("original_language"), keep)
 
     def _art(self, run: int, prefix: str, d: dict) -> int:
-        """poster/fanart/clearlogo: 'Film/X/poster.jpg' with prefix 'Film/X/', 'Film/X-poster.jpg' with prefix 'Film/X-'."""
+        """poster/fanart/clearlogo: 'TV/X/poster.jpg' with prefix 'TV/X/', 'Film/X/X-poster.jpg' with prefix 'Film/X/X-'."""
         n = 0
         for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
             if d.get(key):
@@ -116,7 +116,7 @@ class LibraryEdit:
         """The NFO of the item a poster belongs to, so Kodi can re-read it: Kodi keeps the old poster until then."""
         folder, name = target.rsplit("/", 1)
         if name != "poster.jpg":
-            nfo = target[: -len("-poster.jpg")] + ".nfo"  # 'Film/X (1999)-poster.jpg' beside a loose film
+            nfo = target[: -len("-poster.jpg")] + ".nfo"  # 'Film/X (1999)/X (1999)-poster.jpg', named after the video
         elif target.startswith("TV/"):
             nfo = f"{folder}/tvshow.nfo"
         else:

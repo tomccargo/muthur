@@ -116,7 +116,7 @@ def test_fixes_apply_and_can_be_put_back(env):
     assert result["failed"] == [] and result["done"] == {"leftovers": 1, "empty-films": 1, "episode-nfos": 4, "imdb-scores": 3,
                                                          "film-nfos": 1, "show-nfos": 1}
     assert ET.parse(tmp / "Film" / "Unknown Film" / "Unknown.Film.nfo").getroot().findtext("title") == "Unknown Film"
-    assert (tmp / "Film" / "Unknown Film" / "poster.jpg").exists() and (tmp / "TV" / "Other Show (2019)" / "tvshow.nfo").exists()
+    assert (tmp / "Film" / "Unknown Film" / "Unknown.Film-poster.jpg").exists() and (tmp / "TV" / "Other Show (2019)" / "tvshow.nfo").exists()
     s1 = tmp / "TV" / "Some Show" / "Season 01"
     nfo = ET.parse(s1 / "Some Show - S01E01 - One.nfo").getroot()
     assert nfo.findtext("title") == "One" and nfo.findtext("ratings/rating/value") == "7.1"  # IMDb's S01E01

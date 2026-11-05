@@ -1026,7 +1026,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 raise HTTPException(422, "Not a show folder.")
             return edit(lambda: editor().match_show(folder, int(tmdb_id)))
         f = film_at(path)
-        prefix = f"{path.rsplit('/', 1)[0]}/" if f["folder"] else path.rsplit(".", 1)[0] + "-"  # artwork beside the video
+        prefix = path.rsplit(".", 1)[0] + "-"  # artwork named after the video, the name Kodi reads (artwork.py)
         return edit(lambda: editor().match_film(path, f"Film/{f['nfoFile']}" if f.get("nfoFile") else None, prefix, int(tmdb_id)))
 
     @app.post("/api/library/title")
@@ -1102,7 +1102,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             if not os.path.isfile(full := library_full(path)):
                 continue
             stem, folder = path.rsplit(".", 1)[0], path.rsplit("/", 1)[0]
-            art = next((p for p in (f"{folder}/poster.jpg", f"{stem}-poster.jpg", f"{stem}-thumb.jpg") if os.path.isfile(library_full(p))), None)
+            art = next((p for p in (f"{stem}-poster.jpg", f"{folder}/poster.jpg", f"{stem}-thumb.jpg") if os.path.isfile(library_full(p))), None)
             out.append({"id": player.file_id(path), "kind": what, "name": os.path.basename(full), "path": path, "art": art,
                         "play": player.playback(play_facts.cached(full))})
         return {"items": out}
@@ -1417,7 +1417,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             # 'at' only for a check that knew every kind of fix: one from before an update isn't 'in order'.
             **({"at": plan.get("at")} if set(FIXES) <= set(f) else {}),
             "imdbData": n("imdb-data"), "scores": n("imdb-scores"), "nfos": n("show-rematch", "episode-nfos", "show-nfos", "film-nfos"),
-            "leftovers": n("leftovers", "empty-films", "extras"), "subtitles": n("subtitles"), "posters": n("posters"), "artwork": n("artwork"),
+            "leftovers": n("leftovers", "empty-films", "extras"), "subtitles": n("subtitles"), "posters": n("posters"), "artwork": n("artwork", "film-art"),
             "renames": n("renames", "film-renames"),
             "kodiEntries": n("kodi-entries"), "subTiming": n("subtitle-timing", "subtitle-misfit"),
             "questions": sum(1 for v in plan["manual"].values() for q in v if _question_key(q) not in gone)})

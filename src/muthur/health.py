@@ -19,7 +19,7 @@ from collections import Counter
 from . import kodi_entries, nfo_write, quarantine, subfit, subtitles
 from . import rename as renaming
 from .art import poster_problem
-from .artwork import Artwork
+from .artwork import Artwork, plain_film_art
 from .identify import identify_movie, identify_show
 from .index import JUNK
 from .inbox import OTHER_EPISODE, SAME_EPISODE, _bare, same_title
@@ -31,7 +31,7 @@ from .scores import ScoreRefresh, with_imdb
 from .text import best_similarity, normalize, similarity
 
 # In the order they are applied: renames last, so NFOs and scores written in the same run move along with their video.
-FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "artwork",
+FIXES = ("imdb-data", "show-rematch", "leftovers", "empty-films", "film-art", "extras", "subtitles", "subtitle-timing", "subtitle-misfit", "episode-nfos", "show-nfos", "film-nfos", "posters", "artwork",
          "imdb-scores", "renames", "film-renames", "kodi-entries")
 TWIN = "release notes beside the NFO"  # 'x.NFO' beside 'x.nfo' (index._twin)
 OLD_ART = re.compile(r"(?i)^(season(\d+|-all|-specials)-(poster|banner|fanart|landscape)|banner|landscape|clearart|logo|characterart)\.(jpg|png)$")
@@ -691,12 +691,17 @@ class Health:
         fixes["subtitles"] += moves
         fixes["leftovers"] += orphans
 
-    def _poster(self, places: list[str], kind: str, tmdb_id: int, nfo: str, label: str, fixes: dict) -> None:
-        """places: the names Kodi takes as this item's poster, the one muthur would write first."""
-        have = next((p for p in places if os.path.isfile(self._full(p))), None)
+    def _poster(self, places: list[str], kind: str, tmdb_id: int, nfo: str, label: str, fixes: dict, plain: list[str] | None = None) -> None:
+        """places: the names Kodi takes as this item's poster, the one muthur would write first. plain: a film's plain
+        names, which 'film-art' renames to places[0] before this fix runs."""
+        have = next((p for p in [*places, *(plain or [])] if os.path.isfile(self._full(p))), None)
         why = "missing" if have is None else poster_problem(self._full(have))
         if why:
-            fixes["posters"].append({"path": have or places[0], "kind": kind, "tmdb": tmdb_id, "nfo": nfo, "label": label, "why": why})
+            if have is None or have in places:
+                path = have or places[0]
+            else:  # a plain name: where 'film-art' puts it
+                path = places[-1] if have.lower().endswith(".png") else places[0]
+            fixes["posters"].append({"path": path, "kind": kind, "tmdb": tmdb_id, "nfo": nfo, "label": label, "why": why})
 
     def _film(self, f: dict, fixes: dict, manual: dict) -> None:
         if f["folder"] and f["file"]:
@@ -716,21 +721,29 @@ class Health:
         if not film_id and f["nfo"] and f["ids"].get("imdb"):  # an NFO with only IMDb's ID: TMDB's mapping of it
             found = (self.tmdb.find(f["ids"]["imdb"], "imdb_id") or {}).get("movie_results") or []
             film_id = int(found[0]["id"]) if len(found) == 1 else None
+        label = f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}"
+        own = bool(f["file"]) and "/" in f["file"]  # in a folder of its own, where a plain 'poster.jpg' may be
+        stem = f"Film/{f['file'].rsplit('.', 1)[0]}" if f["file"] else ""
+        folder = f"Film/{f['file'].rsplit('/', 1)[0]}" if own else ""
+        if own:  # Kodi reads only art named after the video (artwork.py), so the plain names get its name
+            try:
+                names = set(os.listdir(self._full(folder)))
+            except OSError:
+                names = set()
+            for was, named in plain_film_art(names, stem.rsplit("/", 1)[1]):
+                fixes["film-art"].append({"path": f"{folder}/{was}", "to": f"{folder}/{named}", "label": label, "why": f"to {named}",
+                                          "nfo": f"Film/{f['nfoFile']}" if f.get("nfoFile") else None})
         if f["nfo"] and f["file"] and f.get("nfoFile") and film_id:
-            stem = f"Film/{f['file'].rsplit('.', 1)[0]}"  # beside the video, where Kodi looks: 'poster.jpg' in its folder, else '<name>-poster.jpg'
-            folder = f"Film/{f['file'].rsplit('/', 1)[0]}"
-            places = ([f"{folder}/poster.jpg", f"{folder}/folder.jpg"] if f["folder"] and "/" in f["file"] else []) + [stem + "-poster.jpg"]
-            label = f"{f['title']}{' (' + str(f['year']) + ')' if f.get('year') else ''}"
-            self._poster(places, "movie", film_id, f"Film/{f['nfoFile']}", label, fixes)
-            prefixes = ([f"{folder}/"] if f["folder"] and "/" in f["file"] else []) + [stem + "-"]
-            fixes["artwork"] += self.art.film(prefixes, film_id, label, f"Film/{f['nfoFile']}")
+            # A plain name counts as there: 'film-art' renames it, before these fixes run.
+            plain = [f"{folder}/poster.jpg", f"{folder}/poster.png", f"{folder}/folder.jpg"] if own else []
+            self._poster([stem + "-poster.jpg", stem + "-poster.png"], "movie", film_id, f"Film/{f['nfoFile']}", label, fixes, plain)
+            fixes["artwork"] += self.art.film([stem + "-"] + ([f"{folder}/"] if own else []), film_id, label, f"Film/{f['nfoFile']}")
         if not f["file"]:
             if f["folder"]:
                 fixes["empty-films"].append({"path": f"Film/{f['key']}", "label": f["title"]})
             return
         if not f["nfo"]:
-            stem = f"Film/{f['file'].rsplit('.', 1)[0]}"
-            fix = {"path": stem + ".nfo", "video": f"Film/{f['file']}", "art": f"Film/{f['file'].rsplit('/', 1)[0]}/" if f["folder"] else stem + "-"}  # beside the video, where Kodi looks
+            fix = {"path": stem + ".nfo", "video": f"Film/{f['file']}", "art": stem + "-"}  # named after the video, as Kodi reads it
             chosen = (self.store.get("library.films") or {}).get(f"Film/{f['file']}")
             if chosen:  # the reader said which film it is
                 fixes["film-nfos"].append({**fix, "tmdb": chosen["tmdbId"], "label": chosen["label"]})
@@ -994,12 +1007,23 @@ class Health:
         imdb_id = movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id")
         self._nfo(run, x["path"], nfo_write.movie_nfo(movie, title, self.imdb.rating(imdb_id)))
         nfos.append(x["path"])
-        # Artwork: 'poster.jpg' in the film's own folder, '<name>-poster.jpg' next to a loose file.
+        # Artwork named after the video ('<name>-poster.jpg'), the only name Kodi reads for a film (artwork.py).
         for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
             if movie.get(key):
                 self._write(run, x["art"] + name, self.tmdb.image(movie[key], size))
         if logo := nfo_write.best_logo(movie):
             self._write(run, x["art"] + "clearlogo.png", self.tmdb.image(logo, "w500"))
+
+    def _film_art(self, run, x, nfos):
+        """A film's 'poster.jpg' (or fanart, logo …) gets the video's name, the one Kodi reads. Kodi re-reads the film."""
+        src, dst = self._full(x["path"]), self._full(x["to"])
+        if not os.path.isfile(src):
+            raise ValueError("it isn't there any more")
+        if os.path.lexists(dst):
+            raise ValueError(f"{x['to'].rsplit('/', 1)[1]} already exists")
+        self.journal.move(run, x["path"], src, dst, "move")
+        if x.get("nfo"):
+            nfos.append(x["nfo"])
 
     def _artwork(self, run, x, nfos):
         """One missing artwork file, from TMDB or fanart.tv; never over a file that is there. Kodi re-reads the item."""
