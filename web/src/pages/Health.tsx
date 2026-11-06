@@ -146,24 +146,29 @@ const unnumbered = (q: Question) => !!q.noNumber && !/s\d+\s*e-?\d|\d+x\d+/i.tes
 const QUESTIONS: Record<string, string> = {
   seasons: 'Seasons numbered differently from TMDB',
   numbers: 'Episodes whose number can’t be trusted',
-  shows: 'Shows muthur can’t find on TMDB',
+  shows: 'Shows muthur can’t place on TMDB',
   films: 'Films without an NFO',
 };
 
 // "Which is it?" for a show or film muthur can't place: a TMDB search right in the list.
-function Chooser({ kind, path, busy, onDone }: { kind: Kind; path: string; busy: boolean; onDone: (text: string) => void }) {
-  const name = path.split('/').filter(Boolean)[kind === 'tv' ? 1 : path.split('/').length - 1] ?? path;
+// open: the link that opens it; pick: what choosing does (default: remember the show or film for this path).
+function Chooser({ kind, path, busy, onDone, open: label = 'Which is it?', name: given, pick }: {
+  kind: Kind; path: string; busy: boolean; onDone: (text: string) => void; open?: string; name?: string;
+  pick?: (card: Card) => Promise<string>;
+}) {
+  const name = given ?? path.split('/').filter(Boolean)[kind === 'tv' ? 1 : path.split('/').length - 1] ?? path;
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState(name.replace(/\.[a-z0-9]{2,4}$/i, '').replace(/[._]+/g, ' '));
   const [cards, setCards] = useState<Card[] | null>(null);
   const [picked, setPicked] = useState<Card | null>(null);
   const [error, setError] = useState<string | null>(null);
-  if (!open) return <button className="btn-link small" type="button" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>Which is it?</button>;
+  if (!open) return <button className="btn-link small" type="button" style={{ alignSelf: 'flex-start' }} onClick={() => setOpen(true)}>{label}</button>;
   const search = () => { setError(null); api.search(kind, query).then((r) => { setCards(r.results); setPicked(null); }).catch((e: Error) => setError(e.message)); };
   const choose = () => {
     if (!picked) return;
-    api.chooseForLibrary(kind, path, picked.tmdbId)
-      .then((r) => onDone(`${picked.title}${picked.year ? ` (${picked.year})` : ''}: ${count(Object.values(r.fixes).reduce((a, b) => a + (b ?? 0), 0), 'fix', 'fixes')} added${r.questions ? `, ${count(r.questions, 'question')} left` : ''}.`))
+    (pick ? pick(picked) : api.chooseForLibrary(kind, path, picked.tmdbId)
+      .then((r) => `${picked.title}${picked.year ? ` (${picked.year})` : ''}: ${count(Object.values(r.fixes).reduce((a, b) => a + (b ?? 0), 0), 'fix', 'fixes')} added${r.questions ? `, ${count(r.questions, 'question')} left` : ''}.`))
+      .then(onDone)
       .catch((e: Error) => setError(e.message));
   };
   return (
@@ -400,8 +405,21 @@ export function HealthPage({ status, refresh }: StatusHook) {
                           <button type="button" className="btn-link small" onClick={() => leave({ items: [q], back: showLeft })}>{showLeft ? 'Ask again' : 'Leave as is'}</button>
                         </span>
                       )}
+                    {k === 'shows' && q.doubt && !showLeft && (
+                      // A match the folder's name is nothing like (6 Nov): another show, a film, or right after all.
+                      <span className="actions">
+                        <button type="button" className="btn btn-secondary btn-sm" title={`Keep ${q.show ?? 'the match'}: this question doesn't come back`}
+                          onClick={() => api.matchOk(q.path).then(() => answered(`${q.path.slice(3)} stays ${q.show ?? 'as matched'}.`)).catch((e: Error) => answered(e.message))}>
+                          It is {q.show ?? 'that show'}
+                        </button>
+                      </span>
+                    )}
+                    {k === 'shows' && q.doubt && q.video && !showLeft && (
+                      <Chooser kind="movie" path={q.video} name={q.path.slice(3).replace(/\s*\(\d{4}\)$/, '')} busy={running} onDone={answered} open="It’s a film: which one?"
+                        pick={(c) => api.toFilm(q.video!, c.tmdbId).then(() => `Moving it to Film as ${c.title}${c.year ? ` (${c.year})` : ''}: the bar at the top shows it.`)} />
+                    )}
                     {(k === 'shows' || k === 'films') && (
-                      <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running} onDone={answered} />
+                      <Chooser kind={k === 'shows' ? 'tv' : 'movie'} path={q.path} busy={running} onDone={answered} open={q.doubt ? 'Another show: which one?' : undefined} />
                     )}
                   </li>
                 ))}

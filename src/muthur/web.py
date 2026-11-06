@@ -969,6 +969,72 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         job = jobs.start("rename", work)
         return job.as_dict()
 
+    @app.post("/api/library/to-film", status_code=202)
+    def episode_to_film(body: dict):
+        """'It's a film' (6 Nov): a video in a show folder is a film on TMDB. It moves to Film with a film NFO and art
+        (Health.to_film); Kodi lists it as a film with the episode's watched status, and drops the episode."""
+        not_dry()
+        client = need_tmdb()
+        path, movie_id = str(body.get("path") or ""), str(body.get("tmdbId") or "")
+        if not movie_id.isdigit():
+            raise HTTPException(422, "Choose the film first.")
+        show, _ = episode_at(path)
+        k = kodi(timeout=30)
+        if not k:
+            raise HTTPException(409, "Moving a video needs Kodi, so it keeps its watched status. Set Kodi up in Settings.")
+
+        def work(job):
+            if not k.check().get("connected"):
+                job.begin(f"Waking the {names()['device']}", 0)
+                try:
+                    wake_kodi()
+                except ShieldError:
+                    pass
+                if not k.check().get("connected"):
+                    raise RuntimeError(f"Kodi is off, and moving now would leave the watched status behind. Turn the {names()['device']} on and try again.")
+            job.begin("Reading what Kodi knows", 0)
+            roots = {"TV": cfg.tv, "Film": cfg.film}
+            before = renaming.read_before(k, roots, follow_watched)
+            run = journal.start("library")
+            job.begin("Moving it to Film", 0)
+            try:
+                new = health_tool(client).to_film(run, path, int(movie_id))
+            except (OSError, ValueError) as err:
+                journal.undo(run)
+                journal.finish(run, {"label": f"Moving {show['title']} to Film stopped"})
+                raise RuntimeError(f"Nothing was moved: {getattr(err, 'strerror', None) or err}.")
+            name = new.split("/")[1]
+            job.begin("Kodi takes the film", 0)
+            renaming.remember(store, [(path, new)])
+            followed = renaming.follow_in_kodi(k, [(path, new)], roots, before, done=lambda old: renaming.forget(store, old),
+                                               scanning=lambda what, s: setattr(job, "step", renaming.scan_line(what, s)), limit=60)
+            if followed["followed"] and not os.path.isdir(os.path.join(cfg.tv, show["folder"])):
+                try:  # the show's folder is in quarantine: Kodi's entry for that show goes too
+                    prefix = k.source_prefix(folder_name(cfg.tv))
+                    shows = k.call("VideoLibrary.GetTVShows", {"properties": ["file"]}).get("tvshows", [])
+                    for s in shows:
+                        if prefix and s["file"].rstrip("/").lower() == (prefix + show["folder"]).lower():
+                            k.call("VideoLibrary.RemoveTVShow", {"tvshowid": s["tvshowid"]})
+                except Exception:
+                    pass  # Kodi's own clean-up removes it later
+            journal.finish(run, {"label": f"Moved {show['title']} to Film as {name}", "kodi": followed})
+            if followed.get("kodiBusy") or followed.get("kodiAway"):
+                job.result = f"{name} is in Film now. Kodi is still busy with earlier work; it lists the film, with its watched status, as soon as it’s done."
+            else:
+                job.result = f"{name} is in Film now." + ("" if followed["followed"] else
+                             " Kodi didn’t list it yet; its watched status is safe in muthur’s backup (Settings, Watched, Restore to Kodi).")
+                job.attention = not followed["followed"]
+            plan, _ = store.snapshot("health")
+            if plan:  # the episode's fixes and questions are gone with it; Health checks the film next time
+                folder = show["folder"]
+                merge_plan(plan, lambda x: x["path"] == path or (x["path"].startswith(f"TV/{folder}/") or x["path"] == f"TV/{folder}")
+                           and not os.path.isdir(os.path.join(cfg.tv, folder)), {}, {})
+            start_library(by_user=False)
+
+        if any(j.name == "to-film" for j in [jobs.current, *jobs.waiting()] if j and (j.running or j.queued)):
+            raise HTTPException(409, "Another video is being moved to Film. Try again when it’s done.")
+        return jobs.start("to-film", work).as_dict()
+
     def score_notes(show: dict) -> dict[str, str]:
         """For each season with episodes lacking an IMDb score: why (DESIGN.md §8: a score left out says so)."""
         lacking = sorted({e["season"] for e in show["episodes"] if e["season"] is not None and not e["imdb"]})
@@ -1611,6 +1677,10 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             for name in {parse_show_folder(folder).title, d.get("name")}:
                 if name:
                     store.remember("tv", name, int(tmdb_id), year, d.get("name") or name, folder, "confirmed")
+            # A folder whose NFO names another show (a doubted match, 6 Nov): Health offers to make it this one.
+            current = tool.scores.show_ids(folder)[1]
+            if current and int(current) != int(tmdb_id):
+                store.put("library.rematch", {**(store.get("library.rematch") or {}), folder: int(tmdb_id)})
             return replan_show(client, folder)
         else:
             film = next((f for f in lib["films"] if f.get("file") and f"Film/{f['file']}" == path), None)
@@ -1736,6 +1806,17 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(422, "That isn't an episode in the library.")
         with alone("edit"):
             store.put("health.trusted", sorted(set(store.get("health.trusted") or []) | {path}))
+            return replan_show(client, path.split("/")[1])
+
+    @app.post("/api/fixes/match-ok")
+    def fixes_match_ok(body: dict):
+        """'The match is right': a show whose NFO doesn't look like its folder's name is what the NFO says (6 Nov)."""
+        client = need_tmdb()
+        path = str(body.get("path") or "")
+        if not path.startswith("TV/") or path.count("/") != 1:
+            raise HTTPException(422, "That isn't a show's folder.")
+        with alone("edit"):
+            store.put("health.matchOk", sorted(set(store.get("health.matchOk") or []) | {path}))
             return replan_show(client, path.split("/")[1])
 
     @app.post("/api/fixes/extras")

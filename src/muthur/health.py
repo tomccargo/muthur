@@ -127,9 +127,19 @@ class Health:
                 manual["shows"].append({"path": f"TV/{folder}", "why": f"muthur can't place this show on TMDB with certainty.{guess}"})
         if not tmdb_id:
             return
+        chosen = (self.store.get("library.rematch") or {}).get(folder)  # the reader's answer to a doubted match
+        if chosen and int(chosen) != int(tmdb_id):
+            fixes["show-rematch"].append(self._rematch_to(folder, eps, int(tmdb_id), int(chosen)))
+            return
         if self.show_order(folder) is None and (rematch := self._rematch(folder, eps, tmdb_id)):
-            fixes["show-rematch"].append(rematch)
-            return  # everything else about this folder would be judged against the wrong show
+            if not rematch.get("doubt"):
+                fixes["show-rematch"].append(rematch)
+                return  # everything else about this folder would be judged against the wrong show
+            if f"TV/{folder}" not in set(self.store.get("health.matchOk") or []):  # "the match is right" ends the doubt
+                videos = [e for e in show["episodes"] if not e.get("extra")]
+                manual["shows"].append({"path": f"TV/{folder}", "why": rematch["why"], "doubt": True, "tmdb": int(tmdb_id),
+                                        "show": show["title"], **({"video": f"TV/{folder}/{videos[0]['file']}"} if len(videos) == 1 else {})})
+                return
         details = self.tmdb.tv(tmdb_id) or {}
         counts = {s["season_number"]: s.get("episode_count") or 0 for s in details.get("seasons", [])}
         title = show["title"] if show["nfo"] else details.get("name") or folder
@@ -601,6 +611,19 @@ class Health:
                        f"{round(share(old, True) * len(titled))} are {old_name}'s",
                 "episodes": mine, "strays": strays}
 
+    def _rematch_to(self, folder: str, eps: list[dict], tmdb_id: int, new_id: int) -> dict:
+        """The show the reader chose for a folder whose match was in doubt: a 'show-rematch' fix like one muthur found."""
+        def named(d: dict) -> str:
+            year = (d.get("first_air_date") or "")[:4]
+            return (d.get("name") or "?") + (f" ({year})" if year else "")
+
+        old, new = self.tmdb.tv(tmdb_id) or {}, self.tmdb.tv(new_id) or {}
+        numbered = [e for e in eps if e["season"] is not None and e["episodes"] and not e["damaged"]]
+        listing = self._listing(new_id, sorted({e["season"] for e in numbered})) if numbered else {}
+        mine = [[e["file"], e["season"], e["episodes"][0]] for e in numbered if (e["season"], e["episodes"][0]) in listing]
+        return {"path": f"TV/{folder}", "from": tmdb_id, "to": new_id, "show": new.get("name") or folder,
+                "label": f"{folder}: {named(new)}, not {named(old)}", "why": f"you chose {named(new)}", "episodes": mine, "strays": []}
+
     def _rematch_by_name(self, folder: str, files: list[tuple], tmdb_id: int, old_details: dict, old_name: str, videos: int) -> dict | None:
         """Without episode titles: the match contradicts the folder, and TMDB places the folder's name with certainty on
         another show, as for a download. A contradiction is a name nothing like the match's (Magi / 'MaXi'), a year in
@@ -622,7 +645,13 @@ class Health:
         wanted = {(f[0]["season"], n) for f in files for n in f[0]["episodes"]}
         m = identify_show(self.tmdb, p.title, p.year, p.country, wanted)
         if m.status != "auto" or not m.best or m.best.tmdb_id == tmdb_id:
-            return None
+            # 6 Nov: 'Micro Men (2009)', a one-off TV film, was matched to the series 'Mountain Men'; TMDB has no show by
+            # that name, so nothing replaced the match and its episode questions listed the other series' episodes.
+            # The name is nothing like the match's: a question, and the folder's other questions wait for its answer.
+            if not unlike:
+                return None  # a year or a count alone is too weak to ask about
+            return {"doubt": True, "why": f"Its NFO says it is {old_name}, which is nothing like the folder’s name, and TMDB has "
+                                          "no show by the folder’s name for certain. Is it another show, or a film?"}
         new_id = m.best.tmdb_id
         listing = self._listing(new_id, sorted({s for s, _ in wanted}))
         mine = [[f[0]["file"], f[0]["season"], f[0]["episodes"][0]] for f in files if (f[0]["season"], f[0]["episodes"][0]) in listing]
@@ -1015,6 +1044,43 @@ class Health:
                 self._write(run, x["art"] + name, self.tmdb.image(movie[key], size))
         if logo := nfo_write.best_logo(movie):
             self._write(run, x["art"] + "clearlogo.png", self.tmdb.image(logo, "w500"))
+
+    def to_film(self, run: int, path: str, movie_id: int) -> str:
+        """'It's a film' (6 Nov: 'Micro Men (2009)', a one-off TV film, sat in TV matched to another series): the video
+        and its subtitles go to 'Film/Title (Year)/Title (Year).ext' with a film NFO and its art named after the video.
+        A show folder without another video left goes to quarantine with the other show's NFO and art. Journalled
+        in `run`; returns the film's library path ('Film/…')."""
+        from .apply import SUBTITLE_EXTS, belongs_to
+
+        src = self._full(path)
+        if not path.startswith("TV/") or not os.path.isfile(src):
+            raise ValueError("the video isn't there any more")
+        movie = self.tmdb.movie_full(movie_id) or {}
+        if not movie.get("id"):
+            raise ValueError("TMDB didn't return the film")
+        keep = set(self.store.get("titles.keepOriginal", sorted(LATIN_SCRIPT)))
+        title = display_title(movie.get("title") or "", movie.get("original_title"), movie.get("original_language"), keep)
+        released = movie.get("release_date") or ""
+        new = "Film/" + movie_path(title, int(released[:4]) if released[:4].isdigit() else None, os.path.splitext(path)[1])
+        if os.path.lexists(self._full(new.rsplit("/", 1)[0])):
+            raise ValueError(f"{new.rsplit('/', 1)[0]} already exists")
+        folder, base = os.path.dirname(src), os.path.splitext(os.path.basename(src))[0]
+        subs = [n for n in sorted(os.listdir(folder)) if n.lower().endswith(SUBTITLE_EXTS) and belongs_to(n, base)]
+        stem = new.rsplit(".", 1)[0]
+        self.journal.move(run, path, src, self._full(new))
+        for n in subs:
+            self.journal.move(run, path, os.path.join(folder, n), self._full(stem + n[len(base):]))
+        imdb_id = movie.get("imdb_id") or (movie.get("external_ids") or {}).get("imdb_id")
+        self._nfo(run, stem + ".nfo", nfo_write.movie_nfo(movie, title, self.imdb.rating(imdb_id) if imdb_id else None))
+        for name, key, size in (("poster.jpg", "poster_path", "w780"), ("fanart.jpg", "backdrop_path", "w1280")):
+            if movie.get(key):
+                self._write(run, f"{stem}-{name}", self.tmdb.image(movie[key], size))
+        if logo := nfo_write.best_logo(movie):
+            self._write(run, f"{stem}-clearlogo.png", self.tmdb.image(logo, "w500"))
+        show = path.split("/")[1]
+        if not any(is_video(n) for _, _, names in os.walk(self._full(f"TV/{show}")) for n in names):
+            self._quarantine(run, f"TV/{show}", f"The show folder of a film ({title}): its NFO and artwork were another show's.")
+        return new
 
     def _film_art(self, run, x, nfos):
         """A film's 'poster.jpg' (or fanart, logo …) gets the video's name, the one Kodi reads. Kodi re-reads the film."""

@@ -134,6 +134,7 @@ export type FixItem = { path: string; label?: string; why?: string; score?: [num
 // A question muthur asks about the library; one about an episode names its show (tmdb, show) so it can be answered in place.
 export type Question = {
   path: string; why: string; season?: number; tmdb?: number; show?: string; noNumber?: boolean;
+  doubt?: boolean; video?: string;  // a show matched to one its name is nothing like; its only video, when it has one
   suggest?: { season: number; episode: number; title: string | null };  // a broken name's likely number, for the reader to confirm
 };
 export type Fixes = {
@@ -221,6 +222,8 @@ export const api = {
   episodeNfo: (path: string) => call<{ text: string }>('/api/library/episode/nfo', { method: 'POST', body: JSON.stringify({ path }) }),
   episodeRename: (path: string, as?: { season: number; episode: number }) =>
     call<Job>('/api/library/episode/rename', { method: 'POST', body: JSON.stringify({ path, ...(as ?? {}) }) }),
+  toFilm: (path: string, tmdbId: number) => call<Job>('/api/library/to-film', { method: 'POST', body: JSON.stringify({ path, tmdbId }) }),
+  matchOk: (path: string) => call<{ fixes: Record<string, number>; questions: number }>('/api/fixes/match-ok', { method: 'POST', body: JSON.stringify({ path }) }),
   duplicates: () => call<{ at: number | null; groups: DupGroup[] }>('/api/duplicates'),
   scanDuplicates: () => call<Job>('/api/duplicates/scan', { method: 'POST' }),
   duplicatePlan: (id: string, keep: string) => call<DupPlan>('/api/duplicates/plan', { method: 'POST', body: JSON.stringify({ id, keep }) }),

@@ -439,15 +439,18 @@ def _carry(kodi, g: dict, before: dict, prefixes: dict, scan: bool = True) -> di
             params["resume"] = {"position": resume["resume"], "total": resume["total"]}
         if len(params) > 1:
             kodi.call(setter, params)
-        remover = "VideoLibrary.RemoveEpisode" if g["kind"] == "episode" else "VideoLibrary.RemoveMovie"
         removed = 0
         for s in states:
-            if s["kodiid"] != item[id_key]:
-                try:
-                    kodi.call(remover, {id_key: s["kodiid"]})
-                    removed += 1
-                except RuntimeError:
-                    pass  # already gone
+            # An old entry goes as what it was: an episode that became a film ('It's a film', 6 Nov) is an episode.
+            kind = s.get("kind") or g["kind"]
+            if kind == g["kind"] and s["kodiid"] == item[id_key]:
+                continue
+            remover, old_key = ("VideoLibrary.RemoveEpisode", "episodeid") if kind == "episode" else ("VideoLibrary.RemoveMovie", "movieid")
+            try:
+                kodi.call(remover, {old_key: s["kodiid"]})
+                removed += 1
+            except RuntimeError:
+                pass  # already gone
         return {"ok": True, "playcount": playcount, "removed": removed}
     except Exception as e:  # the files are done; Kodi catching up is reported, not undone
         return {"ok": False, "why": f"Kodi didn't take it all: {e}"}
