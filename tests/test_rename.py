@@ -84,6 +84,41 @@ def test_kodi_scans_once_carries_the_play_count_and_drops_the_old_entry():
     assert ("VideoLibrary.RemoveEpisode", {"episodeid": 7}) in k.calls
 
 
+def test_a_busy_kodi_keeps_the_rename_waiting():
+    """6 Nov: the scan waited behind 602 films Kodi was re-reading; muthur gave up and forgot the rename."""
+
+    class Busy(FakeKodi):
+        def scan_and_wait(self, folder, limit=300, waited=None):
+            self.scans.append((folder, limit))
+            if waited:
+                waited(limit)
+            return False  # Kodi still scanning when the time ran out
+
+    k, seen, lines = Busy(), [], []
+    pair = ("TV/Show/Season 1/Show.S01E01.mkv", "TV/Show/Season 1/Show - S01E01 - Pilot.mkv")
+    r = follow_in_kodi(k, [pair], {"TV": "/data/TV"}, {}, done=seen.append, scanning=lambda w, s: lines.append((w, s)), limit=60)
+    assert r == {"followed": 0, "problems": [], "kodiBusy": 1}
+    assert seen == [] and k.scans == [("smb://nas/TV/Show/Season 1/", 60)] and lines == [("Season 1", 60)]
+    assert not any(m.startswith("VideoLibrary.Remove") for m, _ in k.calls)  # nothing asked of Kodi after the scan
+
+
+def test_kodi_finishing_a_scan_finishes_waiting_renames(tmp_path, monkeypatch):
+    from muthur import rename as renaming
+    from muthur.web import Config, create_app
+
+    for k, v in {"MUTHUR_CONFIG": tmp_path / "config", "MUTHUR_DOWNLOADS": tmp_path / "dl", "MUTHUR_TV": tmp_path / "Series",
+                 "MUTHUR_FILM": tmp_path / "Movies"}.items():
+        monkeypatch.setenv(k, str(v))
+    app = create_app(Config(dotenv=False))
+    started: list[str] = []
+    monkeypatch.setattr(app.state.jobs, "start", lambda name, fn, by_user=True: started.append(name))
+    app.state.kodi_scan_finished()
+    assert started == []  # nothing waits: Kodi's own scans start nothing
+    renaming.remember(app.state.store, [("TV/a.mkv", "TV/b.mkv")])
+    app.state.kodi_scan_finished()
+    assert started == ["kodi-renames"]
+
+
 def test_health_renames_only_while_kodi_answers(env):  # noqa: F811
     tmp, health, plan = env
     fix = next(x for x in plan["fixes"]["renames"] if x["path"].startswith("TV/Other Show"))

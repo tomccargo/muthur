@@ -67,12 +67,18 @@ def scan_line(what: str, seconds: float) -> str:
     return f"Kodi is reading {what} for the new names: {s // 60}:{s % 60:02d} so far (Kodi doesn’t say how far; usually a few minutes)"
 
 
-def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict, done=None, scanning=None) -> dict:
+def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], before: dict, done=None, scanning=None,
+                   limit: float = 300) -> dict:
     """Kodi takes the renamed files: each folder is scanned once, then every new entry gets the old one's play count
     and resume point and the old entry goes. renamed: (old, new) library paths ('TV/…' an episode, 'Film/…' a film);
     before: Kodi's items by library path, read before the renames (read_before). done(old) after each one Kodi took
     or answered about; when Kodi goes away the rest is left for later ('kodiAway'). scanning(what, seconds): while
-    Kodi scans, for the job's line ('the Film folder', 61.0)."""
+    Kodi scans, for the job's line ('the Film folder', 61.0). limit: seconds to wait for a folder's scan.
+
+    Found 6 Nov: Kodi has one queue for scans and refreshes, and says it is scanning as soon as a scan waits in it.
+    After Health asked Kodi to re-read 602 films, one rename's folder scan waited behind them for 15 minutes; muthur
+    gave up after 5, and the rename was forgotten. A scan that doesn't end within the limit now leaves the rest for
+    later ('kodiBusy'): muthur finishes them when Kodi says its scan is done (web.py, the listener)."""
     import requests
 
     from .duplicates import _carry
@@ -98,16 +104,19 @@ def follow_in_kodi(kodi, renamed: list[tuple[str, str]], roots: dict[str, str], 
         folder = folder_of(new)
         source = prefixes.get(new.partition("/")[0])
         try:
+            ended = True
             if folder and source in whole and source not in scanned:
                 what = f"the {new.partition('/')[0]} folder"
-                kodi.scan_and_wait(source, limit=3600, waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
+                ended = kodi.scan_and_wait(source, limit=max(limit, 3600), waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
                 scanned.add(source)
             elif folder and source not in whole and folder not in scanned:
                 what = folder.rstrip("/").rsplit("/", 1)[-1]
-                kodi.scan_and_wait(folder, waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
+                ended = kodi.scan_and_wait(folder, limit=limit, waited=(lambda s, w=what: scanning(w, s)) if scanning else None)
                 scanned.add(folder)
         except (requests.exceptions.ConnectionError, requests.exceptions.Timeout):
             return {"followed": followed, "problems": problems, "kodiAway": len(renamed) - n}
+        if ended is False:  # Kodi is still busy (its queue): the rest waits for its scan to end, still remembered
+            return {"followed": followed, "problems": problems, "kodiBusy": len(renamed) - n}
         g = {"kind": "episode" if new.startswith("TV/") else "movie", "plan": {"final": new}, "copies": [{"path": old}]}
         r = _carry(kodi, g, before, prefixes, scan=False)
         if not r.get("ok") and not kodi.check().get("connected"):

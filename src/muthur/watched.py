@@ -206,11 +206,13 @@ class Listener:
 
     TRIGGERS = {"VideoLibrary.OnUpdate", "Player.OnStop", "VideoLibrary.OnRemove", "VideoLibrary.OnScanFinished"}
 
-    def __init__(self, address, backup, settle: float = 30, port=9090, on_connect=None):
+    def __init__(self, address, backup, settle: float = 30, port=9090, on_connect=None, on_scan_finished=None):
         """address() -> the Shield's host or None (settings can change); port: a number or a function
         returning one (Kodi lets you change it); backup() runs one backup;
-        on_connect() runs each time Kodi answers again (after the Shield slept), for work that waited."""
+        on_connect() runs each time Kodi answers again (after the Shield slept), for work that waited;
+        on_scan_finished() each time Kodi says a library scan ended (renames that waited for a busy Kodi)."""
         self.address, self.backup, self.settle, self.port, self.on_connect = address, backup, settle, port, on_connect
+        self.on_scan_finished = on_scan_finished
         self.last_event: float | None = None
         self.connected = False
 
@@ -262,6 +264,11 @@ class Listener:
                 buffer = buffer[end:]
                 if isinstance(msg, dict) and msg.get("method") in self.TRIGGERS:
                     self.last_event = time.time()
+                if isinstance(msg, dict) and msg.get("method") == "VideoLibrary.OnScanFinished" and self.on_scan_finished:
+                    try:
+                        self.on_scan_finished()
+                    except Exception:
+                        pass  # never stops listening
 
     def _debounce(self) -> None:
         while True:

@@ -518,7 +518,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         r = renaming.follow_in_kodi(k, waiting, roots, before, done=took,
                                     scanning=lambda what, s: setattr(job, "step", renaming.scan_line(what, s)))
         job.result = f"Kodi took {count(r['followed'], 'renamed file')} with {'its' if r['followed'] == 1 else 'their'} watched status" + (
-            f"; {r['kodiAway']:,} wait for Kodi again." if r.get("kodiAway") else ".") + (
+            f"; {r['kodiAway']:,} wait for Kodi again." if r.get("kodiAway") else
+            f"; {r['kodiBusy']:,} wait until Kodi is done with earlier work." if r.get("kodiBusy") else ".") + (
             f" {count(len(r['problems']), 'file')} Kodi didn’t list: their status is safe in muthur’s backup." if r["problems"] else "")
         job.attention = bool(r["problems"])
 
@@ -749,8 +750,14 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         if k:
             follow_watched(Watched.read_kodi(k))
 
+    def scan_finished():
+        """Kodi's scan ended: renames that waited for a busy Kodi follow now (rename.py, 'kodiBusy')."""
+        if renaming.pending(store):
+            jobs.start("kodi-renames", finish_renames, by_user=False)
+
     listener = Listener(lambda: (store.get("kodi") or {}).get("host"), backup_now, on_connect=kodi_back,
-                        port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090))
+                        port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090), on_scan_finished=scan_finished)
+    app.state.kodi_scan_finished = scan_finished  # tests call it directly
     recover_interrupted()  # before any job: an unfinished run now can only be one a restart cut short
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
@@ -942,12 +949,19 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                         journal.create(run, moved, thumb, picture)
             job.begin("Kodi takes the new name", 0)
             renaming.remember(store, [(path, moved)])  # until Kodi took it, even across a restart
-            followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before, done=lambda old: renaming.forget(store, old))
+            # A minute at most: when Kodi's queue is long (re-reading many items) the rename waits for Kodi's scan
+            # to end instead of keeping every other change waiting (6 Nov, rename.py).
+            followed = renaming.follow_in_kodi(k, [(path, moved)], roots, before, done=lambda old: renaming.forget(store, old),
+                                               scanning=lambda what, s: setattr(job, "step", renaming.scan_line(what, s)), limit=60)
             journal.finish(run, {"label": f"Renamed {label}", "kodi": followed})
-            job.result = (f"Renamed {label} to {new}." + ("" if followed["followed"] else
-                          f" Kodi didn’t take it all ({followed['problems'][0]['why'] if followed['problems'] else 'unknown'}); its watched status is safe"
-                          " in muthur’s backup (Settings, Watched, Restore to Kodi)."))
-            job.attention = not followed["followed"]
+            if followed.get("kodiBusy") or followed.get("kodiAway"):
+                job.result = (f"Renamed {label} to {new}. Kodi is still busy with earlier work; it gets the new name, with its"
+                              " watched status, as soon as it’s done.")
+            else:
+                job.result = (f"Renamed {label} to {new}." + ("" if followed["followed"] else
+                              f" Kodi didn’t take it all ({followed['problems'][0]['why'] if followed['problems'] else 'unknown'}); its watched status is safe"
+                              " in muthur’s backup (Settings, Watched, Restore to Kodi)."))
+                job.attention = not followed["followed"]
             start_library(by_user=False)
 
         if any(j.name == "rename" for j in [jobs.current, *jobs.waiting()] if j and (j.running or j.queued)):
