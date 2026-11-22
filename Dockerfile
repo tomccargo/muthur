@@ -21,8 +21,9 @@ COPY src ./src
 RUN pip install --no-cache-dir -r requirements.lock && pip install --no-cache-dir --no-deps . && rm -rf /root/.cache
 COPY --from=web /web/dist ./web/dist
 
+# TINI_SUBREAPER: in the relay (the host's PID namespace) tini isn't PID 1; as a subreaper it still reaps (tini's README).
 ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1 \
-    MUTHUR_WEB=/app/web/dist MUTHUR_CONFIG=/config
+    MUTHUR_WEB=/app/web/dist MUTHUR_CONFIG=/config TINI_SUBREAPER=1
 # Never root; compose.yaml sets the user (PUID/PGID from .env) that owns the folders.
 USER 1000:1000
 EXPOSE 8580
