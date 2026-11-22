@@ -291,6 +291,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """What the reader calls their NAS and the box Kodi runs on (Settings, Names); neutral until set."""
         return {"device": store.get("names.device") or "Kodi device", "nas": store.get("names.nas") or "NAS"}
 
+    # The relay's folder is made here, by muthur's own user: DSM's Docker doesn't create a missing bind-mount source,
+    # so the relay container (which waits until muthur is healthy) couldn't start without it.
+    os.makedirs(os.path.join(cfg.config_dir, "relay"), mode=0o700, exist_ok=True)
     relay = Relay(os.path.join(cfg.config_dir, "relay"))
 
     def download_station() -> Relay | DownloadStation | None:
