@@ -127,6 +127,33 @@ def test_an_update_pulls_then_rebuilds_from_muthurs_own_labels(tmp_path, monkeyp
     assert json.loads((tmp_path / "update.json").read_text())["state"] == "rebuilding"
 
 
+BUILD_FAILED = ("Content-Type: text/html\n\n Container muthur  Running\n Container muthur-relay  Starting\n"
+                "Error response from daemon: Bind mount failed: '/volume1/docker/muthur/config/relay' does not exist\nExit Code: 1\n\n"
+                "[Line 295] Exec WebAPI:  api=SYNO.Docker.Project, version=1, method=build_stream\n"
+                '{\n   "error" : {\n      "code" : 2202\n   },\n   "httpd_restart" : false,\n   "success" : false\n}\n')  # Nostromo, 2026-11-22
+
+
+@pytest.mark.parametrize("answer, state", [(BUILD_FAILED, "failed"), ("Exit Code: 0\n\n{\n   \"httpd_restart\" : false,\n   \"success\" : true\n}\n", "done")])
+def test_the_rebuild_reports_what_container_manager_said(tmp_path, monkeypatch, answer, state):
+    monkeypatch.setenv("MUTHUR_PROJECT", "muthur")
+    monkeypatch.setenv("MUTHUR_COMPOSE", "/volume1/docker/muthur/compose.yaml")
+
+    def host(args, capture_output=True, text=True, timeout=None):
+        cmd = args[len(relay.HOST):]
+        if cmd[0] == "/bin/cat":
+            return Done("services: {}\n")
+        if "method=list" in cmd:
+            return Done(json.dumps({"success": True, "data": {"abc": {"id": "abc", "name": "muthur"}}}))
+        if "method=update" in cmd:
+            return Done(json.dumps({"success": True}))
+        return Done(answer)
+    relay.rebuild_project(str(tmp_path), host)
+    result = json.loads((tmp_path / "update.json").read_text())
+    assert result["state"] == state
+    if state == "failed":
+        assert "error 2202" in result["problem"] and "Bind mount failed" in result["problem"]
+
+
 def test_the_same_image_is_current(tmp_path, monkeypatch):
     monkeypatch.setenv("MUTHUR_IMAGE", "tomccargo/muthur:latest")
 

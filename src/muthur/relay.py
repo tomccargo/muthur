@@ -54,8 +54,8 @@ def status_name(value) -> str:
 
 
 def parse(out: str) -> dict:
-    """synowebapi may print a log line before its JSON answer."""
-    return json.loads(out[out.index("\n{") + 1:] if "\n{" in out else out)
+    """synowebapi may print log lines before its JSON answer; that answer is the last line starting with '{'."""
+    return json.loads(out[out.rfind("\n{") + 1:] if "\n{" in out else out)
 
 
 def host(args: list[str], timeout: float = 60, run=subprocess.run) -> str:
@@ -187,7 +187,18 @@ def rebuild_project(spool: str = SPOOL, run=subprocess.run) -> None:
         # build_stream recreates every container of the project (muthur and the relay) with the pulled image.
         out = host([SYNOWEBAPI, "--exec", "api=SYNO.Docker.Project", "version=1", "method=build_stream", f"id={json.dumps(found['id'])}"],
                    timeout=1800, run=run)
-        update_state(spool, "done", detail=out.strip().splitlines()[-1][-300:] if out.strip() else "")
+        # The build's log lines come first, then synowebapi's JSON answer, which says whether it worked.
+        log = [line.strip() for line in out[: out.rfind("\n{")].splitlines() if line.strip() and not line.startswith(("Content-Type", "[Line"))]
+        try:
+            body = parse(out)
+        except ValueError:
+            body = {}
+        if body.get("success"):
+            update_state(spool, "done", detail=log[-1][-300:] if log else "")
+        else:
+            code = (body.get("error") or {}).get("code")
+            why = next((line for line in reversed(log) if "rror" in line), log[-1] if log else "")  # Docker's own error line
+            update_state(spool, "failed", problem=f"Container Manager couldn't rebuild muthur (error {code})" + (f": {why[-300:]}" if why else "."))
     except (OSError, subprocess.SubprocessError, ValueError) as e:
         update_state(spool, "failed", problem=str(e) or type(e).__name__)
 
