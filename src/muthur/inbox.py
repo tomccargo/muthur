@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from guessit import guessit
 
 from .apply import SUBTITLE_EXTS, belongs_to
+from .downloadstation import DONE as TASK_DONE
 from .identify import identify_movie, identify_show
 from .media import probe_duration
 from .naming import LATIN_SCRIPT, display_title, episode_path, movie_path
@@ -19,7 +20,7 @@ from .parse import PART_NUMBER, SAMPLE, is_video
 from .store import Store
 from .text import count, similarity
 
-SETTLE_SECONDS = 600  # a download is only handled once nothing in it changed for 10 minutes
+SETTLE_SECONDS = 600  # a download is only handled once nothing in it changed for 10 minutes, unless Download Station says it's done
 SEASON_DIR_NAMES = ("Season {n:02d}", "Season {n}", "S{n:02d}", "Series {n}")
 EPISODE_NUMBERS = re.compile(r"(?i)s(\d{1,3})((?:-?e\d{1,3})+)")
 
@@ -165,9 +166,12 @@ def _season_dir(tv_root: str | None, folder: str | None, season: int) -> str | N
 
 
 class Inbox:
-    def __init__(self, tmdb, store: Store, downloads: str, tv_root: str | None = None, film_root: str | None = None):
+    def __init__(self, tmdb, store: Store, downloads: str, tv_root: str | None = None, film_root: str | None = None,
+                 tasks: dict[str, dict] | None = None):
+        """tasks: Download Station's tasks by title (downloadstation.py), when it could be asked; None: the 10-minute rule only."""
         self.tmdb, self.store = tmdb, store
         self.downloads, self.tv_root, self.film_root = downloads, tv_root, film_root
+        self.tasks = tasks
 
     def keep_original(self) -> set[str]:
         return set(self.store.get("titles.keepOriginal", sorted(LATIN_SCRIPT)))
@@ -216,7 +220,14 @@ class Inbox:
         choice = choice if choice is not None else self.store.choice(entry)
         files = _walk(self.downloads, entry)
         item = Item(entry, "ignored", "", size=sum(s for _, s, _ in files))
-        if files and time.time() - max(m for _, _, m in files) < SETTLE_SECONDS:
+        task = (self.tasks or {}).get(entry.rsplit("/", 1)[-1])
+        if task and task.get("status") not in TASK_DONE:
+            # Download Station knows better than the clock: it is still working on this one.
+            progress = f", {task['progress']}%" if isinstance(task.get("progress"), int) else ""
+            item.status = "waiting"
+            item.reason = f"Download Station: {str(task.get('status') or 'busy').replace('_', ' ')}{progress}. muthur looks again when it is finished."
+            return item
+        if not task and files and time.time() - max(m for _, _, m in files) < SETTLE_SECONDS:
             item.status, item.reason = "waiting", "Still changing; muthur looks again once it has been quiet for 10 minutes."
             return item
         disguised = [p for p, _, _ in files if EXECUTABLE.search(p[-1]) and _looks_like_media(p[-1])]

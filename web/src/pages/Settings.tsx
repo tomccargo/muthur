@@ -4,6 +4,7 @@ import type { StatusHook } from '../App';
 import { Dot, HowTo, Loading } from '../components';
 import { PasswordSettings } from './PasswordSettings';
 import { ShieldSettings, type ShieldDraft } from './ShieldSettings';
+import { CleanUp, UpdateSettings } from './UpdateSettings';
 import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLanguage } from '../labels';
 
 type Draft = {
@@ -182,10 +183,28 @@ export function SettingsPage({ refresh }: StatusHook) {
 
       <section className="panel form" aria-labelledby="ds-h">
         <h2 id="ds-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Download Station</h2>
+        {saved.downloadStation.relay ? <>
+          <p className="hint">
+            After a download is moved into the library, muthur removes its finished task from Download Station, and the Inbox takes a download as
+            soon as Download Station calls it finished. This goes through muthur’s relay container as the DSM user{' '}
+            <span className="mono">{saved.downloadStation.relay.user || '(unknown)'}</span>, so no password is needed and two-step verification can stay on.
+          </p>
+          <div className="actions">
+            <button className="btn btn-secondary btn-sm" type="button" onClick={testDs}>Test the connection</button>
+            {saved.downloadStation.passwordSet && !dirty && (
+              <button className="btn btn-secondary btn-sm" type="button" onClick={() => forget({ downloadStation: { forget: true } })}>Forget the saved account (not needed)</button>
+            )}
+            {ds && (ds.connected
+              ? <span className="status small"><Dot kind="dot-success" />Connected through the relay · {ds.tasks} tasks</span>
+              : <span className="status small"><Dot kind="dot-danger" />{ds.problem}</span>)}
+          </div>
+          <CleanUp last={saved.downloadStation.lastCleanUp} />
+        </> : <>
         <HowTo>
           After a download is moved into the library, muthur removes its finished task from Download Station, so it doesn’t keep pointing at files
-          that are gone. Use the DSM account that adds the downloads, because Download Station only shows an account its own tasks; it must not use
-          two-step verification. Leave this empty to keep tasks as they are.
+          that are gone. On a Synology NAS, muthur’s relay container does this without any password (docs/DEPLOY.md). Without it, use the DSM
+          account that adds the downloads, because Download Station only shows an account its own tasks; it must not use two-step verification.
+          Leave this empty to keep tasks as they are.
         </HowTo>
         <label className="field-label">The NAS’s address
           <input className="field" type="text" placeholder="for example http://192.168.1.10:5000" value={draft.dsUrl} onChange={(e) => edit({ dsUrl: e.target.value })} />
@@ -205,7 +224,11 @@ export function SettingsPage({ refresh }: StatusHook) {
             ? <span className="status small"><Dot kind="dot-success" />Connected · {ds.tasks} tasks</span>
             : <span className="status small"><Dot kind="dot-danger" />{ds.problem}</span>)}
         </div>
+        <CleanUp last={saved.downloadStation.lastCleanUp} />
+        </>}
       </section>
+
+      <UpdateSettings />
 
       <section className="panel form" aria-labelledby="os-h">
         <h2 id="os-h" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 650 }}>Subtitles from OpenSubtitles.com</h2>

@@ -26,3 +26,33 @@ services:
     # Guardrails for a small NAS (ARCHITECTURE.md §3).
     mem_limit: ${MEMORY_LIMIT:-256m}
     cpu_shares: 512
+
+  # Synology only. Removes finished Download Station tasks, tells the Inbox when a download is finished, and updates muthur
+  # from its Settings page, all without a DSM login (the DSM user may keep two-step verification): root, privileged and the
+  # host's PID namespace, so it can run DSM's own synowebapi on the host (src/muthur/relay.py). No network; it reads only
+  # config/relay. Remove this service on another machine, or to switch these off.
+  relay:
+    image: tomccargo/muthur:${MUTHUR_VERSION:-latest}
+    container_name: muthur-relay
+    restart: unless-stopped
+    user: "0:0"
+    privileged: true
+    pid: host
+    network_mode: none
+    entrypoint: ["/sbin/tini", "--", "python", "-m", "muthur.relay"]
+    environment:
+      TZ: ${TZ:-UTC}
+      PUID: ${PUID}
+      PGID: ${PGID}
+      DS_USER: ${DS_USER:-}  # the DSM user that owns the tasks; empty: the user PUID belongs to
+      MUTHUR_IMAGE: tomccargo/muthur:${MUTHUR_VERSION:-latest}  # the image an update pulls
+      MUTHUR_UPDATES: ${MUTHUR_UPDATES:-on}  # off: no updating from Settings
+    volumes:
+      - ${CONFIG_DIR}/relay:/spool
+    healthcheck:
+      test: ["CMD", "sh", "-c", "test $$(( $$(date +%s) - $$(stat -c %Y /spool/relay.alive) )) -lt 60"]
+      interval: 60s
+      timeout: 5s
+      start_period: 20s
+    mem_limit: 64m
+    cpu_shares: 256

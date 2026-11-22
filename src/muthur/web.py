@@ -23,7 +23,7 @@ from .auth import COOKIE, SESSION_SECONDS, Auth, same_site
 from .config import load_dotenv
 from .apply import Applier
 from .imdb import REFRESH_DAYS, Imdb
-from .downloadstation import DownloadStation, DownloadStationError
+from .downloadstation import DownloadStation, DownloadStationError, Relay
 from .opensubs import OpenSubtitles, OpenSubtitlesError
 from .duplicates import Duplicates, apply_groups
 from .fanart import FanartTv
@@ -291,9 +291,25 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         """What the reader calls their NAS and the box Kodi runs on (Settings, Names); neutral until set."""
         return {"device": store.get("names.device") or "Kodi device", "nas": store.get("names.nas") or "NAS"}
 
-    def download_station() -> DownloadStation | None:
+    relay = Relay(os.path.join(cfg.config_dir, "relay"))
+
+    def download_station() -> Relay | DownloadStation | None:
+        """The relay when its container runs (no password, two-step may stay on); else the DSM account from Settings."""
+        if relay.state():
+            return relay
         d = store.get("downloadstation", {})
         return DownloadStation(d["url"], d.get("user", ""), d.get("password", "")) if d.get("url") and d.get("user") else None
+
+    def ds_tasks() -> dict[str, dict] | None:
+        """Download Station's tasks by title, for the Inbox; None when it can't be asked (then the 10-minute rule decides)."""
+        ds = download_station()
+        try:
+            return ds.by_title() if ds else None
+        except DownloadStationError:
+            return None
+
+    def inbox_of(client) -> Inbox:
+        return Inbox(client, store, cfg.downloads, cfg.tv, cfg.film, ds_tasks())
 
     def shield() -> Shield | None:
         """The box Kodi runs on, when waking it is set up in Settings."""
@@ -448,7 +464,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     def health():
         """For the container's health check and for deploying: 'busy' while a job runs or waits, so an update never
         restarts muthur in the middle of one (docs/DEPLOY.md)."""
-        return {"ok": True, "busy": bool((jobs.current and jobs.current.running) or jobs.waiting())}
+        return {"ok": True, "busy": bool((jobs.current and jobs.current.running) or jobs.waiting()), "version": __version__,
+                "relay": relay.state() is not None}
 
     @app.get("/api/status")
     def status():
@@ -499,7 +516,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(409, "The downloads folder isn't reachable. Check the folder settings.")
 
         def work(job):
-            items = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan(job)
+            items = inbox_of(client).scan(job)
             store.save_snapshot("inbox", [asdict(i) for i in items])
             ready, review = sum(i.status == "ready" for i in items), sum(i.status == "review" for i in items)
             job.result = f"Downloads checked: {ready} ready, {review} need you."
@@ -509,7 +526,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     # -- apply, history, undo --------------------------------------------------------
     def _rescan(client):
-        store.save_snapshot("inbox", [asdict(i) for i in Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).scan()])
+        store.save_snapshot("inbox", [asdict(i) for i in inbox_of(client).scan()])
 
     def _tell_kodi(wake: bool = False):
         """Ask Kodi to look for new files. wake: the reader started this, so a sleeping Shield may be woken.
@@ -594,7 +611,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(409, "Nothing is ready to apply. Check the downloads first.")
 
         def work(job):
-            inbox = Inbox(client, store, cfg.downloads, cfg.tv, cfg.film)
+            inbox = inbox_of(client)
             # Look again right before acting: the plan must match what is on disk now.
             fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
             result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb,
@@ -1943,7 +1960,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
 
     def examine(client, item_id: str, choice: dict | None = None) -> dict:
         try:
-            return asdict(Inbox(client, store, cfg.downloads, cfg.tv, cfg.film).examine(item_id, choice))
+            return asdict(inbox_of(client).examine(item_id, choice))
         except OSError as e:
             raise HTTPException(409, f"Couldn't read the download: {e.strerror or e}")
 
@@ -2042,7 +2059,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                      "tokenFrom": "settings" if store.get("tmdb.token") else "install" if os.environ.get("TMDB_READ_TOKEN", "").strip() else None,
                      "language": store.get("tmdb.language") or "en-US"},
             "titles": {"keepOriginal": store.get("titles.keepOriginal", sorted(LATIN_SCRIPT))},
-            "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password"))},
+            "downloadStation": {"url": ds.get("url", ""), "user": ds.get("user", ""), "passwordSet": bool(ds.get("password")),
+                                "relay": relay_info(), "lastCleanUp": last_clean_up()},
             "openSubtitles": {"user": (store.get("opensubtitles") or {}).get("user", ""),
                               "apiKeySet": bool((store.get("opensubtitles") or {}).get("apiKey")),
                               "passwordSet": bool((store.get("opensubtitles") or {}).get("password"))},
@@ -2209,10 +2227,73 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
         start_library(by_user=False)  # the show page lists the new language
         return {"saved": os.path.basename(target), "remaining": remaining}
 
+    def relay_info() -> dict | None:
+        """The relay container, when it runs: the DSM user it acts as, and whether it may update muthur."""
+        s = relay.state()
+        return {"user": s.get("user") or "", "updates": bool(s.get("updates"))} if s else None
+
+    def last_clean_up() -> dict | None:
+        """What the last Apply did in Download Station, for Settings."""
+        last, at = store.snapshot("last-apply")
+        d = (last or {}).get("downloadStation") if isinstance(last, dict) else None
+        return {**d, "at": at} if isinstance(d, dict) else None
+
     @app.post("/api/downloadstation/test")
     def downloadstation_test():
         ds = download_station()
-        return ds.check() if ds else {"connected": False, "problem": "Enter the NAS address and the account first."}
+        if not ds:
+            return {"connected": False, "problem": "Enter the NAS address and the account first."}
+        return {**ds.check(), "via": "relay" if ds is relay else "account"}
+
+    # -- updating muthur through the relay (docs/DEPLOY.md §5) ----------------------------
+    updating: dict = {"thread": None, "problem": None}
+
+    def busy() -> bool:
+        return bool((jobs.current and jobs.current.running) or jobs.waiting())
+
+    def update_view() -> dict:
+        info = relay_info()
+        progress = relay.update_progress() or {}
+        waiting = bool(updating["thread"] and updating["thread"].is_alive() and progress.get("state") == "pulled")
+        return {"version": __version__, "possible": bool(info and info["updates"]), "state": progress.get("state"),
+                "at": progress.get("at"), "problem": updating["problem"] or progress.get("problem"), "waitingForIdle": waiting and busy()}
+
+    def follow_update() -> None:
+        """After the pull: rebuild once muthur is idle, so an update never cuts off a job (docs/DEPLOY.md §5)."""
+        end = time.time() + 6 * 3600
+        while time.time() < end:
+            state = (relay.update_progress() or {}).get("state")
+            if state in ("current", "failed"):
+                return
+            if state == "pulled" and not busy():
+                try:
+                    relay.ask("rebuild", timeout=150)
+                except DownloadStationError as e:
+                    updating["problem"] = str(e)
+                return
+            time.sleep(5)
+        updating["problem"] = "The update was given up: muthur stayed busy for six hours."
+
+    @app.get("/api/update")
+    def update_get():
+        return update_view()
+
+    @app.post("/api/update")
+    def update_start():
+        if not (relay_info() or {}).get("updates"):
+            raise HTTPException(409, "Updating from here needs muthur's relay container (docs/DEPLOY.md §5).")
+        if updating["thread"] and updating["thread"].is_alive():
+            return update_view()
+        if busy():
+            raise HTTPException(409, "muthur is busy. Update when the current job is done.")
+        try:
+            relay.ask("pull", timeout=30)
+        except DownloadStationError as e:
+            raise HTTPException(502, str(e))
+        updating["problem"] = None
+        updating["thread"] = threading.Thread(target=follow_update, daemon=True, name="update")
+        updating["thread"].start()
+        return update_view()
 
     @app.get("/api/shield/apps")
     def shield_apps():

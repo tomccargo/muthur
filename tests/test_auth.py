@@ -131,7 +131,7 @@ def test_saved_secrets_can_be_forgotten_and_the_language_chosen(tmp_path, monkey
     assert c.put("/api/settings", json={"tmdb": {"language": "dutch"}}).status_code == 422
     c.put("/api/settings", json={"downloadStation": {"url": "http://nas:5000", "user": "dl", "password": "pw"}})
     ds = c.put("/api/settings", json={"downloadStation": {"forget": True}}).json()["downloadStation"]
-    assert ds == {"url": "", "user": "", "passwordSet": False}
+    assert ds == {"url": "", "user": "", "passwordSet": False, "relay": None, "lastCleanUp": None}
     assert c.put("/api/settings", json={"kodi": {"tcpPort": "9777"}}).json()["kodi"]["tcpPort"] == 9777
 
 

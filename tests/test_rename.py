@@ -2,6 +2,7 @@
 import pytest
 from test_health import env  # noqa: F401  (the Health fixture)
 
+from muthur import __version__
 from muthur.journal import Journal
 from muthur.rename import follow_in_kodi, moves, new_name, rename
 from muthur.store import Store
@@ -208,7 +209,7 @@ def test_a_run_a_restart_cut_short_is_closed_and_its_renames_wait_for_kodi(tmp_p
     write(old)
     run = journal.start("health")  # the files moved, then muthur was restarted before Kodi was told
     journal.move(run, "Film/Old.Name.mkv", str(old), str(new), "move")
-    assert TestClient(app).get("/api/health").json() == {"ok": True, "busy": False}
+    assert TestClient(app).get("/api/health").json() == {"ok": True, "busy": False, "version": __version__, "relay": False}
 
     create_app(Config(dotenv=False))  # the restart
     assert journal.unfinished() == []

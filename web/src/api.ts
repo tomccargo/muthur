@@ -64,11 +64,21 @@ export type Season = {
 };
 export type Inbox = { items: Item[]; scannedAt: number | null; job: Job | null };
 
+// Updating muthur through its relay container: pulling → current | pulled → rebuilding → done | failed (docs/DEPLOY.md §5).
+export type UpdateState = {
+  version: string; possible: boolean; state: 'pulling' | 'current' | 'pulled' | 'rebuilding' | 'done' | 'failed' | null;
+  at: number | null; problem: string | null; waitingForIdle: boolean;
+};
+
 export type Settings = {
   kodi: { host: string; port: number; tcpPort: number; user: string; passwordSet: boolean };
   tmdb: { tokenSet: boolean; tokenFrom: 'settings' | 'install' | null; language: string };
   titles: { keepOriginal: string[] };
-  downloadStation: { url: string; user: string; passwordSet: boolean };
+  downloadStation: {
+    url: string; user: string; passwordSet: boolean;
+    relay: { user: string; updates: boolean } | null;
+    lastCleanUp: { removed?: string[]; notFinished?: string[]; problem?: string; at: number } | null;
+  };
   openSubtitles: { user: string; apiKeySet: boolean; passwordSet: boolean };
   fanart: { apiKeySet: boolean; clientKeySet: boolean };
   dryRun: boolean;
@@ -190,6 +200,8 @@ export const api = {
   subtitleSave: (path: string, fileId: number, language: string) =>
     call<{ saved: string; remaining: number | null }>('/api/library/subtitles', { method: 'POST', body: JSON.stringify({ path, fileId, language }) }),
   testDownloadStation: () => call<{ connected: true; tasks: number } | { connected: false; problem: string }>('/api/downloadstation/test', { method: 'POST' }),
+  update: () => call<UpdateState>('/api/update'),
+  startUpdate: () => call<UpdateState>('/api/update', { method: 'POST', body: '{}' }),
   shieldApps: () => call<{ apps: string[]; current: string | null }>('/api/shield/apps'),
   wakeShield: () => call<{ ok: boolean; woke: boolean; note?: string }>('/api/shield/wake', { method: 'POST' }),
   testKodi: () => call<KodiState>('/api/kodi/test', { method: 'POST' }),
