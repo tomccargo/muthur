@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import os
 import re
@@ -64,6 +65,8 @@ class Config:
         self.scheduler = os.environ.get("MUTHUR_SCHEDULER", "1") != "0"
         # The UI asks for a password (§14). Only tests, or a proxy in front with its own login, switch it off.
         self.auth = os.environ.get("MUTHUR_AUTH", "1") != "0"
+        # The read-only key for GET /api/owned (§14), for another app on the LAN. Empty: the endpoint is off.
+        self.owned_key = os.environ.get("MUTHUR_OWNED_KEY", "").strip()
 
 
 TMDB_LINK = re.compile(r"themoviedb\.org/(tv|movie)/(\d+)")
@@ -143,6 +146,39 @@ def _twins(films: list[dict]) -> list[int]:
             for i, f in enumerate(films)]
 
 
+def _tmdb_id(ids: dict) -> int | None:
+    v = str(ids.get("tmdb") or "")
+    return int(v) if v.isdigit() else None
+
+
+def _imdb_id(ids: dict) -> str | None:
+    m = re.fullmatch(r"tt\d{6,10}", str(ids.get("imdb") or ""))
+    return m.group(0) if m else None
+
+
+def _owned(lib: dict | None) -> dict:
+    """Every show and film in the library index by its TMDB and IMDb IDs, for GET /api/owned. A title without either
+    ID is left out (nothing could match it); one in two folders is listed once, its episodes put together. An episode
+    counts when its season and number are known and it isn't a sample, an extra or a damaged file."""
+    shows: dict[tuple, dict] = {}
+    for sh in (lib or {}).get("shows", []):
+        tmdb, imdb = _tmdb_id(sh["ids"]), _imdb_id(sh["ids"])
+        if tmdb is None and imdb is None:
+            continue
+        seasons = shows.setdefault((tmdb, imdb), {"tmdb": tmdb, "imdb": imdb, "seasons": {}})["seasons"]
+        for e in sh["episodes"]:
+            if e["season"] is None or e.get("sample") or e.get("extra") or e.get("damaged"):
+                continue
+            seasons.setdefault(e["season"], set()).update(e["episodes"])
+    films: dict[tuple, dict] = {}
+    for f in (lib or {}).get("films", []):
+        tmdb, imdb = _tmdb_id(f["ids"]), _imdb_id(f["ids"])
+        if tmdb is not None or imdb is not None:
+            films.setdefault((tmdb, imdb), {"tmdb": tmdb, "imdb": imdb})
+    return {"tv": [{**s, "seasons": {str(n): sorted(eps) for n, eps in sorted(s["seasons"].items())}} for s in shows.values()],
+            "film": list(films.values())}
+
+
 def _plan_check(plan: list[dict]) -> str:
     """A short fingerprint of a restore plan: the preview and the restore must be the same plan."""
     rows = sorted(json.dumps([c["kind"], c["kodiid"], c["what"], c.get("playcount"), c.get("resume")]) for c in plan)
@@ -199,7 +235,8 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
-    OPEN = {"/api/health", "/api/auth", "/api/auth/login", "/api/auth/setup", "/api/auth/logout"}
+    # /api/owned has its own key instead of the sign-in (library_owned).
+    OPEN = {"/api/health", "/api/auth", "/api/auth/login", "/api/auth/setup", "/api/auth/logout", "/api/owned"}
     # A video and its .srt files for a player outside the browser, with a link key instead of the sign-in (Auth.link_key).
     LINKED = re.compile(r"^/api/player/video/([0-9a-f]{16})(?:/sidecar/[^/]+)?$")
     BUSY = "Another job is running. Try again when it's done."
@@ -782,6 +819,18 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             return {"at": None, "shows": [], "films": []}
         return {"at": lib["at"], "shows": [_show_summary(sh) for sh in lib["shows"]],
                 "films": [_film_summary(f, n) for f, n in zip(lib["films"], _twins(lib["films"]), strict=True)]}
+
+    @app.get("/api/owned")
+    def library_owned(request: Request):
+        """What is on disk, by TMDB and IMDb ID, for another app (lambert) that hides what is owned. Read-only, from the
+        last library index; its own key (MUTHUR_OWNED_KEY) in an Authorization: Bearer header, never the sign-in."""
+        if not cfg.owned_key:
+            raise HTTPException(404, "Not Found")  # off unless the install sets a key
+        scheme, _, given = request.headers.get("authorization", "").partition(" ")
+        if scheme.lower() != "bearer" or not hmac.compare_digest(given.strip().encode(), cfg.owned_key.encode()):
+            raise HTTPException(401, "A valid key is needed.", headers={"WWW-Authenticate": "Bearer"})
+        lib, _ = store.snapshot("library")
+        return _owned(lib)
 
     @app.get("/api/library/show")
     def library_show(folder: str):

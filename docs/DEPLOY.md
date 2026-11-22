@@ -72,6 +72,16 @@ The running version: `docker exec muthur python -c "import muthur; print(muthur.
 
 Run `muthur password` inside the container: Container Manager → Container → muthur → **Open Terminal** (the image has `sh`, not `bash`), or over SSH `sudo docker exec -it muthur muthur password`. Every browser then signs in with the new one.
 
-## 7. Guardrails
+## 7. Another app that reads what you own (optional)
+
+`GET /api/owned` lists every show and film on disk by its TMDB and IMDb ID, with the episodes of each season, for another app on the LAN that hides what you already have (such as lambert):
+
+```json
+{"tv": [{"tmdb": 1399, "imdb": "tt0944947", "seasons": {"1": [1, 2, 3]}}], "film": [{"tmdb": 603, "imdb": "tt0133093"}]}
+```
+
+It is **off** until `.env` sets `MUTHUR_OWNED_KEY`, a key of its own (not the UI password) that only reads this list. Make one with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`, put it in `.env`, and recreate the container (§5). The other app sends it as `Authorization: Bearer <key>`; a missing or wrong key gets 401, and without a key set the address answers 404. The list comes from the last library index (the Library page's, or the daily check's), so it costs no disk scan. Removing the key from `.env` turns it off again.
+
+## 8. Guardrails
 
 `docker stats muthur --no-stream` shows the memory in use: well under the 256 MB limit (`MEMORY_LIMIT` in `.env`), about 70 MB idle. If DSM warns that the kernel doesn't support swap limits, that's expected; the memory limit still applies.
