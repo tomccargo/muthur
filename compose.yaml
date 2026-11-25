@@ -19,6 +19,7 @@ services:
       MUTHUR_QUARANTINE: /data/${QUARANTINE_DIR:-_muthur-quarantine}
       TMDB_READ_TOKEN: ${TMDB_READ_TOKEN:-}
       MUTHUR_OWNED_KEY: ${MUTHUR_OWNED_KEY:-}  # read-only key for GET /api/owned; empty = off (docs/DEPLOY.md §7)
+      MUTHUR_AUTH: ${MUTHUR_AUTH:-1}  # 0 = no login page (docs/DEPLOY.md §6)
     volumes:
       # One mount for downloads, TV and Film, so a move is an instant rename (ARCHITECTURE.md §3).
       - ${MEDIA_SHARE:?Set MEDIA_SHARE in .env}:/data

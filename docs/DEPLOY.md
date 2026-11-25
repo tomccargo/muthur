@@ -75,6 +75,10 @@ The running version: `docker exec muthur python -c "import muthur; print(muthur.
 
 Run `muthur password` inside the container: Container Manager → Container → muthur → **Open Terminal** (the image has `sh`, not `bash`), or over SSH `sudo docker exec -it muthur muthur password`. Every browser then signs in with the new one.
 
+muthur keeps only a one-way (scrypt) hash of the password, so a forgotten one can't be read back, only replaced.
+
+**No login at all:** set `MUTHUR_AUTH=0` in `.env` and recreate the container (§5). The login page goes away and anyone who can reach the address can use every button, so do this only on a network you alone use. The stored password stays in the database; remove the line (or set `1`) to bring the login back. `/api/owned` keeps needing its own key either way.
+
 ## 7. Another app that reads what you own (optional)
 
 `GET /api/owned` lists every show and film on disk by its TMDB and IMDb ID, with the episodes of each season, for another app on the LAN that hides what you already have (such as lambert):
