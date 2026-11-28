@@ -10,7 +10,7 @@ COPY web/ ./
 RUN npm run build
 
 # ---- The app -------------------------------------------------------------------
-FROM python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
+FROM python:3.15-alpine@sha256:0f9552bb28711333da16915ec146f5e6bb44a7fdac9ced15dc17c2e0206346dd
 # ffprobe (from ffmpeg) reads durations; tini forwards signals; tzdata for local times;
 # adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it;
 # bsdtar (libarchive-tools, BSD licence) opens rar, 7z and tar downloads for the automatic pick-up (archives.py).
