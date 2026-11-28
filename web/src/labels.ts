@@ -11,8 +11,20 @@ export const STATUS: Record<ItemStatus, { label: string; dot: string }> = {
   error: { label: "Couldn't read", dot: 'dot-danger' },
 };
 
+// What the automatic pick-up did with a download (autopick.py).
+export const AUTO: Record<string, { label: string; dot: string }> = {
+  filed: { label: 'Filed', dot: 'dot-success' },
+  unpacked: { label: 'Unpacked', dot: 'dot-success' },
+  quarantined: { label: 'To quarantine', dot: 'dot-warning' },
+  review: { label: 'Needs you', dot: 'dot-warning' },
+  stopped: { label: "Couldn't file", dot: 'dot-danger' },
+  left: { label: 'Left for you', dot: 'dot-warning' },
+  planned: { label: 'Planned', dot: '' },
+};
+
 export const JOBS: Record<string, string> = {
   inbox: 'Looking for new downloads',
+  auto: 'Picking up finished downloads',
   memory: 'Learning the shows in your library',
   apply: 'Moving downloads into the library',
   undo: 'Putting a run back',

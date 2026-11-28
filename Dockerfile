@@ -12,8 +12,9 @@ RUN npm run build
 # ---- The app -------------------------------------------------------------------
 FROM python:3.12-alpine@sha256:b658b05ce9c4eb97ec6fc19424818a1f31993659c2b505a532f470e83807815d
 # ffprobe (from ffmpeg) reads durations; tini forwards signals; tzdata for local times;
-# adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it.
-RUN apk add --no-cache ffmpeg tini tzdata android-tools
+# adb (android-tools) wakes the Shield and starts Kodi when the reader asks for something that needs it;
+# bsdtar (libarchive-tools, BSD licence) opens rar, 7z and tar downloads for the automatic pick-up (archives.py).
+RUN apk add --no-cache ffmpeg tini tzdata android-tools libarchive-tools
 WORKDIR /app
 COPY requirements.lock pyproject.toml README.md LICENSE ./
 COPY src ./src

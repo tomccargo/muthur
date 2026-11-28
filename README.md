@@ -12,6 +12,7 @@ It runs as one Docker container next to your media: on a Synology NAS with Conta
 - Send anything ambiguous (a title without a year shared by two films, an episode that doesn't exist) to a review queue instead of guessing.
 - Write Kodi NFOs with IMDb scores per episode, from IMDb's free non-commercial datasets.
 - Pick the best copy among duplicates, move the rest to a quarantine folder, and keep a journal with undo.
+- Pick up finished downloads by itself (once Download Station says they are done, or they have been quiet for 10 minutes, and only while muthur is idle), file what it is sure about, unpack zip, rar, 7z and tar downloads that hold a video, and move fake archives (a program inside, a password to buy, no video) to quarantine. The Inbox lists what it picked up; Settings switches it off.
 
 The architecture is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), and the look and UI rules in [DESIGN.md](DESIGN.md).
 

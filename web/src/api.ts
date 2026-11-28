@@ -82,6 +82,7 @@ export type Settings = {
   openSubtitles: { user: string; apiKeySet: boolean; passwordSet: boolean };
   fanart: { apiKeySet: boolean; clientKeySet: boolean };
   dryRun: boolean;
+  autoPickup: boolean;
   shield: { enabled: boolean; port: number; app: string };
   quality: { preferHdr: boolean };
   names: Names;
@@ -95,12 +96,17 @@ export type SubResult = {
   trusted: boolean; uploader: string | null; rank: string | null; uploaded: string | null; comments: string | null;
 };
 
+// What the automatic pick-up did with one download, newest first.
+export type AutoWhat = 'filed' | 'stopped' | 'review' | 'planned' | 'unpacked' | 'quarantined' | 'left';
+export type AutoRow = { at: number; id: string; what: AutoWhat; title?: string | null; year?: number | null; why?: string; run?: number };
+export type Auto = { enabled: boolean; lookedAt: number | null; every: number; log: AutoRow[] };
+
 export type ApplyResult = { id: string; ok: boolean; files?: number; why?: string };
 export type Run = {
   id: number; kind: string; started: number; finished: number | null; undone: number | null;
   // Apply, Duplicates and Inbox runs list their items; Health runs count what was done per kind and list what failed.
   summary: { applied?: number; stopped?: number; items?: ApplyResult[]; done?: Record<string, number>;
-    failed?: { path: string; why: string }[]; label?: string; interrupted?: boolean } | null;
+    failed?: { path: string; why: string }[]; label?: string; interrupted?: boolean; auto?: boolean } | null;
   counts: { move: number; write: number; quarantine: number; mkdir: number; update: number };
 };
 export type Op = { id: number; item: string; op: 'mkdir' | 'move' | 'write' | 'quarantine' | 'update'; src: string | null; dst: string; size: number | null; status: 'done' | 'undone' | 'failed'; error: string | null };
@@ -190,6 +196,7 @@ export const api = {
   status: () => call<Status>('/api/status'),
   inbox: () => call<Inbox>('/api/inbox'),
   scan: () => call<Job>('/api/inbox/scan', { method: 'POST' }),
+  auto: () => call<Auto>('/api/auto'),
   learnShows: () => call<Job>('/api/memory/import', { method: 'POST' }),
   job: () => call<Job | null>('/api/jobs/current'),
   settings: () => call<Settings>('/api/settings'),

@@ -56,7 +56,8 @@ class Applier:
         self.tmp, self.job = tmp, None
 
     # -- one run --------------------------------------------------------------------
-    def apply(self, items: list[dict], job=None) -> dict:
+    def apply(self, items: list[dict], job=None, auto: bool = False) -> dict:
+        """auto: started by the automatic pick-up, not the reader (History says so)."""
         self.job = job
         run = self.journal.start("apply")
         results = []
@@ -76,7 +77,8 @@ class Applier:
                 results.append({"id": item["id"], "ok": False, "why": why})
             if job:
                 job.done += 1
-        summary = {"applied": sum(r["ok"] for r in results), "stopped": sum(not r["ok"] for r in results), "items": results}
+        summary = {"applied": sum(r["ok"] for r in results), "stopped": sum(not r["ok"] for r in results), "items": results,
+                   **({"auto": True} if auto else {})}
         self.journal.finish(run, summary)
         return {"run": run, **summary}
 

@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from guessit import guessit
 
 from .apply import SUBTITLE_EXTS, belongs_to
+from .archives import ARCHIVE_NAME
 from .downloadstation import DONE as TASK_DONE
 from .identify import identify_movie, identify_show
 from .media import probe_duration
@@ -86,7 +87,7 @@ _RELEASE_MARKERS = ("season", "episode", "year", "screen_size", "source", "video
 FINISHED_DIRS = {"complete", "completed", "finished", "done"}
 IN_PROGRESS_DIRS = {"incomplete", "temp", "tmp", "downloading", "partial"}
 
-ARCHIVE = re.compile(r"(?i)\.(rar|zip|7z|r\d\d|part\d+\.rar)$")
+ARCHIVE = ARCHIVE_NAME  # zip, rar, 7z, tar and the volumes of a split set (archives.py)
 
 # Programs that sometimes travel under episode or film names. They are never media.
 EXECUTABLE = re.compile(r"(?i)\.(exe|scr|com|pif|bat|cmd|vbs|vbe|js|jse|wsf|msi|ps1|lnk|hta|jar|apk)$")
@@ -250,12 +251,14 @@ class Inbox:
                               "They are never copied into the library.")
         videos = [(p, s) for p, s, _ in files if is_video(p[-1]) and not p[-1].lower().endswith(".iso")]
         main = [(p, s) for p, s in videos if not SAMPLE.search(p[-1]) and not any(x.lower() == "sample" for x in p[:-1])]
+        if not main and any(ARCHIVE.search(p[-1]) for p, _, _ in files) and (
+                any(_looks_like_media(p[-1]) for p, _, _ in files) or _looks_like_media(entry.rsplit("/", 1)[-1])):
+            # Nothing to play but an archive (a scene release keeps only a sample clip outside it).
+            item.status = "packed"
+            item.reason = ("Packed in an archive. Automatic pick-up looks inside and unpacks it when it holds a video and no "
+                           "program; one that asks for a password is a known scam.")
+            return item
         if not videos:
-            if any(ARCHIVE.search(p[-1]) for p, _, _ in files) and any(_looks_like_media(p[-1]) for p, _, _ in files):
-                item.status = "packed"
-                item.reason = ("Packed in an archive. muthur doesn't unpack archives. If it opens without a password, "
-                               "unpack it here and check again; one that asks for a password is a known scam.")
-                return item
             item.reason = "Not video. It stays exactly where it is."
             return item
         if not main:

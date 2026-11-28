@@ -47,7 +47,7 @@ function RunCard({ run, busy, onUndo }: { run: Run; busy: boolean; onUndo: () =>
             : run.kind === 'scores' ? <><Dot kind="dot-success" />IMDb scores</>
               : run.kind === 'library' ? <><Dot kind="dot-success" />Library edit</>
               : run.kind === 'health' ? <><Dot kind="dot-success" />{count(fixed, 'fix', 'fixes')}{stopped.length ? `, ${stopped.length} not done` : ''}</>
-              : <><Dot kind="dot-success" />{s?.applied ?? 0} applied{stopped.length ? `, ${stopped.length} stopped` : ''}</>}
+              : <><Dot kind="dot-success" />{s?.label && run.kind === 'inbox' ? s.label : `${s?.applied ?? 0} applied`}{stopped.length ? `, ${stopped.length} stopped` : ''}{s?.auto ? ' · picked up automatically' : ''}</>}
         </span>
       </div>
       <p className="hint" style={{ margin: 0 }}>

@@ -9,7 +9,7 @@ import { ALL_LANGUAGES, METADATA_LANGUAGES, language, libraryPath, metadataLangu
 
 type Draft = {
   host: string; port: string; tcpPort: string; user: string; password: string; token: string; tmdbLanguage: string; keepOriginal: string[];
-  dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; preferHdr: boolean; device: string; nas: string;
+  dsUrl: string; dsUser: string; dsPassword: string; dryRun: boolean; autoPickup: boolean; preferHdr: boolean; device: string; nas: string;
   osKey: string; osUser: string; osPassword: string; faKey: string; faClient: string;
 } & ShieldDraft;
 type DsState = { connected: true; tasks: number } | { connected: false; problem: string };
@@ -19,7 +19,7 @@ function toDraft(s: Settings): Draft {
   return {
     host: s.kodi.host, port: String(s.kodi.port), tcpPort: String(s.kodi.tcpPort), user: s.kodi.user, password: '', token: '',
     tmdbLanguage: s.tmdb.language, keepOriginal: s.titles.keepOriginal,
-    dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, preferHdr: s.quality.preferHdr,
+    dsUrl: s.downloadStation.url, dsUser: s.downloadStation.user, dsPassword: '', dryRun: s.dryRun, autoPickup: s.autoPickup, preferHdr: s.quality.preferHdr,
     shieldOn: s.shield.enabled, shieldPort: String(s.shield.port), shieldApp: s.shield.app, device: s.names.device, nas: s.names.nas,
     osKey: '', osUser: s.openSubtitles.user, osPassword: '', faKey: '', faClient: '',
   };
@@ -55,6 +55,7 @@ export function SettingsPage({ refresh }: StatusHook) {
       openSubtitles: osBody(),
       fanart: faBody(),
       dryRun: draft.dryRun,
+      autoPickup: draft.autoPickup,
       shield: { enabled: draft.shieldOn, port: draft.shieldPort, app: draft.shieldApp },
       quality: { preferHdr: draft.preferHdr },
       names: { device: draft.device, nas: draft.nas },
@@ -125,6 +126,10 @@ export function SettingsPage({ refresh }: StatusHook) {
         <label className="choice">
           <input type="checkbox" checked={draft.dryRun} onChange={(e) => edit({ dryRun: e.target.checked })} />
           <span>Dry run <span className="muted">· plans only, changes nothing</span></span>
+        </label>
+        <label className="choice">
+          <input type="checkbox" checked={draft.autoPickup} onChange={(e) => edit({ autoPickup: e.target.checked })} />
+          <span>Pick up finished downloads by itself <span className="muted">· files what is Ready, unpacks archives with a video, quarantines fakes; Review stays yours</span></span>
         </label>
         <label className="choice">
           <input type="checkbox" checked={draft.preferHdr} onChange={(e) => edit({ preferHdr: e.target.checked })} />

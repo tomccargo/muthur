@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Inbox, type Item, type ItemStatus } from '../api';
+import { api, type Auto, type Inbox, type Item, type ItemStatus } from '../api';
 import type { StatusHook } from '../App';
 import { Dot, JobError, Loading } from '../components';
-import { SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
+import { AUTO, SIGNALS, STATUS, libraryPath, middle, size, splitId, when } from '../labels';
 import { Link, navigate, useLocation } from '../nav';
 
 const FILTERS: [ItemStatus | 'all', string][] = [['all', 'All'], ['ready', 'Ready'], ['review', 'Needs you'], ['suspicious', 'Suspicious'], ['packed', 'Packed'], ['waiting', 'Still downloading'], ['ignored', 'Ignored']];
@@ -60,6 +60,59 @@ function Detail({ item, onChanged }: { item: Item; onChanged: (note: string | nu
       )}
       <span className="small muted">{size(item.size)}</span>
     </aside>
+  );
+}
+
+// What muthur picked up by itself: the last few downloads it filed, unpacked or set aside (autopick.py).
+function AutoPanel({ status }: { status: StatusHook['status'] }) {
+  const [auto, setAuto] = useState<Auto | null>(null);
+  const [all, setAll] = useState(false);
+  const running = Boolean(status?.job?.running);
+  useEffect(() => {
+    api.auto().then(setAuto).catch(() => setAuto(null));
+  }, [status?.inbox.scannedAt, running]);
+  if (!auto) return null;
+  const rows = all ? auto.log : auto.log.slice(0, 6);
+  return (
+    <section className="panel" aria-labelledby="auto-h" style={{ padding: '12px 16px' }}>
+      <div className="panel-head" style={{ marginBottom: rows.length ? 8 : 0 }}>
+        <h2 id="auto-h">Picked up automatically</h2>
+        <span className="status small">
+          {auto.enabled
+            ? <><Dot kind="dot-success" />On · looks every minute · last look {when(auto.lookedAt)}</>
+            : <><Dot />Off · <Link to="/settings">turn it on in Settings</Link></>}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="hint" style={{ margin: 0 }}>Nothing yet.</p>
+      ) : (
+        <ul className="rows">
+          {rows.map((r) => {
+            const a = AUTO[r.what] ?? { label: r.what, dot: '' };
+            return (
+              <li key={`${r.at}-${r.id}-${r.what}`} style={{ alignItems: 'flex-start', gap: 12 }}>
+                <span style={{ display: 'flex', flexDirection: 'column', minWidth: 0, flex: 1 }} title={r.id}>
+                  {r.title
+                    ? <span className="ellipsis" style={{ fontWeight: 600 }}>{r.title}{r.year ? ` (${r.year})` : ''}</span>
+                    : <span className="mono small ellipsis">{middle(splitId(r.id).name, 46)}</span>}
+                  {r.why && <span className="small muted">{r.why}</span>}
+                </span>
+                <span className="status small" style={{ whiteSpace: 'nowrap' }}>
+                  <Dot kind={a.dot} />{a.label} · {when(r.at)}
+                  {r.what === 'review' && <> · <Link to="/review">Review</Link></>}
+                  {r.run && r.what !== 'review' && <> · <Link to="/history">History</Link></>}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {auto.log.length > 6 && (
+        <button className="btn btn-link btn-sm" type="button" aria-expanded={all} onClick={() => setAll(!all)}>
+          {all ? 'Show fewer' : `Show all ${auto.log.length}`}
+        </button>
+      )}
+    </section>
   );
 }
 
@@ -154,6 +207,8 @@ export function InboxPage({ status, refresh }: StatusHook) {
           <Link to="/history">Open History</Link>
         </div>
       )}
+
+      <AutoPanel status={status} />
 
       <div className="seg filters" role="group" aria-label="Show">
         {FILTERS.map(([k, label]) => (

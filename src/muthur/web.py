@@ -9,6 +9,7 @@ import re
 import shutil
 import threading
 import time
+import traceback
 from contextlib import contextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -22,6 +23,7 @@ from . import __version__
 from .auth import COOKIE, SESSION_SECONDS, Auth, same_site
 from .config import load_dotenv
 from .apply import Applier
+from . import archives, autopick
 from .imdb import REFRESH_DAYS, Imdb
 from .downloadstation import DownloadStation, DownloadStationError, Relay
 from .opensubs import OpenSubtitles, OpenSubtitlesError
@@ -231,7 +233,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                  "duplicates": "Looking for duplicates", "duplicates-apply": "Resolving duplicates",
                  "health": "Checking the library", "fixes-apply": "Fixing the library", "kodi-refresh": "Telling Kodi what changed",
                  "rename": "Renaming an episode", "kodi-renames": "Telling Kodi the new names", "player-scan": "Reading how each video plays",
-                 "subtitles-extract": "Copying subtitles out of a video"}
+                 "subtitles-extract": "Copying subtitles out of a video", "auto": "Picking up finished downloads"}
     app = FastAPI(title="muthur", version=__version__, docs_url="/api/docs", openapi_url="/api/openapi.json")
     tmdb_cache: dict = {}
     auth = Auth(store, cfg.auth)
@@ -614,28 +616,165 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
             raise HTTPException(409, "Nothing is ready to apply. Check the downloads first.")
 
         def work(job):
-            inbox = inbox_of(client)
-            # Look again right before acting: the plan must match what is on disk now.
-            fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
-            result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb,
-                             os.path.join(cfg.config_dir, "tmp", "subtitles")).apply(fresh, job)
-            ds = download_station()
-            moved = {i["id"].rsplit("/", 1)[-1] for i in result["items"] if i["ok"]}
-            if ds and moved:
-                # Only now that the files are in the library: the finished tasks leave Download Station (§16).
-                try:
-                    result["downloadStation"] = ds.remove_finished(moved)
-                except DownloadStationError as e:
-                    result["downloadStation"] = {"problem": str(e)}
-            store.save_snapshot("last-apply", result)
+            result = file_downloads(client, wanted, job)
             job.result = f"{count(result['applied'], 'download')} filed" + (f", {result['stopped']} stopped." if result["stopped"] else ".")
             job.attention = bool(result["stopped"])
-            _rescan(client)
-            if result["applied"]:
-                _tell_kodi(wake=True)
 
         job = jobs.start("apply", work)
         return job.as_dict()
+
+    def file_downloads(client, wanted: set[str], job, auto: bool = False) -> dict:
+        """Move these downloads into the library (Applier), then clean up Download Station and tell Kodi. The reader's
+        Apply wakes a sleeping box; the automatic pick-up never does (Kodi hears of it when it answers again)."""
+        inbox = inbox_of(client)
+        # Look again right before acting: the plan must match what is on disk now.
+        fresh = [asdict(inbox.examine(i)) for i in sorted(wanted)]
+        result = Applier(client, journal, cfg.downloads, cfg.tv, cfg.film, cfg.quarantine, imdb,
+                         os.path.join(cfg.config_dir, "tmp", "subtitles")).apply(fresh, job, auto=auto)
+        ds = download_station()
+        moved = {i["id"].rsplit("/", 1)[-1] for i in result["items"] if i["ok"]}
+        if ds and moved:
+            # Only now that the files are in the library: the finished tasks leave Download Station (§16).
+            try:
+                result["downloadStation"] = ds.remove_finished(moved)
+            except DownloadStationError as e:
+                result["downloadStation"] = {"problem": str(e)}
+        store.save_snapshot("last-apply", result)
+        _rescan(client)
+        if result["applied"]:
+            _tell_kodi(wake=not auto)
+        return result
+
+    # -- automatic pick-up (autopick.py) ---------------------------------------------
+    auto_seen: dict = {}  # 'key': the settled downloads at the last pick-up; 'at': when muthur last looked
+
+    def auto_on() -> bool:
+        return bool(store.get("auto.enabled", True))
+
+    def quarantine_download(run: int, item_id: str, why: str, path: str | None = None) -> None:
+        """One download (or one file of it, path) into today's quarantine, journalled in run, with a note."""
+        rel = path or item_id
+        src = os.path.join(cfg.downloads, *rel.split("/"))
+        dst = os.path.join(cfg.quarantine, time.strftime("%Y-%m-%d"), "downloads", *rel.split("/"))
+        if os.path.lexists(dst):
+            dst += f" ({int(time.time())})"
+        journal.move(run, item_id, src, dst, "quarantine")
+        quarantine_notes.note(cfg.quarantine, dst, rel, run, why)
+
+    def auto_look() -> bool:
+        """Once a minute (and from tests): start a pick-up when a download settled and muthur is idle."""
+        auto_seen["at"] = time.time()
+        if not auto_on() or (jobs.current and jobs.current.running) or jobs.waiting():
+            return False
+        client = tmdb()
+        if client is None or not os.path.isdir(cfg.downloads):
+            return False
+        entries = Inbox(None, store, cfg.downloads).entries()
+        key = autopick.look_key(cfg.downloads, entries, ds_tasks(), time.time())
+        if key == auto_seen.get("key"):
+            return False
+        auto_seen["key"] = key
+        jobs.start("auto", lambda job: pick_up(client, job), by_user=False)
+        return True
+
+    def pick_up(client, job) -> None:
+        memory, rows = autopick.Memory(store), list[dict]()
+        dry = bool(store.get("dryRun", False))
+        inbox = inbox_of(client)
+        job.begin("Checking the downloads", 0)
+        items = inbox.scan(job)
+        state = {i.id: autopick.state_of(cfg.downloads, i.id) for i in items}
+
+        # Fakes to quarantine, real archives unpacked. In a dry run nothing is touched.
+        odd = [i for i in items if i.status in ("packed", "suspicious") and memory.new(i.id, state[i.id])]
+        if odd and not dry:
+            job.begin("Looking inside the archives", len(odd))
+            unpacked = False
+            for it in odd:
+                memory.mark(it.id, state[it.id])
+                try:
+                    unpacked |= open_up(it, rows)
+                except OSError as e:
+                    rows.append({"id": it.id, "what": "left", "why": f"muthur couldn't move it: {e.strerror or e}"})
+                job.done += 1
+            if unpacked:
+                job.begin("Checking the unpacked downloads", 0)
+                items = inbox.scan(job)
+                state = {i.id: autopick.state_of(cfg.downloads, i.id) for i in items}
+        store.save_snapshot("inbox", [asdict(i) for i in items])
+
+        for it in items:
+            if it.status == "review" and memory.new(it.id, state[it.id]):
+                memory.mark(it.id, state[it.id])
+                rows.append({"id": it.id, "what": "review", "title": it.title, "year": it.year, "why": it.reason})
+        ready = [i for i in items if i.status == "ready" and memory.new(i.id, state[i.id])]
+        for it in ready:
+            memory.mark(it.id, state[it.id])
+        if ready and dry:
+            rows += [{"id": i.id, "what": "planned", "title": i.title, "year": i.year,
+                      "why": "Planned, not moved: dry run is on."} for i in ready]
+        elif ready:
+            job.begin("Filing downloads", len(ready))
+            result = file_downloads(client, {i.id for i in ready}, job, auto=True)
+            by_id = {i.id: i for i in ready}
+            for r in result["items"]:
+                it = by_id[r["id"]]
+                rows.append({"id": it.id, "what": "filed" if r["ok"] else "stopped", "title": it.title, "year": it.year,
+                             "run": result["run"], **({} if r["ok"] else {"why": r["why"]})})
+        entries = Inbox(None, store, cfg.downloads).entries()
+        memory.save({i.id for i in items} | set(entries))
+        autopick.log(store, rows)
+        # What is settled now, after this pick-up's own moves: only something new starts the next one.
+        auto_seen["key"] = autopick.look_key(cfg.downloads, entries, ds_tasks(), time.time())
+        job.result = autopick.summary(rows)
+        job.attention = any(r["what"] in ("review", "stopped") for r in rows)
+        if any(r["what"] == "filed" for r in rows) and job.result:
+            tell(job.result)  # only when Kodi is on; a pick-up never wakes the box
+
+    def open_up(it, rows: list[dict]) -> bool:
+        """A packed or suspicious download: unpacked when it is real, to quarantine when it is fake. True: unpacked."""
+        if it.status == "suspicious":
+            run = journal.start("inbox")
+            quarantine_download(run, it.id, "A program named like an episode or film, taken out of the downloads.")
+            journal.finish(run, {"applied": 1, "stopped": 0, "items": [{"id": it.id, "ok": True}], "auto": True,
+                                 "label": "A fake download moved to quarantine"})
+            rows.append({"id": it.id, "what": "quarantined", "why": it.reason.split(".")[0] + ".", "run": run})
+            return False
+        found = archives.look(cfg.downloads, it.id)
+        if found.verdict == "unknown":
+            rows.append({"id": it.id, "what": "left", "why": found.why})
+            return False
+        if found.verdict == "media":
+            try:
+                done = archives.unpack(cfg.downloads, it.id, found)
+            except PermissionError as e:  # what came out gave it away after all
+                found = archives.Look("fake", str(e))
+            except (ValueError, OSError) as e:
+                rows.append({"id": it.id, "what": "left", "why": str(e) if isinstance(e, ValueError) else
+                             f"Unpacking didn't work: {e.strerror or e}"})
+                return False
+            else:
+                run = journal.start("inbox")
+                for a in done["archives"]:
+                    quarantine_download(run, done["folder"], "The archive this download came in, after muthur unpacked it.", a)
+                journal.finish(run, {"applied": 1, "stopped": 0, "items": [{"id": done["folder"], "ok": True}], "auto": True,
+                                     "label": "Archive unpacked; the archive itself to quarantine"})
+                rows.append({"id": done["folder"], "what": "unpacked", "run": run,
+                             "why": f"{count(done['files'], 'file')} unpacked; the archive went to quarantine."})
+                return True
+        run = journal.start("inbox")
+        quarantine_download(run, it.id, f"A fake archive: {found.why}")
+        journal.finish(run, {"applied": 1, "stopped": 0, "items": [{"id": it.id, "ok": True}], "auto": True,
+                             "label": "A fake archive moved to quarantine"})
+        rows.append({"id": it.id, "what": "quarantined", "why": f"A fake archive. {found.why}", "run": run})
+        return False
+
+    app.state.auto_look, app.state.jobs = auto_look, jobs  # tests call them directly
+
+    @app.get("/api/auto")
+    def auto_state():
+        return {"enabled": auto_on(), "lookedAt": auto_seen.get("at"), "every": autopick.EVERY,
+                "log": store.get(autopick.LOG) or []}
 
     @app.get("/api/history")
     def history():
@@ -816,8 +955,19 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                         port=lambda: int((store.get("kodi") or {}).get("tcpPort") or 9090), on_scan_finished=scan_finished)
     app.state.kodi_scan_finished = scan_finished  # tests call it directly
     recover_interrupted()  # before any job: an unfinished run now can only be one a restart cut short
+    def watcher():
+        """The automatic pick-up's minute (autopick.py): a cheap look, a pick-up only when something settled."""
+        time.sleep(30)  # let a fresh start settle first
+        while True:
+            try:
+                auto_look()
+            except Exception:  # never let the watcher die; the Inbox shows when it last looked
+                traceback.print_exc()
+            time.sleep(autopick.EVERY)
+
     if cfg.scheduler:
         threading.Thread(target=scheduler, name="scheduler", daemon=True).start()
+        threading.Thread(target=watcher, name="auto-pick-up", daemon=True).start()
         threading.Thread(target=listener.run, name="kodi-listener", daemon=True).start()
 
     # -- library ------------------------------------------------------------------
@@ -2069,6 +2219,7 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                               "passwordSet": bool((store.get("opensubtitles") or {}).get("password"))},
             "fanart": {"apiKeySet": bool((store.get("fanart") or {}).get("apiKey")), "clientKeySet": bool((store.get("fanart") or {}).get("clientKey"))},
             "dryRun": bool(store.get("dryRun", False)),
+            "autoPickup": auto_on(),
             "shield": {"enabled": bool((store.get("shield") or {}).get("enabled")), "port": int((store.get("shield") or {}).get("port") or 5555),
                        "app": (store.get("shield") or {}).get("app") or ""},
             "quality": {"preferHdr": bool(store.get("quality.preferHdr", False))},
@@ -2115,6 +2266,9 @@ def create_app(cfg: Config | None = None, tmdb_factory=None) -> FastAPI:
                 store.put(f"names.{key}", str(value).strip()[:40])  # empty: back to the neutral name
         if isinstance(body.get("dryRun"), bool):
             store.put("dryRun", body["dryRun"])
+        if isinstance(body.get("autoPickup"), bool):
+            store.put("auto.enabled", body["autoPickup"])
+            auto_seen.pop("key", None)  # switched back on: look at everything again
         if isinstance((body.get("quality") or {}).get("preferHdr"), bool):
             store.put("quality.preferHdr", body["quality"]["preferHdr"])
         if "downloadStation" in body:
